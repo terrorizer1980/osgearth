@@ -29,6 +29,7 @@
 #include <osg/MatrixTransform>
 #include <osgEarthFeatures/TransformFilter>
 #include <osgEarthFeatures/ScatterFilter>
+#include <osgEarthFeatures/AltitudeFilter>
 
 #define LC "[BuildBillboardFilter] "
 
@@ -48,8 +49,10 @@ _style( style )
 osg::Node*
 BuildBillboardFilter::push( FeatureList& input, FilterContext& context )
 {
+	computeLocalizers( context );
     osg::Node* result = processBillboards(input, context);
-    return result;
+	// apply the delocalization matrix for no-jitter
+	return delocalize( result);
 }
 
 
@@ -94,6 +97,10 @@ osg::Geode*
 			}
 		}
 	}
+
+	AltitudeFilter clamp;
+	clamp.setPropertiesFromStyle( _style );
+	clamp.push( features, localCX );
 	
 	std::vector<osg::Vec3d> allpoints;
 	for( FeatureList::iterator f_iter = features.begin(); f_iter != features.end(); ++f_iter )
@@ -151,16 +158,17 @@ osg::Geode*
 			osg::Vec4Array* colors = new osg::Vec4Array(verts->size());
 			Random rng;
 
+
+			//
 			for (int i=0; i < allpoints.size(); i++)
 			{
 				//should be transformed with inversed _world2local? 
-				osg::Vec3 world_pos = (*verts)[i];
+				//osg::Vec3 world_pos = (*verts)[i];
+				//world_pos.normalize();
+				//osg::Vec3 normal = world_pos;
+				//(*normals)[i] = normal;//osg::Matrix::transform3x3(normal, w2l);
 				
-				world_pos.normalize();
-
-				osg::Vec3 normal = world_pos;
-				(*normals)[i] = normal;//osg::Matrix::transform3x3(normal, w2l);
-				//(*normals)[i] = osg::Vec3(0,0,1);
+				(*normals)[i] = osg::Vec3(0,0,1); //already localized
 				double intensity = rng.next();
 				(*colors)[i].set( intensity, intensity, intensity, 1 );
 			}
