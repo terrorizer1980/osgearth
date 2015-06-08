@@ -15,6 +15,7 @@ SET(LIB_PUBLIC_HEADERS
 #   header files go here
     AGG.h
     AltitudeSymbol
+	BillboardSymbol
     Common
     Color
     CoverageSymbol
@@ -60,6 +61,7 @@ ADD_LIBRARY(${LIB_NAME} ${OSGEARTH_USER_DEFINED_DYNAMIC_OR_STATIC}
     ${LIB_PUBLIC_HEADERS}
 #  .cpp files go here
     AltitudeSymbol.cpp
+	BillboardSymbol.cpp
     Color.cpp
     CoverageSymbol.cpp
     CssUtils.cpp
