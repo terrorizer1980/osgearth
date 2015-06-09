@@ -29,6 +29,8 @@ Symbol(rhs, copyop),
 _width(rhs._width),
 _height(rhs._height),
 _density(rhs._density),
+_scaleVariance(rhs._scaleVariance),
+_brightnessVariance(rhs._brightnessVariance),
 _imageURI(rhs._imageURI)
 {
 }
@@ -37,7 +39,9 @@ BillboardSymbol::BillboardSymbol( const Config& conf ) :
 Symbol( conf ),
 _width ( 2.0f ),
 _height( 5.0f ),
-_density( 20.0f )
+_density( 20.0f ),
+_scaleVariance(0.3),
+_brightnessVariance(0.3)
 {
     mergeConfig(conf);
 }
@@ -52,7 +56,8 @@ BillboardSymbol::getConfig() const
 	conf.updateIfSet( "billboard-width", _width );
 	conf.updateIfSet( "billboard-height", _height );
 	conf.updateIfSet( "billboard-density", _density );
-  
+	conf.updateIfSet( "billboard-scaleVariance", _scaleVariance);
+	conf.updateIfSet( "billboard-brightnessVariance", _brightnessVariance);
     return conf;
 }
 
@@ -63,6 +68,9 @@ BillboardSymbol::mergeConfig( const Config& conf )
 	  conf.getIfSet( "billboard-width", _width );
 	  conf.getIfSet( "billboard-height", _height );
 	  conf.getIfSet( "billboard-density", _density );
+	  conf.getIfSet( "billboard-scaleVariance", _scaleVariance);
+	  conf.getIfSet( "billboard-brightnessVariance", _brightnessVariance);
+	  
 }
 
 void
@@ -79,6 +87,12 @@ BillboardSymbol::parseSLD(const Config& c, Style& style)
 	}
 	else if ( match(c.key(), "billboard-density") ) {
 		style.getOrCreate<BillboardSymbol>()->density() = as<float>(c.value(), 1.0f);
+	}
+	else if ( match(c.key(), "billboard-scaleVariance") ) {
+		style.getOrCreate<BillboardSymbol>()->scaleVariance() = as<float>(c.value(), 0.0f);
+	}
+	else if ( match(c.key(), "billboard-brightnessVariance") ) {
+		style.getOrCreate<BillboardSymbol>()->brightnessVariance() = as<float>(c.value(), 0.0f);
 	}
 }
 

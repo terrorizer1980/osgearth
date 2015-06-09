@@ -476,7 +476,7 @@ GeometryCompiler::compile(FeatureList&          workingSet,
 		// use a separate filter context since we'll be munging the data
 		FilterContext localCX = sharedCX;
 
-		//first convert all polys to points using scattering filter
+		//first convert all polys to points using the scattering filter
 		for( FeatureList::iterator f_iter = workingSet.begin(); f_iter != workingSet.end(); ++f_iter )
 		{
 			Feature* f = f_iter->get();
@@ -494,14 +494,16 @@ GeometryCompiler::compile(FeatureList&          workingSet,
 			}
 		}
 
+		
 		if ( altRequired )
 		{
+			//clamp to ground...
 			AltitudeFilter clamp;
 			clamp.setPropertiesFromStyle( style );
 			sharedCX = clamp.push( workingSet, localCX );
 			altRequired = false;
 		}
-
+		
 		BuildBillboardFilter filter( style );
 	
 		osg::Node* node = filter.push( workingSet, sharedCX );
