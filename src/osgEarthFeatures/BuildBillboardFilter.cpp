@@ -24,13 +24,6 @@
 #include <osgEarth/Clamping>
 #include <osgText/Text>
 
-//temp
-#include <osg/Point>
-#include <osg/MatrixTransform>
-#include <osgEarthFeatures/TransformFilter>
-#include <osgEarthFeatures/ScatterFilter>
-#include <osgEarthFeatures/AltitudeFilter>
-
 #define LC "[BuildBillboardFilter] "
 
 using namespace osgEarth;
@@ -50,8 +43,10 @@ osg::Node*
 BuildBillboardFilter::push( FeatureList& input, FilterContext& context )
 {
 	computeLocalizers( context );
+
     osg::Node* result = processBillboards(input, context);
-	// apply the delocalization matrix for no-jitter
+
+	// apply the delocalization matrix and return
 	return delocalize( result);
 }
 
@@ -80,27 +75,6 @@ osg::Geode*
 
 	FilterContext localCX = context;
 
-	//first convert all polys to points using scattering filter
-	for( FeatureList::iterator f_iter = features.begin(); f_iter != features.end(); ++f_iter )
-	{
-		Feature* f = f_iter->get();
-		if ( f && f->getGeometry() )
-		{
-			if ( f->getGeometry()->getComponentType() == Geometry::TYPE_POLYGON )
-			{
-				ScatterFilter scatter;
-				scatter.setDensity(billboard_symb->density().get());
-				scatter.setRandom( true );
-				FeatureList featureList;
-				featureList.push_back(f);
-				scatter.push( featureList, localCX );
-			}
-		}
-	}
-
-	AltitudeFilter clamp;
-	clamp.setPropertiesFromStyle( _style );
-	clamp.push( features, localCX );
 	
 	std::vector<osg::Vec3d> allpoints;
 	for( FeatureList::iterator f_iter = features.begin(); f_iter != features.end(); ++f_iter )
@@ -108,20 +82,6 @@ osg::Geode*
 		Feature* f = f_iter->get();
 		if ( f && f->getGeometry() )
 		{
-			// Init a filter to tranform feature in desired SRS 
-			if (!mapSRS->isEquivalentTo(featureSRS))
-			{
-				//FilterContext cx = context;
-				//cx.setProfile( new FeatureProfile(_features->getFeatureProfile()->getExtent()) );
-
-				//TransformFilter xform( mapSRS );
-				//FeatureList featureList;
-				//featureList.push_back(f);
-				//cx = xform.push(featureList, cx);
-				//OE_NOTICE << "Diff trans\n";
-
-			}
-
 			GeometryIterator iter(f->getGeometry());
 			while(iter.hasMore())
 			{
@@ -134,20 +94,6 @@ osg::Geode*
 
 	if ( allpoints.size() > 0 )
 	{
-			//localize all the verts
-			//GeoPoint centroid;
-			//context.profile()->getExtent().getCentroid(centroid);
-			//centroid = centroid.transform(mapSRS);
-			//OE_NOTICE << "Centroid = " << centroid.x() << ", " << centroid.y() << "\n";
-
-			//osg::Matrixd l2w, w2l;
-			//centroid.createLocalToWorld(l2w);
-			//w2l.invert(l2w);
-
-			//osg::MatrixTransform* mt = new osg::MatrixTransform;
-
-			//mt->setMatrix(l2w);
-	
 			osg::ref_ptr<osg::Geometry> osgGeom = new osg::Geometry();
 	
 			osg::Vec3Array* verts = new osg::Vec3Array();	
@@ -157,18 +103,15 @@ osg::Geode*
 			osg::Vec3Array* normals = new osg::Vec3Array(verts->size());
 			osg::Vec4Array* colors = new osg::Vec4Array(verts->size());
 			Random rng;
-
-
-			//
+		
 			for (int i=0; i < allpoints.size(); i++)
 			{
-				//should be transformed with inversed _world2local? 
 				//osg::Vec3 world_pos = (*verts)[i];
 				//world_pos.normalize();
 				//osg::Vec3 normal = world_pos;
 				//(*normals)[i] = normal;//osg::Matrix::transform3x3(normal, w2l);
 				
-				(*normals)[i] = osg::Vec3(0,0,1); //already localized
+				(*normals)[i] = osg::Vec3(0,0,1); //all points are localized, up-vector == +z  
 				double intensity = rng.next();
 				(*colors)[i].set( intensity, intensity, intensity, 1 );
 			}
@@ -178,7 +121,6 @@ osg::Geode*
 			osgGeom->setNormalBinding( osg::Geometry::BIND_PER_VERTEX );
 			osgGeom->setColorArray(colors);
 			osgGeom->setColorBinding( osg::Geometry::BIND_PER_VERTEX );
-
 			osgGeom->addPrimitiveSet( new osg::DrawArrays( GL_POINTS, 0, verts->size() ) );
 			
 			//Load image
@@ -203,8 +145,6 @@ osg::Geode*
 			float bbWidth = (float)tex->getImage()->s() / 2.0f;
 			float bbHeight = (float)tex->getImage()->t();
 			float aspect = (float)tex->getImage()->s() / (float)tex->getImage()->t();
-
-			//osg::Vec4f primaryColor = billboard_symb->fill()->color();
 
 			if (billboard_symb->height().isSet())
 			{

@@ -449,10 +449,6 @@ GeometryCompiler::compile(FeatureList&          workingSet,
     // simple geometry
     else if ( point || line || polygon )
     {
-
-		
-
-
         if ( altRequired )
         {
             AltitudeFilter clamp;
@@ -474,38 +470,40 @@ GeometryCompiler::compile(FeatureList&          workingSet,
             resultGroup->addChild( node );
         }
     }
+	// billboard geometry
 	else if ( billboard )
 	{
+		// use a separate filter context since we'll be munging the data
+		FilterContext localCX = sharedCX;
 
-		/*if ( billboard->placement() == InstanceSymbol::PLACEMENT_RANDOM   ||
-			billboard->placement() == InstanceSymbol::PLACEMENT_INTERVAL )
+		//first convert all polys to points using scattering filter
+		for( FeatureList::iterator f_iter = workingSet.begin(); f_iter != workingSet.end(); ++f_iter )
 		{
-			ScatterFilter scatter;
-			scatter.setDensity( *instance->density() );
-			scatter.setRandom( instance->placement() == InstanceSymbol::PLACEMENT_RANDOM );
-			scatter.setRandomSeed( *instance->randomSeed() );
-			localCX = scatter.push( workingSet, localCX );
-		}*/
+			Feature* f = f_iter->get();
+			if ( f && f->getGeometry() )
+			{
+				if ( f->getGeometry()->getComponentType() == Geometry::TYPE_POLYGON )
+				{
+					ScatterFilter scatter;
+					scatter.setDensity(billboard->density().get());
+					scatter.setRandom( true );
+					FeatureList featureList;
+					featureList.push_back(f);
+					scatter.push( featureList, localCX );
+				}
+			}
+		}
 
 		if ( altRequired )
 		{
 			AltitudeFilter clamp;
 			clamp.setPropertiesFromStyle( style );
-			sharedCX = clamp.push( workingSet, sharedCX );
+			sharedCX = clamp.push( workingSet, localCX );
 			altRequired = false;
 		}
 
-		// use a separate filter context since we'll be munging the data
-		FilterContext localCX = sharedCX;
-
-
 		BuildBillboardFilter filter( style );
-		//filter.maxGranularity() = *_options.maxGranularity();
-		//filter.geoInterp()      = *_options.geoInterp();
-
-		//if ( _options.featureName().isSet() )
-		//	filter.featureName() = *_options.featureName();
-
+	
 		osg::Node* node = filter.push( workingSet, sharedCX );
 		if ( node )
 		{
