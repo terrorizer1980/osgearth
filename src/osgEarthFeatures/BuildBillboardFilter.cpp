@@ -103,6 +103,10 @@ osg::Geode*
 			osg::Vec3Array* normals = new osg::Vec3Array(verts->size());
 			osg::Vec4Array* colors = new osg::Vec4Array(verts->size());
 			Random rng;
+
+			float scale_var = billboard_symb->scaleVariance().get();
+			float int_var = billboard_symb->brightnessVariance().get();
+			
 		
 			for (int i=0; i < allpoints.size(); i++)
 			{
@@ -112,8 +116,9 @@ osg::Geode*
 				//(*normals)[i] = normal;//osg::Matrix::transform3x3(normal, w2l);
 				
 				(*normals)[i] = osg::Vec3(0,0,1); //all points are localized, up-vector == +z  
-				double intensity = rng.next();
-				(*colors)[i].set( intensity, intensity, intensity, 1 );
+				double intensity = 0.5 + int_var*(rng.next() - 0.5);
+				double scale_factor = 1.0 + (rng.next()) * scale_var;
+				(*colors)[i].set( intensity, intensity, scale_factor, 1 );
 			}
 			
 			osgGeom->setVertexArray( verts );

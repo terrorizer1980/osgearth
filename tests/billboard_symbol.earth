@@ -22,11 +22,13 @@
                 points {
                    billboard;
 				   billboard-image:../data/textures/pine.png;
-                   billboard-width:5;
-				   billboard-height:10;
+                   billboard-width:50;
+				   billboard-height:100;
 				   billboard-density: 1000;
-                }                                            
-            </style>
+				   billboard-scaleVariance: 0.3;
+				   billboard-brightnessVariance: 0.7;
+                }
+	        </style>
         </styles>   
         
     </model>
@@ -37,8 +39,8 @@
 	
     <external>	  
 		<viewpoints>
-			<viewpoint name="Models" lat="25.311" long="-80.807" pitch="-21" range="177351"/>
-			<viewpoint name="boston" heading="24.261" height="0" lat="42.34425" long="-71.076262" pitch="-21.6" range="3450"/>
+			<!--<viewpoint name="Models" lat="25.311" long="-80.807" pitch="-21" range="177351"/>
+			<viewpoint name="boston" heading="24.261" height="0" lat="42.34425" long="-71.076262" pitch="-21.6" range="3450"/>-->
 			<viewpoint name="DC" heading="-23.41597142139858" height="25.89056142792106" lat="38.88766329853004" long="-76.99080836437689" pitch="-24.9647839409773" range="18580.10989103711"/>
 		</viewpoints>
 	</external>
