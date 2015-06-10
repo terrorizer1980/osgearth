@@ -31,6 +31,9 @@ _height(rhs._height),
 _density(rhs._density),
 _scaleVariance(rhs._scaleVariance),
 _brightnessVariance(rhs._brightnessVariance),
+_randomSeed(rhs._randomSeed),
+_alphaRefValue(rhs._alphaRefValue),
+_alphaBlend(rhs._alphaBlend),
 _imageURI(rhs._imageURI)
 {
 }
@@ -41,7 +44,10 @@ _width ( 2.0f ),
 _height( 5.0f ),
 _density( 20.0f ),
 _scaleVariance(0.3),
-_brightnessVariance(0.3)
+_brightnessVariance(0.3),
+_randomSeed(0),
+_alphaRefValue(0.5),
+_alphaBlend(true)
 {
     mergeConfig(conf);
 }
@@ -58,6 +64,10 @@ BillboardSymbol::getConfig() const
 	conf.updateIfSet( "billboard-density", _density );
 	conf.updateIfSet( "billboard-scaleVariance", _scaleVariance);
 	conf.updateIfSet( "billboard-brightnessVariance", _brightnessVariance);
+	conf.updateIfSet( "billboard-randomSeed", _randomSeed );
+	conf.updateIfSet( "billboard-alphaRefValue", _alphaRefValue );
+	conf.updateIfSet( "billboard-alphaBlend", _alphaBlend);
+	
     return conf;
 }
 
@@ -70,7 +80,9 @@ BillboardSymbol::mergeConfig( const Config& conf )
 	  conf.getIfSet( "billboard-density", _density );
 	  conf.getIfSet( "billboard-scaleVariance", _scaleVariance);
 	  conf.getIfSet( "billboard-brightnessVariance", _brightnessVariance);
-	  
+	  conf.getIfSet( "billboard-randomSeed", _randomSeed );
+	  conf.getIfSet( "billboard-alphaRefValue", _alphaRefValue );
+	  conf.getIfSet( "billboard-alphaBlend", _alphaBlend);
 }
 
 void
@@ -94,5 +106,13 @@ BillboardSymbol::parseSLD(const Config& c, Style& style)
 	else if ( match(c.key(), "billboard-brightnessVariance") ) {
 		style.getOrCreate<BillboardSymbol>()->brightnessVariance() = as<float>(c.value(), 0.0f);
 	}
+	else if ( match(c.key(), "billboard-randomSeed") ) {
+		style.getOrCreate<BillboardSymbol>()->randomSeed() = as<unsigned>(c.value(), 0);
+	}
+	else if ( match(c.key(), "billboard-alphaRefValue") ) {
+		style.getOrCreate<BillboardSymbol>()->alphaRefValue() = as<float>(c.value(), 0);
+	}
+	else if ( match(c.key(), "billboard-alphaBlend") ) {
+		style.getOrCreate<BillboardSymbol>()->alphaBlend() = as<bool>(c.value(), 0);
+	}
 }
-

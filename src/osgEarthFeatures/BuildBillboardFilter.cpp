@@ -23,6 +23,7 @@
 #include <osgEarthFeatures/FeatureIndex>
 #include <osgEarth/Clamping>
 #include <osgText/Text>
+#include <osg/AlphaFunc>
 
 #define LC "[BuildBillboardFilter] "
 
@@ -129,7 +130,15 @@ osg::Geode*
 			osgGeom->addPrimitiveSet( new osg::DrawArrays( GL_POINTS, 0, verts->size() ) );
 			
 			//Load image
-			osg::Texture2D* tex = new osg::Texture2D(billboard_symb->imageURI()->getImage());
+			osg::Image* image = billboard_symb->imageURI()->getImage();
+			if(!image)
+			{
+				 OE_WARN << LC 
+                        << "Failed to Load billboard image:"<< billboard_symb->imageURI().get().full() << std::endl;
+				 return NULL;
+			}
+
+			osg::Texture2D* tex = new osg::Texture2D(image);
 			tex->setResizeNonPowerOfTwoHint(false);
 			tex->setFilter( osg::Texture::MIN_FILTER, osg::Texture::LINEAR_MIPMAP_LINEAR );
 			tex->setFilter( osg::Texture::MAG_FILTER, osg::Texture::LINEAR );
@@ -170,8 +179,20 @@ osg::Geode*
 
 			geode_ss->getOrCreateUniform("billboard_width", osg::Uniform::FLOAT)->set( bbWidth );
 			geode_ss->getOrCreateUniform("billboard_height", osg::Uniform::FLOAT)->set( bbHeight );
-			geode_ss->setMode(GL_BLEND, osg::StateAttribute::ON);
-
+		
+			osg::AlphaFunc* alphaFunc = new osg::AlphaFunc;
+			alphaFunc->setFunction(osg::AlphaFunc::GEQUAL, billboard_symb->alphaRefValue().get());
+			
+			geode_ss->setAttributeAndModes( alphaFunc, osg::StateAttribute::ON );
+		
+			if(billboard_symb->alphaBlend().get())
+			{
+				geode_ss->setMode(GL_BLEND, osg::StateAttribute::ON);
+				//geode_ss->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+			}
+			else
+				geode_ss->setMode(GL_BLEND, osg::StateAttribute::OFF);
+		
 			//for now just using an osg::Program
 			//TODO: need to add GeometryShader support to the shader comp setup
 			osg::Program* pgm = new osg::Program;

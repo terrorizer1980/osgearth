@@ -487,6 +487,7 @@ GeometryCompiler::compile(FeatureList&          workingSet,
 					ScatterFilter scatter;
 					scatter.setDensity(billboard->density().get());
 					scatter.setRandom( true );
+					scatter.setRandomSeed( billboard->randomSeed().get() );
 					FeatureList featureList;
 					featureList.push_back(f);
 					scatter.push( featureList, localCX );
