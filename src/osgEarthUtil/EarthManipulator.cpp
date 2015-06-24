@@ -479,6 +479,7 @@ _findNodeTraversalMask ( 0x01 )
 {
     reinitialize();
     configureDefaultSettings();
+    _lastTetherMode = _settings->getTetherMode();
 }
 
 EarthManipulator::EarthManipulator( const EarthManipulator& rhs ) :
@@ -575,7 +576,7 @@ EarthManipulator::applySettings( Settings* settings )
 
     // apply new pitch restrictions
     double old_pitch;
-    getLocalEulerAngles( 0L, &old_pitch );
+    getEulerAngles( _rotation, 0L, &old_pitch );
 
     double new_pitch = osg::clampBetween( old_pitch, _settings->getMinPitch(), _settings->getMaxPitch() );
 
@@ -599,8 +600,8 @@ void
 EarthManipulator::reinitialize()
 {
     _distance = 1.0;
-    _offset_x = 0.0;
-    _offset_y = 0.0;
+    _viewOffset.set(0,0);
+    _posOffset.set(0,0,0);
     _thrown = false;
     _dx = 0.0;
     _dy = 0.0;
@@ -661,16 +662,20 @@ EarthManipulator::established()
         {
             Viewpoint vp;
             vp.focalPoint() = GeoPoint(_srs.get(), -90.0, 0, 0, ALTMODE_ABSOLUTE);
+            vp.heading()->set( 0.0, Units::DEGREES );
             vp.pitch()->set( -89.0, Units::DEGREES );
             vp.range()->set( _srs->getEllipsoid()->getRadiusEquator() * 3.0, Units::METERS );
+            vp.positionOffset()->set(0,0,0);
             setHomeViewpoint( vp );
         }
         else 
         {
             Viewpoint vp;
             vp.focalPoint() = GeoPoint(_srs.get(), safeNode->getBound().center(), ALTMODE_ABSOLUTE);
+            vp.heading()->set( 0.0, Units::DEGREES );
             vp.pitch()->set( -89.0, Units::DEGREES );
             vp.range()->set( safeNode->getBound().radius()*2.0, Units::METERS );
+            vp.positionOffset()->set(0,0,0);
             setHomeViewpoint( vp );
         }
     }
@@ -801,6 +806,12 @@ EarthManipulator::getRotation(const osg::Vec3d& point) const
     return osg::Matrixd::lookAt( point - (lookVector * offset), point, up);
 }
 
+osg::Quat
+EarthManipulator::computeCenterRotation(const osg::Vec3d& point) const
+{
+    return getRotation(point).getRotate().inverse();
+}
+
 
 Viewpoint
 EarthManipulator::getViewpoint() const
@@ -827,11 +838,16 @@ EarthManipulator::getViewpoint() const
 
     // Always update the local offsets.
     double localAzim, localPitch;
-    getLocalEulerAngles( &localAzim, &localPitch );
+    getEulerAngles( _rotation, &localAzim, &localPitch );
 
-    vp.heading()->set( localAzim, Units::RADIANS );
-    vp.pitch()->set( localPitch, Units::RADIANS );
+    vp.heading() = Angle(localAzim,  Units::RADIANS).to(Units::DEGREES);
+    vp.pitch()   = Angle(localPitch, Units::RADIANS).to(Units::DEGREES);
     vp.range()->set( _distance, Units::METERS );
+
+    if ( _posOffset.x() != 0.0 || _posOffset.y() != 0.0 || _posOffset.z() != 0.0 )
+    {
+        vp.positionOffset()->set(_posOffset);
+    }
 
     return vp;
 }
@@ -866,10 +882,19 @@ EarthManipulator::setViewpoint(const Viewpoint& vp, double duration_seconds)
         // ending viewpoint
         _setVP1 = vp;
 
+        // If we're no longer going to be tethering, reset the tethering offset quat.
+        //if ( !_setVP1->nodeIsSet() )
+        {
+            //_tetherRotationOffset.unset();
+            //_tetherRotation = osg::Quat();
+            _tetherRotationVP0 = _tetherRotation;
+            _tetherRotationVP1 = osg::Quat();
+        }
+
         // Fill in any missing end-point data with defaults matching the current camera setup.
         // Then all fields are guaranteed to contain usable data during transition.
         double defPitch, defAzim;
-        getLocalEulerAngles( &defAzim, &defPitch );
+        getEulerAngles( _rotation, &defAzim, &defPitch );
 
         if ( !_setVP1->heading().isSet() )
             _setVP1->heading() = Angle(defAzim, Units::RADIANS);
@@ -992,13 +1017,14 @@ EarthManipulator::setViewpoint(const Viewpoint& vp, double duration_seconds)
     _task->_type = TASK_NONE;
 }
 
-bool
+// returns "t" [0..1], the interpolation coefficient.
+double
 EarthManipulator::setViewpointFrame(double time_s)
 {
     if ( !_setVPStartTime.isSet() )
     {
         _setVPStartTime->set( time_s, Units::SECONDS );
-        return false;
+        return 0.0;
     }
     else
     {
@@ -1029,23 +1055,19 @@ EarthManipulator::setViewpointFrame(double time_s)
             if ( tp <= 0.5 )
             {
                 double t2 = 2.0*tp;
-                //t2 = accelerationInterp( t2, _setVPAccel );
                 tp = 0.5*t2;
             }
             else
             {
                 double t2 = 2.0*(tp-0.5);
-                //t2 = accelerationInterp( t2, _setVPAccel2 );
                 tp = 0.5+(0.5*t2);
             }
 
             // the more smoothsteps you do, the more pronounced the fade-in/out effect        
             tp = smoothStepInterp( tp );
-            //tp = smoothStepInterp( tp );
         }
         else if ( t > 0.0 )
         {
-            //tp = accelerationInterp( tp, _setVPAccel );
             tp = smoothStepInterp( tp );
         }
 
@@ -1070,8 +1092,16 @@ EarthManipulator::setViewpointFrame(double time_s)
             _setVP0->range()->as(Units::METERS) +
             d_range.as(Units::METERS)*tp + sin(osg::PI*tp)*_setVPArcHeight;
 
+        // Calculate the offsets
+        osg::Vec3d offset0 = _setVP0->positionOffset().getOrUse(osg::Vec3d(0,0,0));
+        osg::Vec3d offset1 = _setVP1->positionOffset().getOrUse(osg::Vec3d(0,0,0));
+        osg::Vec3d newOffset = offset0 + (offset1-offset0)*tp;
+
         // Activate.
-        setLookAt( newCenter, newAzim, newPitch, newRange );
+        setLookAt( newCenter, newAzim, newPitch, newRange, newOffset );
+
+        // interpolate tether rotation:
+        _tetherRotation.slerp(tp, _tetherRotationVP0, _tetherRotationVP1);
 
         // At t=1 the transition is complete.
         if ( t >= 1.0 )
@@ -1086,7 +1116,7 @@ EarthManipulator::setViewpointFrame(double time_s)
             }
         }
     
-        return true;
+        return tp;
     }
 }
 
@@ -1094,13 +1124,16 @@ void
 EarthManipulator::setLookAt(const osg::Vec3d& center,
                             double            azim,
                             double            pitch,
-                            double            range)
+                            double            range,
+                            const osg::Vec3d& posOffset)
 {
     setCenter( center );
     setDistance( range );
 
     _previousUp = getUpVector( _centerLocalToWorld );
-    _centerRotation = getRotation( center ).getRotate().inverse();
+    _centerRotation = computeCenterRotation( center ); //getRotation( center ).getRotate().inverse();
+
+    _posOffset = posOffset;
 
     azim = normalizeAzimRad( azim );
 
@@ -1109,20 +1142,14 @@ EarthManipulator::setLookAt(const osg::Vec3d& center,
         osg::DegreesToRadians(_settings->getMinPitch()),
         osg::DegreesToRadians(_settings->getMaxPitch()) );
 
-    osg::Quat azim_q (  azim, osg::Vec3d(0,0,1) );
-    osg::Quat pitch_q( -pitch-osg::PI_2, osg::Vec3d(1,0,0) );
-
-    osg::Matrix newRot = osg::Matrixd( azim_q * pitch_q );
-
-    _rotation = osg::Matrixd::inverse(newRot).getRotate();
+    _rotation = getQuaternion(azim, pitch);
 }
 
 void
 EarthManipulator::resetLookAt()
 {
-    // reset the distance, center, and pitch to legal values.
     double pitch;
-    getLocalEulerAngles(0L, &pitch);
+    getEulerAngles( _rotation, 0L, &pitch );
 
     double maxPitch = osg::DegreesToRadians(-10.0);
     if ( pitch > maxPitch )
@@ -1137,6 +1164,13 @@ EarthManipulator::resetLookAt()
 
     double newDistance = (eye-_center).length();
     setDistance( newDistance );
+
+    _posOffset.set(0,0,0);
+    _viewOffset.set(0,0);
+
+    _tetherRotation = osg::Quat();
+    _tetherRotationVP0 = osg::Quat();
+    _tetherRotationVP1 = osg::Quat();
 }
 
 bool
@@ -1878,60 +1912,113 @@ osg::NodePathList getAllParentalNodePaths(osg::Node* node, osg::Node* haltTraver
 void
 EarthManipulator::updateTether()
 {
+    double t = 1.0;
+
     // If we are still setting the viewpoint, tick that now.
     if ( isSettingViewpoint() )
     {
-        setViewpointFrame( _time_s_now );
+        t = setViewpointFrame( _time_s_now );
     }
 
     // Initial transition is complete, so update the camera for tether.
-    else
+    osg::ref_ptr<osg::Node> node;
+    if ( _setVP1->getNode(node) )
     {
-        osg::ref_ptr<osg::Node> tetherNode;
-        if ( _setVP1->getNode(tetherNode) )
-        {            
-            osg::Matrix L2W;
+        // We use our getAllParentalNodePaths function instead of tether_node->getParentalNodePaths() so that we can
+        // ensure even nodes hidden via a node mask are traversed.
+        // Establish the reference frame for the target node. If this fails, bail out.
+        osg::Matrix L2W;
+        osg::NodePathList nodePaths = getAllParentalNodePaths(node.get());
+        if ( nodePaths.empty() )
+            return;
 
-            // We use our getAllParentalNodePaths function instead of tether_node->getParentalNodePaths() so that we can
-            // ensure even nodes hidden via a node mask are traversed.
-            osg::NodePathList nodePaths = getAllParentalNodePaths(tetherNode.get());
-            if ( nodePaths.empty() )
-                return;
+        L2W = osg::computeLocalToWorld( nodePaths[0] );
+        if ( !L2W.valid() )
+            return;
 
-            L2W = osg::computeLocalToWorld( nodePaths[0] );
-            if ( !L2W.valid() )
-                return;
-
+        // If we just called setViewpointFrame, no need to calculate the center again.
+        if ( !isSettingViewpoint() )
+        {
             setCenter( osg::Vec3d(0,0,0) * L2W );
-
+            _centerRotation = computeCenterRotation(_center);
             _previousUp = getUpVector( _centerLocalToWorld );
+        };
 
+        osg::Quat newTetherRotation;
+
+        bool tetherModeChanged = _settings->getTetherMode() != _lastTetherMode;
+        if ( tetherModeChanged )
+        {
+            _tetherRotationOffset.unset();
+        }
+
+        //Just track the center
+        if (_settings->getTetherMode() == TETHER_CENTER)
+        {
+            if ( tetherModeChanged )
+            {
+                resetLookAt();
+                //collapseTetherRotationIntoRotation();
+            }
+            _tetherRotationOffset.unset();
+        }
+        else
+        {
+            // remove any scaling introduced by the model
             double sx = 1.0/sqrt(L2W(0,0)*L2W(0,0) + L2W(1,0)*L2W(1,0) + L2W(2,0)*L2W(2,0));
             double sy = 1.0/sqrt(L2W(0,1)*L2W(0,1) + L2W(1,1)*L2W(1,1) + L2W(2,1)*L2W(2,1));
             double sz = 1.0/sqrt(L2W(0,2)*L2W(0,2) + L2W(1,2)*L2W(1,2) + L2W(2,2)*L2W(2,2));
             L2W = L2W*osg::Matrixd::scale(sx,sy,sz);
 
-            //Just track the center
-            if (_settings->getTetherMode() == TETHER_CENTER)
+            if (_settings->getTetherMode() == TETHER_CENTER_AND_HEADING)
             {
-                _centerRotation = _centerLocalToWorld.getRotate();
-            }
-            //Track all rotations
-            else if (_settings->getTetherMode() == TETHER_CENTER_AND_ROTATION)
-            {
-                _centerRotation = L2W.getRotate();
-            }
-            else if (_settings->getTetherMode() == TETHER_CENTER_AND_HEADING)
-            {
-                //Track just the heading
+                // Back out the tetheree's rotation, then discard all but the heading component:
                 osg::Matrixd localToFrame(L2W*osg::Matrixd::inverse( _centerLocalToWorld ));
                 double azim = atan2(-localToFrame(0,1),localToFrame(0,0));
-                osg::Quat nodeRotationRelToFrame, rotationOfFrame;
-                nodeRotationRelToFrame.makeRotate(-azim,0.0,0.0,1.0);
-                rotationOfFrame = _centerLocalToWorld.getRotate();
-                _centerRotation = nodeRotationRelToFrame*rotationOfFrame;
+
+                newTetherRotation.makeRotate(-azim, 0.0, 0.0, 1.0);
+
+                newTetherRotation.slerp(t, _tetherRotationVP0, newTetherRotation);
+
+                //osg::Quat final;
+                //final.makeRotate(-azim, 0, 0, 1);
+                //newTetherRotation.slerp(t, osg::Quat(), final);
+            
+                // Recalculate rotation to compensate, making for a smooth transition:
+                if ( !_tetherRotationOffset.isSet() )
+                {
+                    //_tetherRotationOffset = newTetherRotation.inverse();
+                    //_tetherRotationOffset = osg::Quat();
+                    //_rotation = osg::Quat();
+                }
             }
+
+            // Track all rotations
+            else if (_settings->getTetherMode() == TETHER_CENTER_AND_ROTATION)
+            {
+                newTetherRotation = L2W.getRotate() * _centerRotation.inverse();
+
+                // Recalculate rotation to compensate, making for a smooth transition.
+                // In this case the new tether rotation might include roll so we need to
+                // extract that.
+#if 0
+                // TODO: doesn't work properly; for now the eye will "jump" when you activate this mode. 
+                if ( !_tetherRotationOffset.isSet() )
+                {
+                    double azim, pitch;
+                    getEulerAngles( newTetherRotation, &azim, &pitch );
+                    _tetherRotationOffset = getQuaternion(azim, pitch).inverse();
+                }
+#endif
+            }   
         }
+
+        if ( _tetherRotationOffset.isSet() )
+            _tetherRotation = newTetherRotation * _tetherRotationOffset.get();
+        else
+            _tetherRotation = newTetherRotation;
+
+        _lastTetherMode = _settings->getTetherMode();
     }
 }
 
@@ -2176,7 +2263,7 @@ EarthManipulator::setByMatrix(const osg::Matrixd& matrix)
     osg::Vec3d lookVector(- matrix(2,0),-matrix(2,1),-matrix(2,2));
     osg::Vec3d eye(matrix(3,0),matrix(3,1),matrix(3,2));
 
-    _centerRotation = makeCenterRotation(_center);
+    _centerRotation = computeCenterRotation(_center);
 
     osg::ref_ptr<osg::Node> safeNode = _node.get();
 
@@ -2199,7 +2286,7 @@ EarthManipulator::setByMatrix(const osg::Matrixd& matrix)
     if (intersect(start_segment, end_segment, ip, normal))
     {
         setCenter( ip );
-        _centerRotation = makeCenterRotation(_center);
+        _centerRotation = computeCenterRotation(_center);
         setDistance( (eye-ip).length());
 
         osg::Matrixd rotation_matrix = osg::Matrixd::translate(0.0,0.0,-_distance)*
@@ -2219,7 +2306,7 @@ EarthManipulator::setByMatrix(const osg::Matrixd& matrix)
         if (intersect(eye + eyeUp*distance, eye - eyeUp*distance, ip, normal))
         {
             setCenter( ip );
-            _centerRotation = makeCenterRotation(_center);
+            _centerRotation = computeCenterRotation(_center);
             setDistance((eye-ip).length());
             _rotation.set(0,0,0,1);
             hitFound = true;
@@ -2239,9 +2326,11 @@ EarthManipulator::setByMatrix(const osg::Matrixd& matrix)
 osg::Matrixd
 EarthManipulator::getMatrix() const
 {
-    return osg::Matrixd::translate(-_offset_x,-_offset_y,_distance)*
-           osg::Matrixd::rotate(_rotation)*
-           osg::Matrixd::rotate(_centerRotation)*
+    return osg::Matrixd::translate(_viewOffset.x(), _viewOffset.y(), _distance) *
+           osg::Matrixd::rotate   (_rotation) *
+           osg::Matrixd::rotate   (_tetherRotation) *
+           osg::Matrixd::translate(_posOffset) *
+           osg::Matrixd::rotate   (_centerRotation) *
            osg::Matrixd::translate(_center);
 }
 
@@ -2249,9 +2338,11 @@ osg::Matrixd
 EarthManipulator::getInverseMatrix() const
 {
     return osg::Matrixd::translate(-_center)*
-           osg::Matrixd::rotate(_centerRotation.inverse() ) *
-           osg::Matrixd::rotate(_rotation.inverse())*
-           osg::Matrixd::translate(_offset_x,_offset_y,-_distance);
+           osg::Matrixd::rotate   (_centerRotation.inverse()) *
+           osg::Matrixd::translate(-_posOffset) *
+           osg::Matrixd::rotate   (_tetherRotation.inverse()) *
+           osg::Matrixd::rotate   (_rotation.inverse()) *
+           osg::Matrixd::translate(-_viewOffset.x(), -_viewOffset.y(), -_distance);
 }
 
 void
@@ -2292,10 +2383,13 @@ EarthManipulator::setByLookAt(const osg::Vec3d& eye,const osg::Vec3d& center,con
 
     osg::Matrixd rotation_matrix = osg::Matrixd::lookAt(eye,center,up);
 
-    _centerRotation = getRotation( _center ).getRotate().inverse();
+    _centerRotation = computeCenterRotation(_center);// getRotation( _center ).getRotate().inverse();
     _rotation = rotation_matrix.getRotate().inverse() * _centerRotation.inverse();	
     
     _previousUp = getUpVector(_centerLocalToWorld);
+
+    _posOffset.set(0,0,0);
+    _viewOffset.set(0,0);
 
     recalculateRoll();
 }
@@ -2309,7 +2403,7 @@ EarthManipulator::setByLookAtRaw(const osg::Vec3d& eye,const osg::Vec3d& center,
     setCenter( center );
 
     osg::Matrixd rotation_matrix = osg::Matrixd::lookAt(eye,center,up);
-    _centerRotation = getRotation(_center).getRotate().inverse();
+    _centerRotation = computeCenterRotation(_center); // getRotation(_center).getRotate().inverse();
     _rotation = rotation_matrix.getRotate().inverse() * _centerRotation.inverse();
     _previousUp = getUpVector(_centerLocalToWorld);
 
@@ -2382,8 +2476,6 @@ EarthManipulator::pan( double dx, double dy )
             return;
 
         double scale = -0.3f*_distance;
-        double old_azim;
-        getLocalEulerAngles( &old_azim );
 
         osg::Matrixd rotation_matrix;
         rotation_matrix.makeRotate( _rotation * _centerRotation  );
@@ -2406,15 +2498,22 @@ EarthManipulator::pan( double dx, double dy )
         // save the previous CF so we can do azimuth locking:
         osg::CoordinateFrame oldCenterLocalToWorld = _centerLocalToWorld;
 
-        // move the center point:
-        setCenter( _center + dv );
+        // move the center point, and ensure that it doesn't change length.
+        double len = _center.length();
+        osg::Vec3d newCenter = _center + dv;
+        newCenter.normalize();
+        newCenter *= len;
+        setCenter( newCenter );
 
-        // need to recompute the intersection point along the look vector.
-        osg::ref_ptr<osg::Node> safeNode;
-        if ( _node.lock(safeNode) )
+        if ( _settings->getLockAzimuthWhilePanning() )
         {
-            //recalculateCenter( oldCenterLocalToWorld );
-
+            // in azimuth-lock mode, _centerRotation maintains a consistent north vector
+            _centerRotation = computeCenterRotation( _center );
+        }
+        
+        else
+        {
+            // otherwise, we need to rotate _centerRotation manually.
             osg::Vec3d new_localUp = getUpVector( _centerLocalToWorld );
 
             osg::Quat pan_rotation;
@@ -2425,26 +2524,24 @@ EarthManipulator::pan( double dx, double dy )
                 _centerRotation = _centerRotation * pan_rotation;
                 _previousUp = new_localUp;
             }
+
+#if 0
             else
             {
                 //OE_DEBUG<<"New up orientation nearly inline - no need to rotate"<<std::endl;
             }
 
-            if ( _settings->getLockAzimuthWhilePanning() )
+            double new_azim;
+            getEulerAngles( _rotation, &new_azim, 0L );
+            double delta_azim = new_azim - old_azim;
+
+            osg::Quat q;
+            q.makeRotate( delta_azim, new_localUp );
+            if ( !q.zeroRotation() )
             {
-                double new_azim;
-                getLocalEulerAngles( &new_azim );
-
-                double delta_azim = new_azim - old_azim;
-                //OE_NOTICE << "DeltaAzim" << delta_azim << std::endl;
-
-                osg::Quat q;
-                q.makeRotate( delta_azim, new_localUp );
-                if ( !q.zeroRotation() )
-                {
-                    _centerRotation = _centerRotation * q;
-                }
+                _centerRotation = _centerRotation * q;
             }
+#endif
         }
 
         //recalculateLocalPitchAndAzimuth();
@@ -2452,14 +2549,14 @@ EarthManipulator::pan( double dx, double dy )
     else
     {
         double scale = _distance;
-        _offset_x += dx * scale;
-        _offset_y += dy * scale;
+
+        // Panning in tether mode changes the focal view offsets.
+        _viewOffset.x() -= dx * scale;
+        _viewOffset.y() -= dy * scale;
 
         //Clamp values within range
-        if (_offset_x < -_settings->getMaxXOffset()) _offset_x = -_settings->getMaxXOffset();
-        if (_offset_y < -_settings->getMaxYOffset()) _offset_y = -_settings->getMaxYOffset();
-        if (_offset_x > _settings->getMaxXOffset()) _offset_x = _settings->getMaxXOffset();
-        if (_offset_y > _settings->getMaxYOffset()) _offset_y = _settings->getMaxYOffset();
+        _viewOffset.x() = osg::clampBetween( _viewOffset.x(), -_settings->getMaxXOffset(), _settings->getMaxXOffset() );
+        _viewOffset.y() = osg::clampBetween( _viewOffset.y(), -_settings->getMaxYOffset(), _settings->getMaxYOffset() );
     }
 
     collisionDetect();
@@ -2483,7 +2580,7 @@ EarthManipulator::rotate( double dx, double dy )
 
     // clamp pitch range:
     double oldPitch;
-    getLocalEulerAngles( 0L, &oldPitch );
+    getEulerAngles( _rotation, 0L, &oldPitch );
 
     if ( dy + oldPitch > maxp || dy + oldPitch < minp )
         dy = 0;
@@ -2842,7 +2939,7 @@ EarthManipulator::recalculateRoll()
 }
 
 void
-EarthManipulator::getLocalEulerAngles( double* out_azim, double* out_pitch ) const
+EarthManipulator::getCompositeEulerAngles( double* out_azim, double* out_pitch ) const
 {
     osg::Matrix m = getMatrix() * osg::Matrixd::inverse(_centerLocalToWorld);
     osg::Vec3d look = -getUpVector( m );
@@ -2867,6 +2964,66 @@ EarthManipulator::getLocalEulerAngles( double* out_azim, double* out_pitch ) con
     {
         *out_pitch = asin( look.z() );
     }
+}
+
+
+// Extracts azim and pitch from a quaternion that does not contain any roll.
+void
+EarthManipulator::getEulerAngles(const osg::Quat& q, double* out_azim, double* out_pitch) const
+{
+    osg::Matrix m( q );
+
+    osg::Vec3d look = -getUpVector( m );
+    osg::Vec3d up   =  getFrontVector( m );
+    
+    look.normalize();
+    up.normalize();
+
+    if ( out_azim )
+    {
+        if ( look.z() < -0.9 )
+            *out_azim = atan2( up.x(), up.y() );
+        else if ( look.z() > 0.9 )
+            *out_azim = atan2( -up.x(), -up.y() );
+        else
+            *out_azim = atan2( look.x(), look.y() );
+
+        *out_azim = normalizeAzimRad( *out_azim );
+    }
+
+    if ( out_pitch )
+    {
+        *out_pitch = asin( look.z() );
+    }
+}
+
+osg::Quat
+EarthManipulator::getQuaternion(double azim, double pitch) const
+{
+    osg::Quat azim_q (  azim,            osg::Vec3d(0,0,1) );
+    osg::Quat pitch_q( -pitch-osg::PI_2, osg::Vec3d(1,0,0) );
+    osg::Matrix newRot = osg::Matrixd( azim_q * pitch_q );
+    return osg::Matrixd::inverse(newRot).getRotate();
+    //TODO: simplify this old code..
+}
+
+void
+EarthManipulator::collapseTetherRotationIntoRotation()
+{
+    // fetch the composite rotation angles (_rotation and _tetherRotation):
+
+    double azim, pitch;
+    getCompositeEulerAngles(&azim, &pitch); // TODO replace with getEulerAngles(_rotation*_tetherRotation, ...)
+    
+    pitch = osg::clampBetween(
+        pitch, 
+        osg::DegreesToRadians(_settings->getMinPitch()),
+        osg::DegreesToRadians(_settings->getMaxPitch()) );
+
+    _rotation = getQuaternion(azim, pitch);
+
+    _tetherRotation = osg::Quat();
+    _tetherRotationOffset.unset();
 }
 
 
@@ -3120,10 +3277,9 @@ EarthManipulator::drag(double dx, double dy, osg::View* theView)
         // when several mouse movement events arrive in a frame. there
         // will be bad stuttering artifacts if we use the updated
         // manipulator parameters.
-        osg::Matrixd Mmanip = osg::Matrixd::translate(_offset_x, _offset_y, -_distance)
-            * viewMatInv;
+        osg::Matrixd Mmanip = osg::Matrixd::translate(-_viewOffset.x(), -_viewOffset.y(), -_distance) * viewMatInv;
         osg::Vec3d center = Mmanip.getTrans();
-        osg::Quat centerRotation = makeCenterRotation(center);
+        osg::Quat centerRotation = computeCenterRotation(center);
         osg::Matrixd Mrotation = (Mmanip * osg::Matrixd::translate(center * -1)
                              * osg::Matrixd::rotate(centerRotation.inverse()));
         osg::Matrixd Me = osg::Matrixd::rotate(centerRotation)
@@ -3226,13 +3382,13 @@ EarthManipulator::drag(double dx, double dy, osg::View* theView)
             // It's not necessary to include the translation
             // component, but it's useful for debugging.
             osg::Matrixd headMat
-                = (osg::Matrixd::translate(-_offset_x, -_offset_y, _distance)
+                = (osg::Matrixd::translate(_viewOffset.x(), _viewOffset.y(), _distance)
                 * Mrotation);
             headMat = headMat * osg::Matrixd::inverse(m);
             _rotation = headMat.getRotate();
             //recalculateLocalPitchAndAzimuth();
         }
-        _centerRotation = makeCenterRotation(_center);
+        _centerRotation = computeCenterRotation(_center);
 
         _previousUp = getUpVector(_centerLocalToWorld);
     }

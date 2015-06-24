@@ -144,7 +144,8 @@ ImageLayerOptions::getConfig( bool isolate ) const
         Config filtersConf("color_filters");
         if ( ColorFilterRegistry::instance()->writeChain( _colorFilters, filtersConf ) )
         {
-            conf.add( filtersConf );
+            conf.update( filtersConf );
+            //conf.add( filtersConf );
         }
     }
 
@@ -401,32 +402,29 @@ ImageLayer::setTargetProfileHint( const Profile* profile )
     TerrainLayer::setTargetProfileHint( profile );
 
     // if we've already constructed the pre-cache operation, reinitialize it.
-    if ( _preCacheOp.valid() )
-        initPreCacheOp();
+    _preCacheOp = 0L;
 }
 
-void
-ImageLayer::initTileSource()
+TileSource::ImageOperation*
+ImageLayer::getOrCreatePreCacheOp()
 {
-    // call superclass first.
-    TerrainLayer::initTileSource();
+    if ( !_preCacheOp.valid() )
+    {
+        Threading::ScopedMutexLock lock(_mutex);
+        if ( !_preCacheOp.valid() )
+        {
+            bool layerInTargetProfile = 
+                _targetProfileHint.valid() &&
+                getProfile()               &&
+                _targetProfileHint->isEquivalentTo( getProfile() );
 
-    // install the pre-caching image processor operation.
-    initPreCacheOp();
-}
+            ImageLayerPreCacheOperation* op = new ImageLayerPreCacheOperation();
+            op->_processor.init( _runtimeOptions, _dbOptions.get(), layerInTargetProfile );
 
-void
-ImageLayer::initPreCacheOp()
-{
-    bool layerInTargetProfile = 
-        _targetProfileHint.valid() &&
-        getProfile()               &&
-        _targetProfileHint->isEquivalentTo( getProfile() );
-
-    ImageLayerPreCacheOperation* op = new ImageLayerPreCacheOperation();
-    op->_processor.init( _runtimeOptions, _dbOptions.get(), layerInTargetProfile );
-
-    _preCacheOp = op;
+            _preCacheOp = op;
+        }
+    }
+    return _preCacheOp.get();
 }
 
 
@@ -665,7 +663,7 @@ ImageLayer::createImageFromTileSource(const TileKey&    key,
     }
 
     // Good to go, ask the tile source for an image:
-    osg::ref_ptr<TileSource::ImageOperation> op = _preCacheOp;
+    osg::ref_ptr<TileSource::ImageOperation> op = getOrCreatePreCacheOp();
 
     // Fail is the image is blacklisted.
     if ( source->getBlacklist()->contains(key) )
