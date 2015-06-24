@@ -21,6 +21,7 @@
 
 #include <osgEarth/VirtualProgram>
 
+#define LOG_DEPTH 1
 using namespace osgEarth;
 
 namespace
@@ -49,6 +50,7 @@ namespace
         GLSL_DEFAULT_PRECISION_FLOAT "\n"
         "varying out vec2 tex_coord;\n"
         "varying out float brightness;\n"
+		"varying out vec3 bnormal;\n"
         "varying in vec3 normal[];\n"
         "varying in vec4 color[];\n"
 		"uniform float oe_logDepth_FC;\n"
@@ -70,6 +72,7 @@ namespace
         "void main(void)\n"
         "{\n"
 		"    float scale = color[0].b;\n"
+		"	 bnormal = normalize(gl_NormalMatrix * vec3(0.0,0.0,1.0));\n"
         "    vec4 v = gl_ModelViewMatrix * gl_PositionIn[0];\n"
         "    vec4 v2 = gl_ModelViewMatrix * (gl_PositionIn[0] + vec4(normal[0]*billboard_height*scale, 0.0));\n"
         "    \n"
@@ -109,10 +112,15 @@ namespace
         "uniform sampler2D billboard_tex; \n"
         "varying vec2 tex_coord;\n"
         "varying float brightness;\n"
+		"varying vec3 bnormal; \n"
         "void main(void) {\n"
         "    float contrast = clamp(1.0-brightness, 0.85, 1.0);\n"
         "    vec4 color = texture2D(billboard_tex, tex_coord);\n"
         "    color.rgb = clamp(((color.rgb-0.5)*contrast + 0.5) * (1.0+brightness), 0.0, 1.0);\n"
+		"    vec3 light_dir = normalize(gl_LightSource[0].position.xyz);\n"
+		"    vec3 n = normalize(bnormal);\n"
+		"    float NdotL = max(dot(n, light_dir), 0);\n"
+		"	 color.rgb *= (NdotL * gl_LightSource[0].diffuse.xyz + gl_LightSource[0].ambient.xyz);\n"
         //"    if ( color.a < 0.1 ) discard; \n"
         "    gl_FragColor = color; \n"
         "}\n";
