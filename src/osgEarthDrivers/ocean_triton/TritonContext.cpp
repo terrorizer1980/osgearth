@@ -89,6 +89,7 @@ TritonContext::initialize(osg::RenderInfo& renderInfo)
             else if( openGLVersion == 3.2 )
                 tritonOpenGlVersion = ::Triton::OPENGL_3_2;
 
+			//_environment->SetSeaLevel(200);
             ::Triton::EnvironmentError err = _environment->Initialize(
                 cs,
                 tritonOpenGlVersion,

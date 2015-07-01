@@ -107,12 +107,19 @@ SilverLiningNode::onSetDateTime()
     ::SilverLining::LocalTime utcTime;
     utcTime.SetFromEpochSeconds( getDateTime().asTimeStamp() );
     _SL->getAtmosphere()->GetConditions()->SetTime( utcTime );
+	_SL->setUpdateEnvMap(true);
+	
 }
 
 void
 SilverLiningNode::onSetMinimumAmbient()
 {
     _SL->setMinimumAmbient( getMinimumAmbient() );
+}
+
+int SilverLiningNode::getSkyBoxID() const 
+{
+	return _SL->getEnvMapID();
 }
 
 void
