@@ -50,6 +50,20 @@ SilverLiningContext::~SilverLiningContext()
     OE_INFO << LC << "Destroyed\n";
 }
 
+
+void SilverLiningContext::updateEnvMap()
+{
+	if(_updateEnvMap)
+	{
+	GLuint tex_id = 0;
+	void* pid = &tex_id;
+	//_atmosphere->GetEnvironmentMap((void*)&tex_id);
+	bool ret = _atmosphere->GetEnvironmentMap(pid);
+	_envMapID = (GLuint) pid;
+	_updateEnvMap = false;
+	}
+}
+
 void
 SilverLiningContext::setLight(osg::Light* light)
 {

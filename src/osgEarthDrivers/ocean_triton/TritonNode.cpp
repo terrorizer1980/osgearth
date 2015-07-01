@@ -22,6 +22,7 @@
 #include "TritonContext"
 #include "TritonDrawable"
 #include <osgEarth/CullingUtils>
+#include <osgEarthUtil/Sky>
 
 #define LC "[TritonNode] "
 
@@ -41,7 +42,17 @@ _options ( options )
     if ( map )
         _TRITON->setSRS( map->getSRS() );
 
-    TritonDrawable* tritonDrawable = new TritonDrawable(mapNode,_TRITON);
+	osgEarth::Util::SkyNode* skynode = NULL;
+	if ( mapNode->getNumParents() > 0 )
+	{
+		skynode = osgEarth::findTopMostNodeOfType<osgEarth::Util::SkyNode>(mapNode->getParent(0));
+	}
+	else
+	{
+		skynode = osgEarth::findTopMostNodeOfType<osgEarth::Util::SkyNode>(mapNode);
+	}
+
+    TritonDrawable* tritonDrawable = new TritonDrawable(mapNode,_TRITON,skynode);
     _drawable = tritonDrawable;
     osg::Geode* geode = new osg::Geode();
     geode->addDrawable( _drawable );
@@ -50,6 +61,8 @@ _options ( options )
     this->addChild( geode );
 
     this->setNumChildrenRequiringUpdateTraversal(1);
+
+	
 }
 
 TritonNode::~TritonNode()
@@ -63,6 +76,9 @@ TritonNode::onSetSeaLevel()
     if ( _TRITON->ready() )
     {
         _TRITON->getEnvironment()->SetSeaLevel( getSeaLevel() );
+		//_TRITON->getEnvironment()->SetWaveBlendDepth(1);
+
+		 
     }
     dirtyBound();
 }
