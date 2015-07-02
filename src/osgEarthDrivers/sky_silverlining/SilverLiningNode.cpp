@@ -117,7 +117,7 @@ SilverLiningNode::onSetMinimumAmbient()
     _SL->setMinimumAmbient( getMinimumAmbient() );
 }
 
-int SilverLiningNode::getSkyBoxID() const 
+int SilverLiningNode::getEnvMapID() const 
 {
 	return _SL->getEnvMapID();
 }

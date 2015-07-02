@@ -171,7 +171,7 @@ namespace osgEarth { namespace Util
         virtual void setMinimumAmbient(const osg::Vec4f& ambient);
         const osg::Vec4& getMinimumAmbient() const { return _minimumAmbient; }
 
-		 virtual int getSkyBoxID() const {return -1;}
+		 virtual int getEnvMapID() const {return 0;}
 
     public:
         
