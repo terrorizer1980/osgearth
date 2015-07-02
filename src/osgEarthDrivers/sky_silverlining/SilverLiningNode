@@ -48,7 +48,7 @@ namespace osgEarth { namespace SilverLining
         void onSetDateTime();
         void onSetMinimumAmbient();
 
-		virtual int getSkyBoxID() const;
+		virtual int getEnvMapID() const;
 
     public: // osg::Node
 

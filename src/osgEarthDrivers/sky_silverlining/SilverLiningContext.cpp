@@ -33,7 +33,9 @@ _initFailed           ( false ),
 _maxAmbientLightingAlt( -1.0 ),
 _atmosphere           ( 0L ),
 _clouds               ( 0L ),
-_minAmbient           ( 0,0,0,0 )
+_minAmbient           ( 0,0,0,0 ),
+_envMapID			  ( 0 ),
+_updateEnvMap		  ( false )
 {
     // Create a SL atmosphere (the main SL object).
     // TODO: plug in the username + license key.
@@ -55,12 +57,10 @@ void SilverLiningContext::updateEnvMap()
 {
 	if(_updateEnvMap)
 	{
-	GLuint tex_id = 0;
-	void* pid = &tex_id;
-	//_atmosphere->GetEnvironmentMap((void*)&tex_id);
-	bool ret = _atmosphere->GetEnvironmentMap(pid);
-	_envMapID = (GLuint) pid;
-	_updateEnvMap = false;
+		void* pid;
+		bool ret = _atmosphere->GetEnvironmentMap(pid);
+		_envMapID = (GLuint) pid;
+		_updateEnvMap = false;
 	}
 }
 

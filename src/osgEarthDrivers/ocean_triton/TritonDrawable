@@ -82,6 +82,7 @@ namespace osgEarth { namespace Triton
 		osgEarth::Util::SkyNode* _skyNode;
         
         TritonDrawable(const TritonDrawable& copy, const osg::CopyOp& op=osg::CopyOp::SHALLOW_COPY) { }
+		osg::TextureCubeMap* readCubeMap( );
     };
 
 } } // namespace osgEarth::Triton

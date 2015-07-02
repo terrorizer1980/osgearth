@@ -20,7 +20,6 @@
 
 #include "TritonDrawable"
 #include "TritonContext"
-#include "SkyBox.h"
 #include <osg/MatrixTransform>
 #include <osgEarth/SpatialReference>
 #include <osgEarth/VirtualProgram>
@@ -389,25 +388,71 @@ _TRITON(TRITON),
 	this->getOrCreateStateSet()->setRenderingHint( osg::StateSet::TRANSPARENT_BIN );
 	this->getOrCreateStateSet()->setRenderBinDetails( 97, "RenderBin" );
 
-	if ( !_cubeMap.valid() )
+	if ( !_cubeMap.valid()) //load default cubemap
 	{
-		osg::TextureCubeMap * environmentMap = NULL;
-
 		// Create Sky
-		createSkyBox( environmentMap );
+		osg::TextureCubeMap * environmentMap = readCubeMap();
 		osg::ref_ptr<osg::TextureCubeMap>  cubeMap = (environmentMap);
 		_cubeMap = cubeMap;
-
 
 		this->getOrCreateStateSet()->setTextureAttributeAndModes(0, environmentMap, osg::StateAttribute::ON);
 		this->getOrCreateStateSet()->setMode( GL_TEXTURE_CUBE_MAP_SEAMLESS, osg::StateAttribute::ON );
 	}
-/*	_testUniform = this->getOrCreateStateSet()->getOrCreateUniform( "test_2value", osg::Uniform::FLOAT );
-	if(_testUniform.valid())
-	{
-		_testUniform->set(0.5f);
-	}*/
 }
+
+
+osg::TextureCubeMap* TritonDrawable::readCubeMap( )
+{
+	osg::ref_ptr< osg::TextureCubeMap> cubemap = new osg::TextureCubeMap();
+
+	const char *tritonPath = getenv("TRITON_PATH");
+	if (!tritonPath) {
+		printf("Can't find Triton; set the TRITON_PATH environment variable ");
+		printf("to point to the directory containing the SDK.\n");
+		exit(0);
+	}
+
+	std::string resPath(tritonPath);
+#ifdef _WIN32
+	resPath += "\\Samples\\";
+#else
+	resPath += "/Samples/";
+#endif
+
+#if OSG_TEST_CUBEMAP
+	// OSG test cubemap - useful for testing reflections
+#define CUBEMAP_FILENAME(face) "cubemap_test/" #face ".png"
+#else
+#define CUBEMAP_FILENAME(face) #face ".tga"
+#endif
+
+	osg::Image* imagePosX = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(posX));
+	osg::Image* imageNegX = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negX));
+	osg::Image* imagePosY = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(posY));
+	osg::Image* imageNegY = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negY));
+	osg::Image* imagePosZ = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(posZ));
+	osg::Image* imageNegZ = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negZ));
+
+	if (imagePosX && imageNegX && imagePosY && imageNegY && imagePosZ && imageNegZ) {
+		cubemap->setImage(osg::TextureCubeMap::POSITIVE_X, imagePosX);
+		cubemap->setImage(osg::TextureCubeMap::NEGATIVE_X, imageNegX);
+		cubemap->setImage(osg::TextureCubeMap::POSITIVE_Y, imagePosY);
+		cubemap->setImage(osg::TextureCubeMap::NEGATIVE_Y, imageNegY);
+		cubemap->setImage(osg::TextureCubeMap::POSITIVE_Z, imagePosZ);
+		cubemap->setImage(osg::TextureCubeMap::NEGATIVE_Z, imageNegZ);
+
+		cubemap->setWrap(osg::Texture::WRAP_S, osg::Texture::CLAMP_TO_EDGE);
+		cubemap->setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP_TO_EDGE);
+		cubemap->setWrap(osg::Texture::WRAP_R, osg::Texture::CLAMP_TO_EDGE);
+
+		cubemap->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR);
+		cubemap->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
+	}
+
+	return cubemap.release();
+}
+
+
 
 void
 	TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
@@ -421,10 +466,6 @@ void
 	_TRITON->initialize( renderInfo );
 	if ( !_TRITON->ready() )
 		return;
-
-
-	
-	//_testUniform->set( 0.7 );
 
 #ifdef USE_HEIGHT_MAP
 	if( !_terrainChangedCallback.valid())
@@ -440,27 +481,11 @@ void
 		adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::SPRAY_PARTICLES)) );
 		adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WAKE_SPRAY_PARTICLES)) );
 		adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_DECALS)) );
-		osgEarth::NativeProgramAdapter* npa=		new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE));
-		adapters.push_back( npa );
+		adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE)) );
 		adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE_PATCH)) );
+	}
 	
-	}
-	/* TritonDrawable* const_this =   const_cast<TritonDrawable*> (this);
-	osg::ref_ptr<osg::Uniform> testUniform = const_this->getOrCreateStateSet()->getOrCreateUniform( "test_2value", osg::Uniform::FLOAT );
-	if(testUniform.valid())
-	{
-		testUniform->set(0.5f);
-	}
-
-	state->getStateSetStack();*/
-
 	adapters.apply( state );
-	
-
-	 //unsigned testUniformNameID     = osg::Uniform::getNameID( "test_2value" );
-	 //GLint test_loc =     state->getUniformLocation(testUniformNameID);
-
-
 
 	// Pass the final view and projection matrices into Triton.
 	if ( environment )
@@ -523,7 +548,16 @@ void
 	
 		// Grab the cube map from our sky box and give it to Triton to use as an _environment map
 		// GLenum texture = renderInfo.getState()->getLastAppliedTextureAttribute( _stage, osg::StateAttribute::TEXTURE );
-		if ( _cubeMap.valid() )
+
+		::Triton::TextureHandle env_id = 0; 
+		if(_skyNode)
+		{
+			env_id = (::Triton::TextureHandle)_skyNode->getEnvMapID();
+		}
+		if(env_id > 0)
+			environment->SetEnvironmentMap(env_id);
+
+		else if ( _cubeMap.valid() )
 		{
 			osg::Vec3d eye, center, up;
 			osg::Camera* camera = renderInfo.getCurrentCamera();
@@ -547,10 +581,8 @@ void
 				m(2,0), m(2,1), m(2,2) );
 
 			osg::Texture::TextureObject* to = _cubeMap->getTextureObject( state->getContextID() );
-			//::Triton::TextureHandle id = (::Triton::TextureHandle)to->id();
-			::Triton::TextureHandle id = (::Triton::TextureHandle)_skyNode->getSkyBoxID();
-			environment->SetEnvironmentMap(
-				id);//, transformFromYUpToZUpCubeMapCoords );
+			::Triton::TextureHandle id = (::Triton::TextureHandle)to->id();
+			environment->SetEnvironmentMap(id, transformFromYUpToZUpCubeMapCoords );
 
 			if( _planarReflectionMap.valid() && _planarReflectionProjection.valid() )
 			{
@@ -569,12 +601,14 @@ void
 		// Draw the ocean for the current time sample
 		if ( _TRITON->getOcean() )
 		{
+			/*
+			//Test to set custom params
+
 			GLfloat test_value = 0.6f;
 			osg::ref_ptr<osg::GL2Extensions> ext;
 			unsigned contextID;
 			contextID = state->getContextID();
 			ext = osg::GL2Extensions::Get( contextID, true );
-
 			
 			GLuint shader_handle = (GLuint) _TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE);
 			
@@ -586,7 +620,7 @@ void
 			
 			loc = ext->glGetUniformLocation( shader_handle, "test_2value" );
 			ext->glUseProgram( shader_handle );
-			ext->glUniform1f( loc, test_value);
+			ext->glUniform1f( loc, test_value);*/
 
 			_TRITON->getOcean()->Draw( renderInfo.getView()->getFrameStamp()->getSimulationTime() );
 		}
