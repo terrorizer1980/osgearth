@@ -34,7 +34,6 @@
 #include <osgEarthSymbology/Skins>
 #include <osgEarthSymbology/RenderSymbol>
 #include <osgEarthSymbology/CoverageSymbol>
-#include <osgEarthSymbology/BillboardSymbol>
 
 #include <osgEarth/Config>
 #include <osg/Object>
