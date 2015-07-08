@@ -192,10 +192,16 @@ SilverLiningContext::updateLight()
     osg::Vec3 direction(x, y, z);
     direction.normalize();
 
-    osg::Vec4 ambient(
+    /*osg::Vec4 ambient(
         osg::clampAbove(ra, _minAmbient.r()),
         osg::clampAbove(ba, _minAmbient.g()),
         osg::clampAbove(ga, _minAmbient.b()),
+        1.0);*/
+
+	osg::Vec4 ambient(
+        ra * _minAmbient.r(),
+        ba * _minAmbient.g(),
+        ga * _minAmbient.b(),
         1.0);
 
     _light->setAmbient( ambient );
