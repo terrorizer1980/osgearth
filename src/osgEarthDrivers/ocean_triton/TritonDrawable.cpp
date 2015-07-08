@@ -238,9 +238,13 @@ namespace
 
 		virtual void onTileAdded(const osgEarth::TileKey& tileKey, osg::Node* terrain, osgEarth::TerrainCallbackContext& context)
 		{
-			if ( !_TRITON->ready() )
+			if ( !_TRITON->ready() || tileKey.getLOD() > 10 )
+			{
+				//disable camera?
+				//_heightCam->setCullMask(0);
 				return;
-
+			}
+		
 			osg::Vec3d eye, center, up;
 			_viewMatrix.getLookAt(eye, center, up);
 			double fovyDEG=0.0, aspectRatio=0.0, zNear=0.0, zFar=0.0;
