@@ -52,14 +52,14 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
         camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
         _SL->setSkyBoxSize( zfar < 100000.0 ? zfar : 100000.0 );
-
+		
         _SL->getAtmosphere()->DrawSky(
             true, 
             _SL->getSRS()->isGeographic(),
             _SL->getSkyBoxSize(),
             true,
             false );
-
+		_SL->updateEnvMap();
         renderInfo.getState()->dirtyAllVertexArrays();
     }
 }
