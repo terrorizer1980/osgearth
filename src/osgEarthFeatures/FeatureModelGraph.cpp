@@ -1009,7 +1009,23 @@ FeatureModelGraph::build(const Style&         defaultStyle,
                     if ( styleGroup && !group->containsNode(styleGroup) )
                         group->addChild( styleGroup );
                 }
+#if 1
+				//Hack to use selectors (without expressions) on pre-tiled data (like TFS). 
+				//This was fastest way to be able to define multiple styles 
+				//of billboards (for same tfs feature-set)
+				//to create variations when doing forest rendering /JH
+				else 
+				{
+					// combine the selection style with the incoming base style:
+					Style selectedStyle = *styles->getStyle( sel.getSelectedStyleName() );
+					Style combinedStyle = defaultStyle.combineWith( selectedStyle );
+					// then create the node.
+					osg::Group* styleGroup = createStyleGroup( combinedStyle, baseQuery, index );
 
+					if ( styleGroup && !group->containsNode(styleGroup) )
+						group->addChild( styleGroup );
+				}
+#else
                 // Tried to apply a selector query to a tiled source, which is illegal because
                 // you cannot run an SQL expression on pre-tiled data (like TFS).
                 else
@@ -1019,6 +1035,7 @@ FeatureModelGraph::build(const Style&         defaultStyle,
                         << "Consider using a JavaScript style expression instead."
                         << std::endl;
                 }
+#endif
             }
         }
 
