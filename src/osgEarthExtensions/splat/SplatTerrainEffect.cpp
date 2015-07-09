@@ -96,7 +96,7 @@ _gpuNoise   ( false )
 
     SplatOptions def;
 
-    _scaleOffsetUniform    = new osg::Uniform("oe_splat_scaleOffsetInt",   *def.scaleLevelOffset());
+    _scaleOffsetUniform    = new osg::Uniform("oe_splat_scaleOffset",   (float) *def.scaleLevelOffset());
     _warpUniform           = new osg::Uniform("oe_splat_warp",             *def.coverageWarp());
     _blurUniform           = new osg::Uniform("oe_splat_blur",             *def.coverageBlur());
     _useBilinearUniform    = new osg::Uniform("oe_splat_useBilinear",      (def.bilinearSampling()==true?1.0f:0.0f));
@@ -158,6 +158,8 @@ SplatTerrainEffect::onInstall(TerrainEngineNode* engine)
 				stateset->addUniform(new osg::Uniform("oe_splat_color_start_dist", 1000.0f));
 			}
 
+			//HACK to support new unnormalized coverage
+			package.define( "SPLAT_USE_UNNORMALIZED_COVERAGE",  (::getenv("SPLAT_USE_UNNORMALIZED_COVERAGE") != 0L) );
 
             package.replace( "$COVERAGE_TEXMAT_UNIFORM", _coverageLayer->shareTexMatUniformName().get() );
             
