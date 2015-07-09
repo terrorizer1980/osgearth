@@ -13,6 +13,8 @@ SET(LIB_NAME osgEarthFeatures)
 SET(HEADER_PATH ${OSGEARTH_SOURCE_DIR}/include/${LIB_NAME})
 SET(LIB_PUBLIC_HEADERS
     AltitudeFilter
+	BillboardShaders2
+	BuildBillboardFilter
     BufferFilter
     BuildGeometryFilter  
     BuildTextFilter
@@ -59,6 +61,7 @@ ADD_LIBRARY(${LIB_NAME} ${OSGEARTH_USER_DEFINED_DYNAMIC_OR_STATIC}
     ${LIB_PUBLIC_HEADERS}
     AltitudeFilter.cpp
     BufferFilter.cpp
+	BuildBillboardFilter.cpp
     BuildGeometryFilter.cpp 
     BuildTextFilter.cpp
     BuildTextOperator.cpp
