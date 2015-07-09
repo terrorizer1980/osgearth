@@ -33,7 +33,9 @@ _initFailed           ( false ),
 _maxAmbientLightingAlt( -1.0 ),
 _atmosphere           ( 0L ),
 _clouds               ( 0L ),
-_minAmbient           ( 0,0,0,0 )
+_minAmbient           ( 0,0,0,0 ),
+_envMapID			  ( 0 ),
+_updateEnvMap		  ( false )
 {
     // Create a SL atmosphere (the main SL object).
     // TODO: plug in the username + license key.
@@ -48,6 +50,18 @@ SilverLiningContext::~SilverLiningContext()
         delete _atmosphere;
 
     OE_INFO << LC << "Destroyed\n";
+}
+
+
+void SilverLiningContext::updateEnvMap()
+{
+	if(_updateEnvMap)
+	{
+		void* pid;
+		bool ret = _atmosphere->GetEnvironmentMap(pid);
+		_envMapID = (GLuint) pid;
+		_updateEnvMap = false;
+	}
 }
 
 void
@@ -178,10 +192,16 @@ SilverLiningContext::updateLight()
     osg::Vec3 direction(x, y, z);
     direction.normalize();
 
-    osg::Vec4 ambient(
+    /*osg::Vec4 ambient(
         osg::clampAbove(ra, _minAmbient.r()),
         osg::clampAbove(ba, _minAmbient.g()),
         osg::clampAbove(ga, _minAmbient.b()),
+        1.0);*/
+
+	osg::Vec4 ambient(
+        ra * _minAmbient.r(),
+        ba * _minAmbient.g(),
+        ga * _minAmbient.b(),
         1.0);
 
     _light->setAmbient( ambient );

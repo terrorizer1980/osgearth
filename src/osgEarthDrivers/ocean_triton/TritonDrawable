@@ -28,6 +28,7 @@
 #include <osgEarth/MapNode>
 #include <osgEarth/Terrain>
 #include <osgEarth/NativeProgramAdapter>
+#include <osgEarthUtil/Sky>
 
 const unsigned int TRITON_OCEAN_MASK = 0x4; // 0100
 
@@ -41,7 +42,7 @@ namespace osgEarth { namespace Triton
     class TritonDrawable : public osg::Drawable
     {
     public:
-        TritonDrawable(osgEarth::MapNode* mapNode=NULL, TritonContext* TRITON =0L);
+        TritonDrawable(osgEarth::MapNode* mapNode=NULL, TritonContext* TRITON =0L, osgEarth::Util::SkyNode* sky_node = NULL);
         META_Object(Triton, TritonDrawable);
      
     public: // osg::Drawable
@@ -76,8 +77,12 @@ namespace osgEarth { namespace Triton
         osg::ref_ptr< osg::RefMatrix >       _planarReflectionProjection;
 
         mutable osg::buffered_object<osgEarth::NativeProgramAdapterCollection> _adapters;
+
+		osg::ref_ptr<osg::Uniform> _testUniform;
+		osgEarth::Util::SkyNode* _skyNode;
         
         TritonDrawable(const TritonDrawable& copy, const osg::CopyOp& op=osg::CopyOp::SHALLOW_COPY) { }
+		osg::TextureCubeMap* readCubeMap( );
     };
 
 } } // namespace osgEarth::Triton

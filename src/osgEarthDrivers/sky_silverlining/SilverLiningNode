@@ -48,6 +48,8 @@ namespace osgEarth { namespace SilverLining
         void onSetDateTime();
         void onSetMinimumAmbient();
 
+		virtual int getEnvMapID() const;
+
     public: // osg::Node
 
         void traverse(osg::NodeVisitor&);
@@ -64,6 +66,7 @@ namespace osgEarth { namespace SilverLining
 		double _lastAltitude;
 		const SilverLiningOptions _options;
         osg::ref_ptr<osgEarth::PhongLightingEffect> _lighting;
+		int _envID;
     };
 
 } } // namespace osgEarth::SilverLining

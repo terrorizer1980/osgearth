@@ -74,7 +74,11 @@ namespace osgEarth { namespace SilverLining
 
         void setCameraPosition(const osg::Vec3d& pos) { _cameraPos = pos; }
         const osg::Vec3d& getCameraPosition() const { return _cameraPos; }
-
+		int getEnvMapID() const {return _envMapID;}
+		void setEnvMapID(int value) {_envMapID = value;}
+		void setUpdateEnvMap(bool value) {_updateEnvMap = value;}
+		bool getUpdateEnvMap() const {return _updateEnvMap;}
+		void updateEnvMap();
     protected:
 
         virtual ~SilverLiningContext();
@@ -103,6 +107,8 @@ namespace osgEarth { namespace SilverLining
         osg::Vec4f                     _minAmbient;
 
         SilverLiningOptions _options;
+		bool _updateEnvMap;
+		int _envMapID;
     };
 
 } } // namespace osgEarth::SilverLining
