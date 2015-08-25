@@ -121,16 +121,27 @@ GeometryPool::createKeyForTileKey(const TileKey&             tileKey,
     out.size = size;
 }
 
+namespace
+{
+    int getMorphNeighborIndexOffset(unsigned col, unsigned row, int rowSize)
+    {
+        if ( (col & 0x1)==1 && (row & 0x1)==1 ) return rowSize+2;
+        if ( (row & 0x1)==1 )                   return rowSize+1;
+        if ( (col & 0x1)==1 )                   return 2;
+        return 1;            
+    }
+}
+
 #define addSkirtDataForIndex(INDEX, HEIGHT) \
 { \
     verts->push_back( (*verts)[INDEX] ); \
     normals->push_back( (*normals)[INDEX] ); \
     texCoords->push_back( (*texCoords)[INDEX] ); \
-    tangents->push_back( osg::Vec3(1,0,0) ); \
+    neighbors->push_back( (*neighbors)[INDEX] ); \
     verts->push_back( (*verts)[INDEX] - ((*normals)[INDEX])*(HEIGHT) ); \
     normals->push_back( (*normals)[INDEX] ); \
     texCoords->push_back( (*texCoords)[INDEX] ); \
-    tangents->push_back( osg::Vec3(1,0,0) ); \
+    neighbors->push_back( (*neighbors)[INDEX] - ((*normals)[INDEX])*(HEIGHT) ); \
 }
 
 #define addSkirtTriangles(INDEX0, INDEX1) \
@@ -198,10 +209,10 @@ GeometryPool::createGeometry(const TileKey& tileKey,
     geom->setNormalArray( normals );
     geom->setNormalBinding( geom->BIND_PER_VERTEX );
 
-    osg::Vec3Array* tangents = 0;
-    tangents = new osg::Vec3Array();
-    tangents->reserve( numVerts );
-    geom->setTexCoordArray(1, tangents );
+    osg::Vec3Array* neighbors = 0;
+    neighbors = new osg::Vec3Array();
+    neighbors->reserve( numVerts );
+    geom->setTexCoordArray(1, neighbors );
 
     // tex coord is [0..1] across the tile. The 3rd dimension tracks whether the
     // vert is masked: 0=yes, 1=no
@@ -255,6 +266,12 @@ GeometryPool::createGeometry(const TileKey& tileKey,
             normal.normalize();
             normals->push_back( normal );
 
+#if 1
+            // neighbor:
+            osg::Vec3d modelNeighborLTP = (*verts)[verts->size() - getMorphNeighborIndexOffset(col, row, _tileSize)];
+            neighbors->push_back(modelNeighborLTP);
+#else
+
             if (tileKey.getLOD()>=uiMorphLOD)
             {
                 osg::Vec3d modelXPlusOne;
@@ -282,6 +299,7 @@ GeometryPool::createGeometry(const TileKey& tileKey,
                 // PP: I shouldn't have to do this
                 tangents->push_back(vZero);
             }
+#endif
         }
     }
 

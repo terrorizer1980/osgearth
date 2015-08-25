@@ -253,8 +253,11 @@ RexTerrainEngineNode::postInitialize( const Map* map, const TerrainOptions& opti
     // merge in the custom options:
     _terrainOptions.merge( options );
 
-    if ( _terrainOptions.enableLODBlending() == true )
+    // morphing imagery LODs requires we bind parent textures to their own unit.
+    if ( _terrainOptions.morphImagery() == true )
+    {
         _requireParentTextures = true;
+    }
 
     // if the envvar for tile expiration is set, overide the options setting
     const char* val = ::getenv("OSGEARTH_EXPIRATION_THRESHOLD");
@@ -328,19 +331,6 @@ RexTerrainEngineNode::postInitialize( const Map* map, const TerrainOptions& opti
 
     _batchUpdateInProgress = false;
 
-    // install some terrain-wide uniforms
-    this->getOrCreateStateSet()->getOrCreateUniform(
-        "oe_min_tile_range_factor",
-        osg::Uniform::FLOAT)->set( *_terrainOptions.minTileRangeFactor() );
-
-    this->getOrCreateStateSet()->getOrCreateUniform(
-        "oe_lodblend_delay",
-        osg::Uniform::FLOAT)->set( *_terrainOptions.lodBlendDelay() );
-
-    this->getOrCreateStateSet()->getOrCreateUniform(
-        "oe_lodblend_duration",
-        osg::Uniform::FLOAT)->set( *_terrainOptions.lodBlendDuration() );
-
     // set up the initial shaders
     updateState();
 
@@ -355,14 +345,7 @@ RexTerrainEngineNode::postInitialize( const Map* map, const TerrainOptions& opti
 osg::BoundingSphere
 RexTerrainEngineNode::computeBound() const
 {
-    //if ( _terrain && _terrain->getNumChildren() > 0 )
-    //{
-    //    return _terrain->getBound();
-    //}
-    //else
-    {
-        return TerrainEngineNode::computeBound();
-    }
+    return TerrainEngineNode::computeBound();
 }
 
 void
@@ -486,8 +469,8 @@ RexTerrainEngineNode::setupRenderBindings()
     _renderBindings.push_back( SamplerBinding() );
     SamplerBinding& colorParent = _renderBindings.back();
     colorParent.usage()       = SamplerBinding::COLOR_PARENT;
-    colorParent.samplerName() = "oe_layer_tex_parent";
-    colorParent.matrixName()  = "oe_layer_texMatrix_parent";
+    colorParent.samplerName() = "oe_layer_texParent";
+    colorParent.matrixName()  = "oe_layer_texParentMatrix";
     this->getResources()->reserveTextureImageUnit( colorParent.unit(), "Terrain Color (Parent)" );
 }
 
@@ -522,7 +505,7 @@ RexTerrainEngineNode::dirtyTerrain()
 
     // are we LOD blending?
     bool setupParentData = 
-        _terrainOptions.enableLODBlending() == true ||
+        _terrainOptions.morphImagery() == true || // gw: redundant?
         this->parentTexturesRequired();
     
     // reserve GPU unit for the main color texture:
@@ -935,6 +918,14 @@ RexTerrainEngineNode::updateState()
             {
                 package.load(surfaceVP, package.NORMAL_MAP_VERT);
                 package.load(surfaceVP, package.NORMAL_MAP_FRAG);
+            }
+
+            // Morphing?
+            if (_terrainOptions.morphTerrain() == true ||
+                _terrainOptions.morphImagery() == true)
+            {
+                package.define("OE_REX_VERTEX_MORPHING", (_terrainOptions.morphTerrain() == true));
+                package.load(surfaceVP, package.MORPHING_VERT);
             }
 
             for(LandCoverBins::iterator i = _landCoverBins.begin(); i != _landCoverBins.end(); ++i)
