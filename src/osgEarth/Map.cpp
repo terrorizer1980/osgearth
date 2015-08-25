@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -1039,8 +1039,12 @@ Map::calculateProfile()
         }
         else if ( _mapOptions.coordSysType() == MapOptions::CSTYPE_PROJECTED && _profile.valid() && _profile->getSRS()->isGeographic() )
         {
-            OE_INFO << LC << "Projected display with geographic SRS; activating Plate Carre mode" << std::endl;
-            _profile = _profile->overrideSRS( _profile->getSRS()->createPlateCarreGeographicSRS() );
+            OE_INFO << LC << "Projected map with geographic SRS; activating EQC profile" << std::endl;            
+            unsigned u, v;
+            _profile->getNumTiles(0, u, v);
+            const osgEarth::SpatialReference* eqc = _profile->getSRS()->createEquirectangularSRS();
+            osgEarth::GeoExtent e = _profile->getExtent().transform( eqc );
+            _profile = osgEarth::Profile::create( eqc, e.xMin(), e.yMin(), e.xMax(), e.yMax(), u, v);
         }
         else if ( _mapOptions.coordSysType() == MapOptions::CSTYPE_PROJECTED && !( _profile.valid() && _profile->getSRS()->isProjected() ) )
         {
