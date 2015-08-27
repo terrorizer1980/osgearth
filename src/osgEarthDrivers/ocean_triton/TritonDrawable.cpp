@@ -368,10 +368,6 @@ namespace
 		"} \n";
 }
 
-
-
-	
-
 TritonDrawable::TritonDrawable(osgEarth::MapNode* mapNode, TritonContext* TRITON, osgEarth::Util::SkyNode* sky_node) :
 _TRITON(TRITON),
 	_mapNode(mapNode),
@@ -399,6 +395,14 @@ _TRITON(TRITON),
 		this->getOrCreateStateSet()->setTextureAttributeAndModes(0, environmentMap, osg::StateAttribute::ON);
 		this->getOrCreateStateSet()->setMode( GL_TEXTURE_CUBE_MAP_SEAMLESS, osg::StateAttribute::ON );
 	}
+
+    // dynamic variance prevents update/cull overlap when drawing this
+    setDataVariance( osg::Object::DYNAMIC );
+    
+    // Place in the depth-sorted bin and set a rendering order.
+    // We want Triton to render after the terrain.
+    this->getOrCreateStateSet()->setRenderingHint( osg::StateSet::TRANSPARENT_BIN );
+
 }
 
 
@@ -574,7 +578,8 @@ void
 
 			// Build transform from our cube map orientation space to native Triton orientation
 			// See worldToCubeMap function used in SkyBox to orient sky texture so that sky is up and earth is down
-			osg::Matrix m = *worldToLocal*osg::Matrix::rotate( -osg::PI_2, osg::X_AXIS ); // = worldToCubeMap
+			//osg::Matrix m = *worldToLocal*osg::Matrix::rotate( -osg::PI_2, osg::X_AXIS ); // = worldToCubeMap
+			osg::Matrix m = osg::Matrix::rotate( 0, osg::X_AXIS ); // = worldToCubeMap
 
 			::Triton::Matrix3 transformFromYUpToZUpCubeMapCoords(
 				m(0,0), m(0,1), m(0,2),

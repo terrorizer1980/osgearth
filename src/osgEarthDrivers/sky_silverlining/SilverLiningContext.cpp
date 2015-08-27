@@ -223,6 +223,13 @@ SilverLiningContext::updateLocation()
         osg::Vec3d north = osg::Vec3d(0, 1, 0);
         osg::Vec3d east = north ^ up;
 
+
+		/*if(abs(_cameraPos.length() - _lastCamPos.length()) > 1000)
+		{
+			_updateEnvMap = true;
+			_lastCamPos = _cameraPos;
+		}*/
+
         // Check for edge case of north or south pole
         if (east.length2() == 0)
         {
@@ -242,6 +249,7 @@ SilverLiningContext::updateLocation()
         loc.SetAltitude ( latLonAlt.z() );
         loc.SetLongitude( latLonAlt.x() ); //osg::DegreesToRadians(latLonAlt.x()) );
         loc.SetLatitude ( latLonAlt.y() ); //osg::DegreesToRadians(latLonAlt.y()) );
+
 
         _atmosphere->GetConditions()->SetLocation( loc );
 

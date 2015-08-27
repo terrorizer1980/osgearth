@@ -105,6 +105,7 @@ namespace osgEarth { namespace SilverLining
         osg::observer_ptr<osg::Camera> _camera;
         osg::Vec3d                     _cameraPos; // eye point
         osg::Vec4f                     _minAmbient;
+		osg::Vec3d					   _lastCamPos;
 
         SilverLiningOptions _options;
 		bool _updateEnvMap;
