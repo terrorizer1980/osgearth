@@ -26,6 +26,7 @@
 #include <iterator>
 #include <osgEarth/Registry>
 #include <osgEarth/Capabilities>
+#include <osgEarth/ImageUtils>
 
 using namespace osg;
 using namespace osgEarth::Drivers::RexTerrainEngine;
@@ -58,6 +59,8 @@ _drawPatch   ( false )
 
     _textureImageUnit       = SamplerBinding::findUsage(bindings, SamplerBinding::COLOR)->unit();
     _textureParentImageUnit = SamplerBinding::findUsage(bindings, SamplerBinding::COLOR_PARENT)->unit();
+
+    _tileSize = (int)sqrt((float)_geom->getVertexArray()->getNumElements());
 }
 
 void
@@ -116,6 +119,10 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo) const
         pcp = state.getLastAppliedProgramObject();
     }
 
+    // safely latch
+    if ( _geom->getNumPrimitiveSets() < 1 )
+        return;
+
     // cannot store these in the object since there could be multiple GCs (and multiple
     // PerContextPrograms) at large
     GLint opacityLocation            = -1;
@@ -123,7 +130,7 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo) const
     GLint orderLocation              = -1;
     GLint texMatrixLocation          = -1;
     GLint texMatrixParentLocation    = -1;
-    GLint texParentExistsLocation     = -1;
+    GLint texParentExistsLocation    = -1;
 
     // The PCP can change (especially in a VirtualProgram environment). So we do need to
     // requery the uni locations each time unfortunately. TODO: explore optimizations.
@@ -260,6 +267,14 @@ TileDrawable:: COMPUTE_BOUND() const
     return bbox;
 }
 
+void
+TileDrawable::setElevationRaster(const osg::Image*   image,
+                                 const osg::Matrixf& scaleBias)
+{
+    _elevationRaster = image;
+    _elevationScaleBias = scaleBias;
+}
+
 void    
 TileDrawable::setElevationExtrema(const osg::Vec2f& minmax)
 {
@@ -277,6 +292,55 @@ osg::BoundingBox
 TileDrawable::computeBox() const
 {
     return COMPUTE_BOUND();
+}
+
+void
+TileDrawable::accept(osg::PrimitiveFunctor& f) const
+{
+    if ( !_elevationRaster.valid() )
+        return;
+
+    const osg::Vec3Array* verts   = static_cast<osg::Vec3Array*>(_geom->getVertexArray());
+    const osg::Vec3Array* normals = static_cast<osg::Vec3Array*>(_geom->getNormalArray());
+
+    ImageUtils::PixelReader elevation(_elevationRaster.get());
+
+    float
+        scaleU = _elevationScaleBias(0,0),
+        scaleV = _elevationScaleBias(1,1),
+        biasU  = _elevationScaleBias(3,0),
+        biasV  = _elevationScaleBias(3,1);    
+    
+    for(int t=0; t<_tileSize-1; ++t)
+    {
+        float v  = (float)t     / (float)(_tileSize-1);
+        float v1 = (float)(t+1) / (float)(_tileSize-1);
+
+        f.begin( GL_QUAD_STRIP );
+
+        for(int s=0; s<_tileSize; ++s)
+        {
+            float u = (float)s / (float)(_tileSize-1);
+
+            int index = t*_tileSize + s;
+            {
+                const osg::Vec3f& vert   = (*verts)[index];
+                const osg::Vec3f& normal = (*normals)[index];
+                float h = elevation(u*scaleU+biasU, v*scaleV+biasV).r();
+                f.vertex( vert + normal*h );
+            }
+
+            index += _tileSize;
+            {
+                const osg::Vec3f& vert = (*verts)[index];
+                const osg::Vec3f& normal = (*normals)[index];
+                float h = elevation(u*scaleU+biasU, v1*scaleV+biasV).r();
+                f.vertex( vert + normal*h );
+            }
+        }
+
+        f.end();
+    }
 }
 
 void 
@@ -436,77 +500,79 @@ void
 TileDrawable::drawVertexArraysImplementation(osg::RenderInfo& renderInfo) const
 {
     State& state = *renderInfo.getState();
-    bool handleVertexAttributes = !_vertexAttribList.empty();
+    bool handleVertexAttributes = !_geom->getVertexAttribArrayList().empty();
+    //bool handleVertexAttributes = !_vertexAttribList.empty();
 
     ArrayDispatchers& arrayDispatchers = state.getArrayDispatchers();
 
     arrayDispatchers.reset();
-    arrayDispatchers.setUseVertexAttribAlias(useFastPath && state.getUseVertexAttributeAliasing());
-    arrayDispatchers.setUseGLBeginEndAdapter(!useFastPath);
+    arrayDispatchers.setUseVertexAttribAlias(state.getUseVertexAttributeAliasing());
+    arrayDispatchers.setUseGLBeginEndAdapter(false);
 
-    arrayDispatchers.activateNormalArray(_normalData.binding, _normalData.array.get(), _normalData.indices.get());
-    arrayDispatchers.activateColorArray(_colorData.binding, _colorData.array.get(), _colorData.indices.get());
-    arrayDispatchers.activateSecondaryColorArray(_secondaryColorData.binding, _secondaryColorData.array.get(), _secondaryColorData.indices.get());
-    arrayDispatchers.activateFogCoordArray(_fogCoordData.binding, _fogCoordData.array.get(), _fogCoordData.indices.get());
+    arrayDispatchers.activateNormalArray(_geom->getNormalBinding(), _geom->getNormalArray(), _geom->getNormalIndices());
+    arrayDispatchers.activateColorArray(_geom->getColorBinding(), _geom->getColorArray(), _geom->getColorIndices());
+    arrayDispatchers.activateSecondaryColorArray(_geom->getSecondaryColorBinding(), _geom->getSecondaryColorArray(), _geom->getSecondaryColorIndices());
+    arrayDispatchers.activateFogCoordArray(_geom->getFogCoordBinding(), _geom->getFogCoordArray(), _geom->getFogCoordIndices());
 
     if (handleVertexAttributes)
     {
-        for(unsigned int unit=0;unit<_vertexAttribList.size();++unit)
+        for(unsigned int unit=0;unit < _geom->getVertexAttribArrayList().size();++unit)
         {
-            arrayDispatchers.activateVertexAttribArray(_vertexAttribList[unit].binding, unit, _vertexAttribList[unit].array.get(), _vertexAttribList[unit].indices.get());
+            const osg::Geometry::ArrayData& val = _geom->getVertexAttribArrayList()[unit];
+            arrayDispatchers.activateVertexAttribArray(val.binding, unit, val.array.get(), val.indices.get());
         }
     }
 
     // dispatch any attributes that are bound overall
-    arrayDispatchers.dispatch(BIND_OVERALL,0);
+    arrayDispatchers.dispatch(_geom->BIND_OVERALL, 0);
 
     state.lazyDisablingOfVertexAttributes();
 
-    if (useFastPath)
+    // set up arrays
+    if( _geom->getVertexArray() )
+        state.setVertexPointer(_geom->getVertexArray()); //_vertexData.array.get());
+
+    if (_geom->getNormalBinding()==_geom->BIND_PER_VERTEX && _geom->getNormalArray())
+        state.setNormalPointer(_geom->getNormalArray());
+
+    if (_geom->getColorBinding()==_geom->BIND_PER_VERTEX && _geom->getColorArray())
+        state.setColorPointer(_geom->getColorArray());
+
+    if (_geom->getSecondaryColorBinding()==_geom->BIND_PER_VERTEX && _geom->getSecondaryColorArray())
+        state.setSecondaryColorPointer(_geom->getSecondaryColorArray());
+
+    if (_geom->getFogCoordBinding()==_geom->BIND_PER_VERTEX && _geom->getFogCoordArray())
+        state.setFogCoordPointer(_geom->getFogCoordArray());
+    
+    for(unsigned int unit=0;unit<_geom->getTexCoordArrayList().size();++unit)
     {
-        // set up arrays
-        if( _vertexData.array.valid() )
-            state.setVertexPointer(_vertexData.array.get());
-
-        if (_normalData.binding==BIND_PER_VERTEX && _normalData.array.valid())
-            state.setNormalPointer(_normalData.array.get());
-
-        if (_colorData.binding==BIND_PER_VERTEX && _colorData.array.valid())
-            state.setColorPointer(_colorData.array.get());
-
-        if (_secondaryColorData.binding==BIND_PER_VERTEX && _secondaryColorData.array.valid())
-            state.setSecondaryColorPointer(_secondaryColorData.array.get());
-
-        if (_fogCoordData.binding==BIND_PER_VERTEX && _fogCoordData.array.valid())
-            state.setFogCoordPointer(_fogCoordData.array.get());
-
-        for(unsigned int unit=0;unit<_texCoordList.size();++unit)
+        const Array* array = _geom->getTexCoordArray(unit);
+        if (array)
         {
-            const Array* array = _texCoordList[unit].array.get();
-            if (array) state.setTexCoordPointer(unit,array);
+            state.setTexCoordPointer(unit,array);
         }
-
-        if( handleVertexAttributes )
+    }
+    
+    if ( handleVertexAttributes )
+    {
+        for(unsigned int index = 0; index < _geom->getVertexAttribArrayList().size(); ++index)
         {
-            for(unsigned int index = 0; index < _vertexAttribList.size(); ++index )
+            const osg::Array* array = _geom->getVertexAttribArray(index);
+            if ( array && _geom->getVertexAttribBinding(index) == _geom->BIND_PER_VERTEX )
             {
-                const Array* array = _vertexAttribList[index].array.get();
-                const AttributeBinding ab = _vertexAttribList[index].binding;
-                if( ab == BIND_PER_VERTEX && array )
+                if (array->getPreserveDataType())
                 {
-                    state.setVertexAttribPointer( index, array, _vertexAttribList[index].normalize );
+                    GLenum dataType = array->getDataType();
+                    if (dataType==GL_FLOAT) state.setVertexAttribPointer( index, array, GL_FALSE );
+                    else if (dataType==GL_DOUBLE) state.setVertexAttribLPointer( index, array );
+                    else state.setVertexAttribIPointer( index, array );
+                }
+                else
+                {
+                    state.setVertexAttribPointer( index, array, GL_FALSE );
                 }
             }
         }
-    }
-    else
-    {
-        for(unsigned int unit=0;unit<_texCoordList.size();++unit)
-        {
-            arrayDispatchers.activateTexCoordArray(BIND_PER_VERTEX, unit, _texCoordList[unit].array.get(), _texCoordList[unit].indices.get());
-        }
-
-        arrayDispatchers.activateVertexArray(BIND_PER_VERTEX, _vertexData.array.get(), _vertexData.indices.get());
     }
 
     state.applyDisablingOfVertexAttributes();
