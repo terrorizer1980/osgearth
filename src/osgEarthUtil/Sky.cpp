@@ -64,6 +64,12 @@ SkyNode::baseInit(const SkyOptions& options)
         _dateTime = DateTime(_dateTime.year(), _dateTime.month(), _dateTime.day(), (double)hours);
         // (don't call setDateTime since we are called from the CTOR)
     }
+
+	if ( options.ambient().isSet() )
+	{
+		float min_a = osg::clampBetween(options.ambient().get(), 0.0f, 1.0f);
+		_minimumAmbient.set(min_a, min_a, min_a, min_a);
+	}
 }
 
 void
