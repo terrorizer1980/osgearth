@@ -554,14 +554,19 @@ void
 		// GLenum texture = renderInfo.getState()->getLastAppliedTextureAttribute( _stage, osg::StateAttribute::TEXTURE );
 
 		::Triton::TextureHandle env_id = 0; 
+
+		static bool update_env = true;
 		if(_skyNode)
 		{
 			env_id = (::Triton::TextureHandle)_skyNode->getEnvMapID();
+			if(env_id > 0)
+			{
+				environment->SetEnvironmentMap(env_id);
+				update_env = false;
+			}
 		}
-		if(env_id > 0)
-			environment->SetEnvironmentMap(env_id);
 
-		else if ( _cubeMap.valid() )
+		if ( update_env && _cubeMap.valid() )
 		{
 			osg::Vec3d eye, center, up;
 			osg::Camera* camera = renderInfo.getCurrentCamera();
