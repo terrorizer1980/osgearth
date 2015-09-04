@@ -69,9 +69,8 @@ namespace osgEarth { namespace Drivers { namespace RexTerrainEngine
         // underlying geometry, possible shared between this tile and other.
         osg::ref_ptr<osg::Geometry> _geom;
 
-
-        // local elevation extrema
-        osg::Vec2f _minmax;
+        // tile dimensions
+        int _tileSize;
 
         bool _drawPatch;
 
@@ -82,13 +81,17 @@ namespace osgEarth { namespace Drivers { namespace RexTerrainEngine
 
         const TileKey _key;
 
+        osg::ref_ptr<const osg::Image> _elevationRaster;
+        osg::Matrixf                   _elevationScaleBias;
+
     public:
         
         // construct a new TileDrawable that fronts an osg::Geometry
         TileDrawable(
             const TileKey&        key,
             const RenderBindings& bindings,
-            osg::Geometry*        geometry);
+            osg::Geometry*        geometry,
+            int                   tileSize);
 
         // whether to draw this as a multi-image geometry or as a tesselation patch.
         void setDrawAsPatches(bool value) { _drawPatch = value; }
@@ -109,11 +112,10 @@ namespace osgEarth { namespace Drivers { namespace RexTerrainEngine
         // validate the geometry is OK.
         void validate();
 
-        // Sets the min and max elevation for verts in this tile. Necessary since the elevation
-        void setElevationExtrema(const osg::Vec2f& minmax);
-
-        osg::BoundingBox computeBox() const;
-        const osg::BoundingBox& getBox() const;
+        // Sets the elevation raster for this tile
+        void setElevationRaster(const osg::Image* image, const osg::Matrixf& scaleBias);
+        const osg::Image* getElevationRaster() const;
+        const osg::Matrixf& getElevationMatrix() const;
 
     public: // osg::Geometry overrides
 
@@ -140,17 +142,10 @@ namespace osgEarth { namespace Drivers { namespace RexTerrainEngine
         void accept(osg::Drawable::ConstAttributeFunctor& f) const { if ( _geom.valid() ) _geom->accept(f); }
 
         bool supports(osg::PrimitiveFunctor& f) const { return true; }
-        void accept(osg::PrimitiveFunctor& f) const {}
+        void accept(osg::PrimitiveFunctor& f) const;
         
-        bool supports(osg::PrimitiveIndexFunctor& f) const { return true; }
-        void accept(osg::PrimitiveIndexFunctor& f) const {}
-        
-        // recalculate the bound for the tile key uniform.
-#if OSG_VERSION_GREATER_THAN(3,3,1)
-        osg::BoundingBox computeBoundingBox() const;
-#else
-        osg::BoundingBox computeBound() const;
-#endif
+        /** indexed functor is NOT supported since we need to apply elevation dynamically */
+        bool supports(osg::PrimitiveIndexFunctor& f) const { return false; }
 
     public:
         META_Object(osgEarth, TileDrawable);

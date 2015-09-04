@@ -145,8 +145,6 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
     bool viewStageInGS  = hasGS;
     bool viewStageInTES = !viewStageInGS && hasTES;
     bool viewStageInVS  = !viewStageInTES && !viewStageInGS;
-
-    //OE_WARN << "viewStageInVS = " << viewStageInVS << "; viewStageInTES = " << viewStageInTES << "; viewStageInGS = " << viewStageInGS << "\n";
     
     bool clipStageInGS  = hasGS;
     bool clipStageInTES = hasTES && !hasGS;
@@ -382,9 +380,7 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
 
         buf << "} \n";
 
-        std::string str;
-        str = buf.str();
-        osg::Shader* vertexShader = new osg::Shader( osg::Shader::VERTEX, str );
+        osg::Shader* vertexShader = new osg::Shader( osg::Shader::VERTEX, buf.str() );
         vertexShader->setName( "main(vertex)" );
         out_shaders.push_back( vertexShader );
     }

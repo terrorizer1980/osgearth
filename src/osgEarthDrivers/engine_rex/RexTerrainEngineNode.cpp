@@ -33,11 +33,16 @@
 #include <osgEarth/Utils>
 #include <osgEarth/ObjectIndex>
 
+#include <osg/Version>
 #include <osg/Depth>
 #include <osg/BlendFunc>
-#include <osg/PatchParameter>
 #include <osg/Multisample>
 #include <osgUtil/RenderBin>
+
+#if OSG_VERSION_GREATER_OR_EQUAL(3,1,8)
+#   define HAVE_OSG_PATCH_PARAMETER
+#   include <osg/PatchParameter>
+#endif
 
 #include <cstdlib> // for getenv
 
@@ -47,7 +52,7 @@ using namespace osgEarth::Drivers::RexTerrainEngine;
 using namespace osgEarth;
 
 
-// TODO: bins don't work with SSDK. No idea why. Disable until further notice.
+// TODO: bins don't work with SSDK. No idea why.
 #define USE_RENDER_BINS 1
 
 //------------------------------------------------------------------------
@@ -301,7 +306,12 @@ RexTerrainEngineNode::postInitialize( const Map* map, const TerrainOptions& opti
     }
 
     // Make a tile loader
-    _loader = new PagerLoader( getUID() );
+    PagerLoader* loader = new PagerLoader( getUID() );    
+    if ( _terrainOptions.mergesPerFrame().isSet() )
+    {
+        loader->setMergesPerFrame( _terrainOptions.mergesPerFrame().get() );
+    }
+    _loader = loader;
     //_loader = new SimpleLoader();
     this->addChild( _loader.get() );
     
@@ -883,7 +893,9 @@ RexTerrainEngineNode::updateState()
         // install patch param if we are tessellation on the GPU.
         if ( _terrainOptions.gpuTessellation() == true )
         {
-            terrainStateSet->setAttributeAndModes( new osg::PatchParameter(3) );
+            #ifdef HAVE_PATCH_PARAMETER
+              terrainStateSet->setAttributeAndModes( new osg::PatchParameter(3) );
+            #endif
         }
 
         // install shaders, if we're using them.
@@ -944,7 +956,9 @@ RexTerrainEngineNode::updateState()
                     new osg::BlendFunc(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO),
                     osg::StateAttribute::OVERRIDE );
 
-                landCoverStateSet->setAttributeAndModes( new osg::PatchParameter(3) );
+                #ifdef HAVE_OSG_PATCH_PARAMETER
+                    landCoverStateSet->setAttributeAndModes( new osg::PatchParameter(3) );
+                #endif
             }
 
             // assemble color filter code snippets.

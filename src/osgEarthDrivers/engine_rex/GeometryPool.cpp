@@ -19,7 +19,6 @@
 #include "GeometryPool"
 #include <osgEarth/Locators>
 #include <osg/Point>
-#include <osg/PatchParameter>
 #include <cstdlib> // for getenv
 
 using namespace osgEarth;
@@ -29,8 +28,10 @@ using namespace osgEarth::Drivers::RexTerrainEngine;
 
 // TODO: experiment with sharing a single texture coordinate array 
 //// across all shared geometries.
-#define SHARE_TEX_COORDS 1
+/// JB:  Disabled to fix issues with ATI.
+//#define SHARE_TEX_COORDS 1
 
+#if 0
 namespace
 {
     /**
@@ -64,6 +65,7 @@ namespace
         osg::ref_ptr<osg::PrimitiveSet> _patchTriangles;
     };
 }
+#endif
 
 
 GeometryPool::GeometryPool(const RexTerrainEngineOptions& options) :
@@ -80,7 +82,6 @@ _debug   ( false )
 
 void
 GeometryPool::getPooledGeometry(const TileKey&               tileKey,
-                                unsigned uiMorphLOD,
                                 const MapInfo&               mapInfo,
                                 osg::ref_ptr<osg::Geometry>& out)
 {
@@ -100,7 +101,7 @@ GeometryPool::getPooledGeometry(const TileKey&               tileKey,
     else
     {
         // Not found. Create it.
-        out = createGeometry( tileKey, uiMorphLOD, mapInfo, 0L );
+        out = createGeometry( tileKey, mapInfo, 0L );
         _geometryMap[ geomKey ] = out.get();
 
         if ( _debug )
@@ -159,7 +160,6 @@ namespace
 
 osg::Geometry*
 GeometryPool::createGeometry(const TileKey& tileKey,
-                             unsigned uiMorphLOD,
                              const MapInfo& mapInfo,
                              MaskGenerator* maskSet) const
 {    
@@ -192,7 +192,7 @@ GeometryPool::createGeometry(const TileKey& tileKey,
     osg::BoundingSphere tileBound;
 
     // the geometry:
-    SharedGeometry* geom = new SharedGeometry();
+    osg::Geometry* geom = new osg::Geometry();
     geom->setUseVertexBufferObjects(true);
     geom->setUseDisplayList(false);
 
@@ -209,10 +209,10 @@ GeometryPool::createGeometry(const TileKey& tileKey,
     geom->setNormalArray( normals );
     geom->setNormalBinding( geom->BIND_PER_VERTEX );
 
-    osg::Vec3Array* neighbors = 0;
-    neighbors = new osg::Vec3Array();
+    // neighbor positions (for morphing)
+    osg::Vec3Array* neighbors = new osg::Vec3Array();
     neighbors->reserve( numVerts );
-    geom->setTexCoordArray(1, neighbors );
+    geom->setTexCoordArray( 1, neighbors );
 
     // tex coord is [0..1] across the tile. The 3rd dimension tracks whether the
     // vert is masked: 0=yes, 1=no
@@ -262,44 +262,13 @@ GeometryPool::createGeometry(const TileKey& tileKey,
 
             osg::Vec3d modelPlusOne;
             locator->unitToModel(osg::Vec3d(nx, ny, 1.0f), modelPlusOne);
-            osg::Vec3d normal = (modelPlusOne*world2local)-modelLTP;
+            osg::Vec3d normal = (modelPlusOne*world2local)-modelLTP;                
             normal.normalize();
             normals->push_back( normal );
 
-#if 1
             // neighbor:
             osg::Vec3d modelNeighborLTP = (*verts)[verts->size() - getMorphNeighborIndexOffset(col, row, _tileSize)];
             neighbors->push_back(modelNeighborLTP);
-#else
-
-            if (tileKey.getLOD()>=uiMorphLOD)
-            {
-                osg::Vec3d modelXPlusOne;
-                locator->unitToModel(osg::Vec3d(nx+tdelta.x(), ny, 0.0f), modelXPlusOne);
-                osg::Vec3d tangent = (modelXPlusOne*world2local)-modelLTP;
-                tangent.normalize();
-                tangents->push_back(tangent);
-#if 0
-                // for debugging
-                osg::Vec3d modelYPlusOne;
-                locator->unitToModel(osg::Vec3d(nx, ny+bdelta.y(), 0.0f), modelYPlusOne);
-                osg::Vec3f binormal = (modelYPlusOne*world2local)-modelLTP;
-                binormal.normalize();
-
-                osg::Vec3f recoveredBN = normal^tangent;
-                recoveredBN.normalize();
-
-                float d1 = normal*tangent;
-                float d2 = binormal*tangent;
-                float d3 = binormal*normal;
-#endif
-            }
-            else
-            {
-                // PP: I shouldn't have to do this
-                tangents->push_back(vZero);
-            }
-#endif
         }
     }
 
@@ -383,6 +352,7 @@ GeometryPool::createGeometry(const TileKey& tileKey,
         addSkirtTriangles( i, skirtIndex );
     }
 
+#if 0
     // if we're using patches, we must create a "proxy" primitive set that supports
     // PrimitiveFunctor et al (for intersections, bounds testing, etc.)
     if ( mode == GL_PATCHES )
@@ -391,6 +361,7 @@ GeometryPool::createGeometry(const TileKey& tileKey,
         patchesAsTriangles->setMode( GL_TRIANGLES );
         geom->setPatchTriangles( patchesAsTriangles );
     }
+#endif
 
     return geom;
 }
