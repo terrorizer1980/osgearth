@@ -28,8 +28,10 @@ using namespace osgEarth::Drivers::RexTerrainEngine;
 
 // TODO: experiment with sharing a single texture coordinate array 
 //// across all shared geometries.
-#define SHARE_TEX_COORDS 1
+/// JB:  Disabled to fix issues with ATI.
+//#define SHARE_TEX_COORDS 1
 
+#if 0
 namespace
 {
     /**
@@ -63,6 +65,7 @@ namespace
         osg::ref_ptr<osg::PrimitiveSet> _patchTriangles;
     };
 }
+#endif
 
 
 GeometryPool::GeometryPool(const RexTerrainEngineOptions& options) :
@@ -189,7 +192,7 @@ GeometryPool::createGeometry(const TileKey& tileKey,
     osg::BoundingSphere tileBound;
 
     // the geometry:
-    SharedGeometry* geom = new SharedGeometry();
+    osg::Geometry* geom = new osg::Geometry();
     geom->setUseVertexBufferObjects(true);
     geom->setUseDisplayList(false);
 
@@ -206,10 +209,10 @@ GeometryPool::createGeometry(const TileKey& tileKey,
     geom->setNormalArray( normals );
     geom->setNormalBinding( geom->BIND_PER_VERTEX );
 
-    osg::Vec3Array* neighbors = 0;
-    neighbors = new osg::Vec3Array();
+    // neighbor positions (for morphing)
+    osg::Vec3Array* neighbors = new osg::Vec3Array();
     neighbors->reserve( numVerts );
-    geom->setTexCoordArray(1, neighbors );
+    geom->setTexCoordArray( 1, neighbors );
 
     // tex coord is [0..1] across the tile. The 3rd dimension tracks whether the
     // vert is masked: 0=yes, 1=no
@@ -259,7 +262,7 @@ GeometryPool::createGeometry(const TileKey& tileKey,
 
             osg::Vec3d modelPlusOne;
             locator->unitToModel(osg::Vec3d(nx, ny, 1.0f), modelPlusOne);
-            osg::Vec3d normal = (modelPlusOne*world2local)-modelLTP;
+            osg::Vec3d normal = (modelPlusOne*world2local)-modelLTP;                
             normal.normalize();
             normals->push_back( normal );
 
@@ -349,6 +352,7 @@ GeometryPool::createGeometry(const TileKey& tileKey,
         addSkirtTriangles( i, skirtIndex );
     }
 
+#if 0
     // if we're using patches, we must create a "proxy" primitive set that supports
     // PrimitiveFunctor et al (for intersections, bounds testing, etc.)
     if ( mode == GL_PATCHES )
@@ -357,6 +361,7 @@ GeometryPool::createGeometry(const TileKey& tileKey,
         patchesAsTriangles->setMode( GL_TRIANGLES );
         geom->setPatchTriangles( patchesAsTriangles );
     }
+#endif
 
     return geom;
 }
