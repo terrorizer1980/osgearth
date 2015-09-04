@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -80,14 +80,23 @@ namespace osgEarth { namespace Splat
             conf.addIfSet("warp",      _warp);
             conf.addIfSet("base_lod",  _baseLOD);
             conf.addIfSet("bits",      _bits);
+
+            // single
             conf.addObjIfSet( "image", _imageLayerOptions );
-            
-            for(std::vector<ImageLayerOptions>::const_iterator i = _imageLayerOptionsVec.begin();
-                i != _imageLayerOptionsVec.end(); 
-                ++i)
+
+            // multiple
+            if ( _imageLayerOptionsVec.size() > 0 )
             {
-                conf.add( "image", i->getConfig() );
+                Config images("images");
+                for(std::vector<ImageLayerOptions>::const_iterator i = _imageLayerOptionsVec.begin();
+                    i != _imageLayerOptionsVec.end(); 
+                    ++i)
+                {
+                    images.add( "image", i->getConfig() );
+                }
+                conf.add( images );
             }
+
             return conf;
         }
 
@@ -103,9 +112,12 @@ namespace osgEarth { namespace Splat
             conf.getIfSet("warp", _warp);
             conf.getIfSet("base_lod", _baseLOD);
             conf.getIfSet("bits",      _bits);
+
+            // single:
             conf.getObjIfSet( "image", _imageLayerOptions );
             
-            ConfigSet layerConfs = conf.children("image");
+            // multi:
+            ConfigSet layerConfs = conf.child("images").children("image");
             for(ConfigSet::const_iterator i = layerConfs.begin(); i != layerConfs.end(); ++i)
             {
                 _imageLayerOptionsVec.push_back( ImageLayerOptions(*i) );

@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -171,6 +171,7 @@ TileSourceOptions::getConfig() const
     conf.updateIfSet( "bilinear_reprojection", _bilinearReprojection );
     conf.updateIfSet( "max_data_level", _maxDataLevel );
     conf.updateIfSet( "coverage", _coverage );
+    conf.updateIfSet( "osg_option_string", _osgOptionString );
     conf.updateObjIfSet( "profile", _profileOptions );
     return conf;
 }
@@ -198,6 +199,7 @@ TileSourceOptions::fromConfig( const Config& conf )
     conf.getIfSet( "bilinear_reprojection", _bilinearReprojection );
     conf.getIfSet( "max_data_level", _maxDataLevel );
     conf.getIfSet( "coverage", _coverage );
+    conf.getIfSet( "osg_option_string", _osgOptionString );
     conf.getObjIfSet( "profile", _profileOptions );
 }
 
@@ -217,12 +219,9 @@ const TileSource::Mode TileSource::MODE_CREATE = 0x04;
 TileSource::TileSource(const TileSourceOptions& options) :
 _options( options ),
 _status ( Status::Error("Not initialized") ),
-_mode   ( 0 ),
-_frame  ( 0L )
+_mode   ( 0 )
 {
     this->setThreadSafeRefUnref( true );
-
-    _frame = new MapFrame();
 
     // Initialize the l2 cache size to the options.
     int l2CacheSize = *options.L2CacheSize();
@@ -267,11 +266,6 @@ TileSource::~TileSource()
     if (_blacklist.valid() && !_blacklistFilename.empty())
     {
         _blacklist->write(_blacklistFilename);
-    }
-
-    if ( _frame )
-    {
-        delete _frame;
     }
 }
 
@@ -339,8 +333,7 @@ const GeoExtent& TileSource::getDataExtentsUnion() const
 {
     if (_dataExtentsUnion.isInvalid() && _dataExtents.size() > 0)
     {
-        static Threading::Mutex s_mutex;
-        Threading::ScopedMutexLock lock(s_mutex);
+        Threading::ScopedMutexLock lock(_mutex);
         {
             if (_dataExtentsUnion.isInvalid() && _dataExtents.size() > 0) // double-check
             {
@@ -354,18 +347,6 @@ const GeoExtent& TileSource::getDataExtentsUnion() const
         }
     }
     return _dataExtentsUnion;
-}
-
-void
-TileSource::setMap(const Map* map)
-{
-    _frame->setMap( map );
-}
-
-MapFrame&
-TileSource::getMapFrame() const
-{
-    return *_frame;
 }
 
 osg::Image*

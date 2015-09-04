@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -26,36 +26,63 @@
 
 using namespace osgEarth;
 
-namespace
-{
-    // find the value of a quoted pragma, e.g.:
-    //   #pragma oe_key "value"
-    // returns the string "value" (without the quotes).
-    std::string getQuotedPragmaValue(const std::string& source,
-                                     const std::string& key)
-    {
-        std::string::size_type includePos = source.find("#pragma " + key);
-        if ( includePos == std::string::npos )
-            return "";
-
-        std::string::size_type openQuotePos = source.find('\"', includePos);
-        if ( openQuotePos == std::string::npos )
-            return "";
-
-        std::string::size_type closeQuotePos = source.find('\"', openQuotePos+1);
-        if ( closeQuotePos == std::string::npos )
-            return "";
-
-        std::string statement = source.substr( includePos, (closeQuotePos-includePos)+1 );
-
-        std::string value = source.substr( openQuotePos+1, (closeQuotePos-openQuotePos)-1 );
-
-        return value;
-    }
-}
 
 typedef std::map<std::string,std::string> StringMap;
 
+
+// find the value of a quoted pragma, e.g.:
+//   #pragma oe_key "value"
+// returns the string "value" (without the quotes).
+std::string
+ShaderLoader::getQuotedPragmaValue(const std::string& source, const std::string& key)
+{
+    std::string::size_type includePos = source.find("#pragma " + key);
+    if ( includePos == std::string::npos )
+        return "";
+
+    std::string::size_type openQuotePos = source.find('\"', includePos);
+    if ( openQuotePos == std::string::npos )
+        return "";
+
+    std::string::size_type closeQuotePos = source.find('\"', openQuotePos+1);
+    if ( closeQuotePos == std::string::npos )
+        return "";
+
+    std::string statement = source.substr( includePos, (closeQuotePos-includePos)+1 );
+
+    std::string value = source.substr( openQuotePos+1, (closeQuotePos-openQuotePos)-1 );
+
+    return value;
+}
+
+void 
+ShaderLoader::getAllQuotedPragmaValues(const std::string&     source,
+                                       const std::string&     key,
+                                       std::set<std::string>& output)
+{
+    std::string::size_type includePos = 0;
+    while( includePos != std::string::npos )
+    {
+        includePos = source.find("#pragma " + key, includePos);
+        if ( includePos != std::string::npos )
+        {
+            std::string::size_type openQuotePos = source.find('\"', includePos);
+            if ( openQuotePos != std::string::npos )
+            {
+                std::string::size_type closeQuotePos = source.find('\"', openQuotePos+1);
+                if ( closeQuotePos != std::string::npos )
+                {
+                    std::string statement = source.substr( includePos, (closeQuotePos-includePos)+1 );
+                    std::string value = source.substr( openQuotePos+1, (closeQuotePos-openQuotePos)-1 );
+                    if ( !value.empty() )
+                        output.insert( value );
+
+                    includePos = closeQuotePos;
+                }
+            }
+        }
+    }
+}
 
 std::string
 ShaderLoader::load(const std::string&    filename,
@@ -75,6 +102,10 @@ ShaderLoader::load(const std::string&    filename,
     {
         output = inlineSource;
         useInlineSource = true;
+        if ( inlineSource.empty() )
+        {
+            OE_WARN << LC << "Inline source for \"" << filename << "\" is empty, and no external file could be found.\n";
+        }
     }
     else
     {
@@ -220,10 +251,10 @@ ShaderLoader::load(const std::string&    filename,
 }
 
 bool
-ShaderLoader::loadFunction(VirtualProgram*       vp,
-                           const std::string&    filename,
-                           const ShaderPackage&  package,
-                           const osgDB::Options* dbOptions)
+ShaderLoader::load(VirtualProgram*       vp,
+                   const std::string&    filename,
+                   const ShaderPackage&  package,
+                   const osgDB::Options* dbOptions)
 {
     if ( !vp )
     {
@@ -237,14 +268,7 @@ ShaderLoader::loadFunction(VirtualProgram*       vp,
         OE_WARN << LC << "Failed to load shader source from \"" << filename << "\"\n";
         return false;
     }
-
-    std::string entryPoint = getQuotedPragmaValue(source, "vp_entryPoint");
-    if ( entryPoint.empty() )
-    {
-        OE_WARN << LC << "Illegal: shader \"" << filename << "\" missing required #pragma vp_entryPoint\n";
-        return false;
-    }
-
+    
     std::string loc = getQuotedPragmaValue(source, "vp_location");
     if ( loc.empty() )
     {
@@ -259,6 +283,12 @@ ShaderLoader::loadFunction(VirtualProgram*       vp,
         location = ShaderComp::LOCATION_VERTEX_VIEW;
     else if ( ciEquals(loc, "vertex_clip") )
         location = ShaderComp::LOCATION_VERTEX_CLIP;
+    else if ( ciEquals(loc, "tess_control") || ciEquals(loc, "tessellation_control") )
+        location = ShaderComp::LOCATION_TESS_CONTROL;
+    else if ( ciEquals(loc, "tess_eval") || ciEquals(loc, "tessellation_eval") || ciEquals(loc, "tessellation_evaluation") || ciEquals(loc, "tess_evaluation") )
+        location = ShaderComp::LOCATION_TESS_EVALUATION;
+    else if ( ciEquals(loc, "vertex_geometry") || ciEquals(loc, "geometry") )
+        location = ShaderComp::LOCATION_GEOMETRY;
     else if ( ciEquals(loc, "fragment" ) )
         location = ShaderComp::LOCATION_FRAGMENT_COLORING;
     else if ( ciEquals(loc, "fragment_coloring") )
@@ -273,26 +303,44 @@ ShaderLoader::loadFunction(VirtualProgram*       vp,
         return false;
     }
 
-    // order is optional.
-    std::string orderStr = getQuotedPragmaValue(source, "vp_order");
-    float order;
-    if ( ciEquals(orderStr, "FLT_MAX") || ciEquals(orderStr, "last") )
-        order = FLT_MAX;
-    else if ( ciEquals(orderStr, "-FLT_MAX") || ciEquals(orderStr, "first") )
-        order = -FLT_MAX;
-    else
-        order = as<float>(orderStr, 1.0f);
+    // If entry point is set, this is a function; otherwise a simple library.
+    std::string entryPoint = getQuotedPragmaValue(source, "vp_entryPoint");
+    if ( !entryPoint.empty() )
+    {
+        // order is optional.
+        std::string orderStr = getQuotedPragmaValue(source, "vp_order");
+        float order;
+        if ( ciEquals(orderStr, "FLT_MAX") || ciEquals(orderStr, "last") )
+            order = FLT_MAX;
+        else if ( ciEquals(orderStr, "-FLT_MAX") || ciEquals(orderStr, "first") )
+            order = -FLT_MAX;
+        else
+            order = as<float>(orderStr, 1.0f);
 
-    // set the function!
-    vp->setFunction( entryPoint, source, location, 0L, order );
+        // set the function!
+        vp->setFunction( entryPoint, source, location, 0L, order );
+    }
+
+    else
+    {
+        // install as a simple shader.
+        osg::Shader::Type type =
+            location == ShaderComp::LOCATION_VERTEX_MODEL || location == ShaderComp::LOCATION_VERTEX_VIEW || location == ShaderComp::LOCATION_VERTEX_CLIP ? osg::Shader::VERTEX :
+            osg::Shader::FRAGMENT;
+
+        osg::Shader* shader = new osg::Shader(type, source);
+        shader->setName( filename );
+        vp->setShader( filename, shader );
+    }
+
     return true;
 }
 
 bool
-ShaderLoader::unloadFunction(VirtualProgram*       vp,
-                             const std::string&    filename,
-                             const ShaderPackage&  package,
-                             const osgDB::Options* dbOptions)
+ShaderLoader::unload(VirtualProgram*       vp,
+                     const std::string&    filename,
+                     const ShaderPackage&  package,
+                     const osgDB::Options* dbOptions)
 {
     if ( !vp )
     {
@@ -308,13 +356,14 @@ ShaderLoader::unloadFunction(VirtualProgram*       vp,
     }
 
     std::string entryPoint = getQuotedPragmaValue(source, "vp_entryPoint");
-    if ( entryPoint.empty() )
+    if ( !entryPoint.empty() )
     {
-        OE_WARN << LC << "Illegal: shader \"" << filename << "\" missing required #pragma vp_entryPoint\n";
-        return false;
+        vp->removeShader( entryPoint );
     }
-
-    vp->removeShader( entryPoint );
+    else
+    {
+        vp->removeShader( filename );
+    }
     return true;
 }
 
@@ -335,19 +384,19 @@ ShaderPackage::replace(const std::string& pattern,
 }
 
 bool
-ShaderPackage::loadFunction(VirtualProgram*       vp,
-                            const std::string&    filename,
-                            const osgDB::Options* dbOptions) const
+ShaderPackage::load(VirtualProgram*       vp,
+                    const std::string&    filename,
+                    const osgDB::Options* dbOptions) const
 {
-    return ShaderLoader::loadFunction(vp, filename, *this, dbOptions);
+    return ShaderLoader::load(vp, filename, *this, dbOptions);
 }
 
 bool
-ShaderPackage::unloadFunction(VirtualProgram*       vp,
-                              const std::string&    filename,
-                              const osgDB::Options* dbOptions) const
+ShaderPackage::unload(VirtualProgram*       vp,
+                      const std::string&    filename,
+                      const osgDB::Options* dbOptions) const
 {
-    return ShaderLoader::unloadFunction(vp, filename, *this, dbOptions);
+    return ShaderLoader::unload(vp, filename, *this, dbOptions);
 }
 
 bool
@@ -357,7 +406,7 @@ ShaderPackage::loadAll(VirtualProgram*       vp,
     int oks = 0;
     for(SourceMap::const_iterator i = _sources.begin(); i != _sources.end(); ++i)
     {
-        oks += loadFunction( vp, i->first ) ? 1 : 0;
+        oks += load( vp, i->first ) ? 1 : 0;
     }
     return oks == _sources.size();
 }
@@ -369,7 +418,7 @@ ShaderPackage::unloadAll(VirtualProgram*       vp,
     int oks = 0;
     for(SourceMap::const_iterator i = _sources.begin(); i != _sources.end(); ++i)
     {
-        oks += unloadFunction( vp, i->first ) ? 1 : 0;
+        oks += unload( vp, i->first ) ? 1 : 0;
     }
     return oks == _sources.size();
 }

@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
-* Copyright 2008-2014 Pelican Mapping
+* Copyright 2015 Pelican Mapping
 * http://osgearth.org
 *
 * osgEarth is free software; you can redistribute it and/or modify
@@ -8,10 +8,13 @@
 * the Free Software Foundation; either version 2 of the License, or
 * (at your option) any later version.
 *
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU Lesser General Public License for more details.
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+* IN THE SOFTWARE.
 *
 * You should have received a copy of the GNU Lesser General Public License
 * along with this program.  If not, see <http://www.gnu.org/licenses/>
@@ -42,6 +45,7 @@
 #include <osg/Timer>
 #include <osg/Depth>
 #include <osg/BlendFunc>
+#include <osg/PatchParameter>
 #include <osgDB/DatabasePager>
 #include <osgUtil/RenderBin>
 #include <osgUtil/RenderLeaf>
@@ -120,6 +124,55 @@ namespace
         {
         }
     };
+
+#if 0
+    class NormalTexInstaller : public TerrainEngine::NodeCallback
+    {
+    public:
+        NormalTexInstaller(int unit) : _unit(unit) { }
+        
+    public: // TileNodeCallback
+        void operator()(const TileKey& key, osg::Node* node)
+        {
+            TileNode* tile = osgEarth::findTopMostNodeOfType<TileNode>(node);
+            if ( !tile )
+            {
+                OE_WARN << LC << "No tile " << key.str() << "\n";
+                return;
+            }
+
+            if ( !tile->getTileModel() )
+            {
+                OE_WARN << LC << "No tile model available for " << key.str() << "\n";
+                return;
+            }
+            
+            osg::StateSet* ss = node->getOrCreateStateSet();
+            osg::Texture* tex = tile->getTileModel()->getNormalTexture();
+            if ( tex )
+            {
+                ss->setTextureAttribute(_unit, tex);
+            }
+
+            osg::RefMatrixf* mat = tile->getModel()->getNormalTextureMatrix();
+            osg::Matrixf fmat;
+            if ( mat )
+            {
+                fmat = osg::Matrixf(*mat);
+            }
+            else
+            {
+                // special marker indicating that there's no valid normal texture.
+                fmat(0,0) = 0.0f;
+            }
+
+            ss->addUniform(new osg::Uniform("oe_tile_normalTexMatrix", fmat) );
+        }
+
+    private:
+        int _unit;
+    };
+#endif
 }
 
 //---------------------------------------------------------------------------
@@ -288,6 +341,14 @@ MPTerrainEngineNode::postInitialize( const Map* map, const TerrainOptions& optio
     // initialize the model factory:
     _tileModelFactory = new TileModelFactory(_liveTiles.get(), _terrainOptions, this);
 
+    // Normal map texture unit
+    if ( _terrainOptions.normalMaps() == true )
+    {
+        this->_requireNormalTextures = true;
+        getResources()->reserveTextureImageUnit( _normalMapUnit, "MP Normal Maps" );
+        _tileModelFactory->setNormalMapUnit( _normalMapUnit );
+    }
+
     // handle an already-established map profile:
     if ( _update_mapf->getProfile() )
     {
@@ -405,9 +466,9 @@ namespace
 {
     struct NotifyExistingNodesOp : public TileNodeRegistry::Operation
     {
-        TerrainTileNodeCallback* _cb;
+        TerrainEngine::NodeCallback* _cb;
 
-        NotifyExistingNodesOp(TerrainTileNodeCallback* cb) : _cb(cb) { }
+        NotifyExistingNodesOp(TerrainEngine::NodeCallback* cb) : _cb(cb) { }
 
         void operator()(TileNodeRegistry::TileNodeMap& tiles)
         {
@@ -424,7 +485,7 @@ namespace
 }
 
 void
-MPTerrainEngineNode::notifyExistingNodes(TerrainTileNodeCallback* cb)
+MPTerrainEngineNode::notifyExistingNodes(TerrainEngine::NodeCallback* cb)
 {
     NotifyExistingNodesOp op( cb );
     _liveTiles->run( op );
@@ -480,7 +541,8 @@ MPTerrainEngineNode::dirtyTerrain()
 
     osg::ref_ptr<osgDB::Options> dbOptions = Registry::instance()->cloneOrCreateOptions();
 
-    bool accumulate = (_terrainOptions.elevationSmoothing() == true);
+    // Accumulate data from low to high resolution when necessary:
+    bool accumulate = true;
 
     unsigned child = 0;
     for( unsigned i=0; i<keys.size(); ++i )
@@ -599,7 +661,6 @@ MPTerrainEngineNode::getKeyNodeFactory()
             _liveTiles.get(),
             _deadTiles.get(),
             _terrainOptions,
-            _uid,
             this );
     }
 
@@ -617,8 +678,8 @@ MPTerrainEngineNode::createNode(const TileKey&    key,
 
     OE_DEBUG << LC << "Create node for \"" << key.str() << "\"" << std::endl;
 
-    bool accumulate    = (_terrainOptions.elevationSmoothing() == true );
-    bool setupChildren = true;
+    bool accumulate    = true;  // use parent data to help build tiles if neccesary
+    bool setupChildren = true;  // prepare the tile for subdivision
 
     // create the node:
     osg::ref_ptr<osg::Node> node = getKeyNodeFactory()->createNode(key, accumulate, setupChildren, progress);
@@ -679,23 +740,24 @@ MPTerrainEngineNode::createTile( const TileKey& key )
     if (!populated)
     {
         // We have no heightfield so just create a reference heightfield.
-        hf = HeightFieldUtils::createReferenceHeightField( key.getExtent(), 15, 15 );
+        int tileSize = _terrainOptions.tileSize().get();
+        hf = HeightFieldUtils::createReferenceHeightField( key.getExtent(), tileSize, tileSize );
         sampleKey = key;
     }
 
     model->_elevationData = TileModel::ElevationData(
-            hf,
-            GeoLocator::createForKey( sampleKey, mapInfo ),
-            false );        
+        hf,
+        GeoLocator::createForKey( sampleKey, mapInfo ),
+        false );        
 
     bool optimizeTriangleOrientation = getMap()->getMapOptions().elevationInterpolation() != INTERP_TRIANGULATE;
 
     osg::ref_ptr<TileModelCompiler> compiler = new TileModelCompiler(
-            _update_mapf->terrainMaskLayers(),
-            _update_mapf->modelLayers(),
-            _primaryUnit,
-            optimizeTriangleOrientation,
-            _terrainOptions );
+        _update_mapf->terrainMaskLayers(),
+        _update_mapf->modelLayers(),
+        _primaryUnit,
+        optimizeTriangleOrientation,
+        _terrainOptions );
 
     return compiler->compile(model.get(), *_update_mapf, 0L);
 }
@@ -798,7 +860,8 @@ MPTerrainEngineNode::addImageLayer( ImageLayer* layerAdded )
             optional<std::string>& texMatUniformName = layerAdded->shareTexMatUniformName();
             if ( !texMatUniformName.isSet() )
             {
-                texMatUniformName = Stringify() << "oe_layer_" << layerAdded->getUID() << "_texmat";
+                texMatUniformName = Stringify() << "oe_layer_" << layerAdded->getUID() << "_texMatrix";
+                OE_INFO << LC << "Layer \"" << layerAdded->getName() << "\" texmat uniform = \"" << texMatUniformName.get() << "\"\n";
             }
         }
     }
@@ -911,10 +974,17 @@ MPTerrainEngineNode::updateState()
 
             package.define( "MP_USE_BLENDING", (_terrainOptions.enableBlending() == true) );
 
-            package.loadFunction( vp, package.VertexModel );
-            package.loadFunction( vp, package.VertexView );
-            package.loadFunction( vp, package.Fragment );
+            package.load( vp, package.EngineVertexModel );
+            package.load( vp, package.EngineVertexView );
+            package.load( vp, package.EngineFragment );
             
+            if ( this->normalTexturesRequired() )
+            {
+                package.load( vp, package.NormalMapVertex );
+                package.load( vp, package.NormalMapFragment );
+
+                terrainStateSet->addUniform( new osg::Uniform("oe_tile_normalTex", _normalMapUnit) );
+            }
 
             // terrain background color; negative means use the vertex color.
             Color terrainColor = _terrainOptions.color().getOrUse( Color(1,1,1,-1) );
@@ -1026,7 +1096,8 @@ MPTerrainEngineNode::updateState()
 
             // default min/max range uniforms. (max < min means ranges are disabled)
             terrainStateSet->addUniform( new osg::Uniform("oe_layer_minRange", 0.0f) );
-            terrainStateSet->addUniform( new osg::Uniform("oe_layer_maxRange", -1.0f) );
+            terrainStateSet->addUniform( new osg::Uniform("oe_layer_maxRange", FLT_MAX) );
+            terrainStateSet->addUniform( new osg::Uniform("oe_layer_attenuationRange", _terrainOptions.attentuationDistance().get()) );
             
             terrainStateSet->getOrCreateUniform(
                 "oe_min_tile_range_factor",

@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -98,21 +98,15 @@ namespace
         {
             if ( hf.valid() )
             {
-                unsigned count = 0;
                 osg::FloatArray* values = hf->getFloatArray();
                 for(osg::FloatArray::iterator i = values->begin(); i != values->end(); ++i)
                 {
                     float& value = *i;
-                    if ( value == _noDataValue || value < _minValidValue || value > _maxValidValue )
+                    if ( osg::equivalent(value, _noDataValue) || value < _minValidValue || value > _maxValidValue )
                     {
                         value = NO_DATA_VALUE;
-                        ++count;
                     }
                 } 
-
-                if ( count > 0 ) {
-                    OE_DEBUG << "Replaced " << count << "/" << values->size() << " heights with NODATA; ndv=" << _noDataValue << ", min=" << _minValidValue << ", max=" << _maxValidValue << "\n";
-                }
             }
         }
 

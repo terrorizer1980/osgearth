@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -18,6 +18,7 @@
  */
 #include "TerrainShaderExtension"
 #include <osgEarth/TerrainEffect>
+#include <osgEarth/TerrainEngineNode>
 #include <osgEarth/MapNode>
 #include <osgEarth/VirtualProgram>
 #include <osgEarth/ShaderLoader>
@@ -29,12 +30,15 @@ using namespace osgEarth::TerrainShader;
 
 namespace
 {
-    class GLSLEffect : public TerrainEffect
+    class GLSLEffect : public osgEarth::TerrainEffect
     {
     public:
-        GLSLEffect(const std::vector<TerrainShaderOptions::Code>& code,
-                   const osgDB::Options*                          dbOptions ) : _code(code), _dbOptions(dbOptions)
+        GLSLEffect(const TerrainShaderOptions& options,
+                   const osgDB::Options*       dbOptions ) :
+            _options(options), _dbOptions(dbOptions)
         {
+            const std::vector<TerrainShaderOptions::Code>& code = _options.code();
+
             for(unsigned i=0; i<code.size(); ++i)
             {
                 std::string fn = code[i]._uri.isSet() ? code[i]._uri->full() : "$code." + i;
@@ -46,23 +50,78 @@ namespace
         {
             if ( !engine ) return;
 
-            VirtualProgram* vp = VirtualProgram::getOrCreate(engine->getOrCreateStateSet());
-            _package.loadAll( vp, _dbOptions.get() );
-        }
+            osg::StateSet* stateSet = 0L;
 
-        void onUninstall(TerrainEngineNode* engine)
-        {
-            if ( engine && engine->getStateSet() )
+            if ( _options.landCoverGroup().isSet() )
+            {                
+                stateSet = engine->addLandCoverGroup(
+                    _options.landCoverGroup().get(),
+                    _options.landCoverLOD().get() );
+            }
+
+            else
             {
-                VirtualProgram* vp = VirtualProgram::get(engine->getStateSet());
-                if ( vp )
+                stateSet = engine->getSurfaceStateSet();
+            }
+            
+            VirtualProgram* vp = VirtualProgram::getOrCreate(stateSet);
+            _package.loadAll( vp, _dbOptions.get() );
+
+            const std::vector<TerrainShaderOptions::Sampler>& samplers = _options.samplers();
+            for(int i=0; i<samplers.size(); ++i)
+            {
+                if ( !samplers[i]._name.empty() && samplers[i]._uri.isSet() )
                 {
-                    _package.unloadAll( vp, _dbOptions.get() );
+                    int unit;    
+                    engine->getResources()->reserveTextureImageUnit(unit, "TerrainShader sampler");
+                    if ( unit >= 0 )
+                    {
+                        osg::Image* image = samplers[i]._uri->getImage(_dbOptions.get());
+                        if ( image )
+                        {
+                            osg::Texture2D* tex = new osg::Texture2D(image);
+                            tex->setFilter(tex->MIN_FILTER, tex->NEAREST_MIPMAP_LINEAR);
+                            tex->setFilter(tex->MAG_FILTER, tex->LINEAR);
+                            tex->setWrap  (tex->WRAP_S, tex->CLAMP_TO_EDGE);
+                            tex->setWrap  (tex->WRAP_T, tex->CLAMP_TO_EDGE);
+                            tex->setUnRefImageDataAfterApply( true );
+                            tex->setMaxAnisotropy( 4.0 );
+                            tex->setResizeNonPowerOfTwoHint( false );
+
+                            stateSet->setTextureAttribute(unit, tex);
+                            stateSet->addUniform(new osg::Uniform(samplers[i]._name.c_str(), unit));
+                        }
+                    }
+                    else
+                    {
+                        OE_WARN << LC << "Failed to allocate a texture image unit for this terrain shader sampler!\n";
+                    }
+                }
+            }
+
+            const std::vector<TerrainShaderOptions::Uniform>& uniforms = _options.uniforms();
+            for(int i=0; i<uniforms.size(); ++i)
+            {
+                if ( !uniforms[i]._name.empty() && uniforms[i]._value.isSet() )
+                {
+                    osg::Uniform* u = new osg::Uniform(uniforms[i]._name.c_str(), (float)uniforms[i]._value.get());
+                    stateSet->addUniform( u );
                 }
             }
         }
 
-        std::vector<TerrainShaderOptions::Code> _code;
+        void onUninstall(TerrainEngineNode* engine)
+        {
+            if ( engine )
+            {
+                if ( _options.landCoverGroup().isSet() )
+                {
+                    engine->removeLandCoverGroup( _options.landCoverGroup().get() );
+                }
+            }
+        }
+
+        const TerrainShaderOptions              _options;
         ShaderPackage                           _package;
         osg::ref_ptr<const osgDB::Options>      _dbOptions;
     };
@@ -99,7 +158,7 @@ TerrainShaderExtension::connect(MapNode* mapNode)
         OE_WARN << LC << "Illegal: MapNode cannot be null." << std::endl;
         return false;
     }
-    _effect = new GLSLEffect( _options.code(), _dbOptions.get() );
+    _effect = new GLSLEffect( _options, _dbOptions.get() );
     mapNode->getTerrainEngine()->addEffect( _effect.get() );
     
     OE_INFO << LC << "Installed.\n";

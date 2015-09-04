@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -223,6 +223,13 @@ SilverLiningContext::updateLocation()
         osg::Vec3d north = osg::Vec3d(0, 1, 0);
         osg::Vec3d east = north ^ up;
 
+
+		/*if(abs(_cameraPos.length() - _lastCamPos.length()) > 1000)
+		{
+			_updateEnvMap = true;
+			_lastCamPos = _cameraPos;
+		}*/
+
         // Check for edge case of north or south pole
         if (east.length2() == 0)
         {
@@ -240,10 +247,9 @@ SilverLiningContext::updateLocation()
 
         ::SilverLining::Location loc;
         loc.SetAltitude ( latLonAlt.z() );
-        //loc.SetLongitude( osg::DegreesToRadians(latLonAlt.x()) );
-        //loc.SetLatitude ( osg::DegreesToRadians(latLonAlt.y()) );
-		loc.SetLongitude( latLonAlt.x() );
-		loc.SetLatitude ( latLonAlt.y() );
+        loc.SetLongitude( latLonAlt.x() ); //osg::DegreesToRadians(latLonAlt.x()) );
+        loc.SetLatitude ( latLonAlt.y() ); //osg::DegreesToRadians(latLonAlt.y()) );
+
 
         _atmosphere->GetConditions()->SetLocation( loc );
 

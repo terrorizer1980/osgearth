@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -96,8 +96,10 @@ TerrainLayerOptions::getConfig( bool isolate ) const
 
     conf.updateIfSet   ( "cacheid",      _cacheId );
     conf.updateIfSet   ( "cache_format", _cacheFormat );
-    conf.updateObjIfSet( "cache_policy", _cachePolicy );
     conf.updateObjIfSet( "proxy",        _proxySettings );
+
+    if ( _cachePolicy.isSet() && !_cachePolicy->empty() )
+        conf.updateObjIfSet( "cache_policy", _cachePolicy );
 
     // Merge the TileSource options
     if ( !isolate && driver().isSet() )
@@ -622,6 +624,18 @@ TerrainLayer::createTileSource()
             URIContext( _runtimeOptions->referrer() ).apply( _dbOptions.get() );
         }
 
+        // add the osgDB options string if it's set.
+        const optional<std::string>& osgOptions = ts->getOptions().osgOptionString();
+        if ( osgOptions.isSet() && !osgOptions->empty() )
+        {
+            std::string s = _dbOptions->getOptionString();
+            if ( !s.empty() )
+                s = Stringify() << osgOptions.get() << " " << s;
+            else
+                s = osgOptions.get();
+            _dbOptions->setOptionString( s );
+        }
+
         // report on a manual override profile:
         if ( ts->getProfile() )
         {
@@ -641,11 +655,11 @@ TerrainLayer::createTileSource()
 
 #if 0 //debugging 
             // dump out data extents:
-            if ( _tileSource->getDataExtents().size() > 0 )
+            if ( ts->getDataExtents().size() > 0 )
             {
                 OE_INFO << LC << "Data extents reported:" << std::endl;
-                for(DataExtentList::const_iterator i = _tileSource->getDataExtents().begin();
-                    i != _tileSource->getDataExtents().end(); ++i)
+                for(DataExtentList::const_iterator i = ts->getDataExtents().begin();
+                    i != ts->getDataExtents().end(); ++i)
                 {
                     const DataExtent& de = *i;
                     OE_INFO << "    "

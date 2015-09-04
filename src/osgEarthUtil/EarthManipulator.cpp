@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -20,6 +20,7 @@
 #include <osgEarth/MapNode>
 #include <osgEarth/NodeUtils>
 #include <osgEarth/GeoMath>
+#include <osgEarth/TerrainEngineNode>
 #include <osg/Quat>
 #include <osg/Notify>
 #include <osg/MatrixTransform>
@@ -284,6 +285,24 @@ _throwDecayRate( rhs._throwDecayRate )
     //NOP
 }
 
+void
+EarthManipulator::Settings::apply(osg::ArgumentParser& args)
+{
+    bool   boolval;
+    double doubleval;
+
+    if ( args.read("--manip-terrain-avoidance", boolval) )
+        setTerrainAvoidanceEnabled( boolval );
+    if ( args.read("--manip-min-distance", doubleval) )
+        setMinMaxDistance(doubleval, _max_distance);
+    if ( args.read("--manip-max-distance", doubleval) )
+        setMinMaxDistance(_min_distance, doubleval);
+    if ( args.read("--manip-min-pitch", doubleval) )
+        setMinMaxPitch(doubleval, _max_pitch);
+    if ( args.read("--manip-max-pitch", doubleval) )
+        setMinMaxPitch(_min_pitch, doubleval);
+}
+
 #define HASMODKEY( W, V ) (( W & V ) == V )
 
 // expands one input spec into many if necessary, to deal with modifier key combos.
@@ -480,6 +499,21 @@ _findNodeTraversalMask ( 0x01 )
     reinitialize();
     configureDefaultSettings();
     _lastTetherMode = _settings->getTetherMode();
+}
+
+EarthManipulator::EarthManipulator(osg::ArgumentParser& args) :
+osgGA::CameraManipulator(),
+_last_action           ( ACTION_NULL ),
+_last_event            ( EVENT_MOUSE_DOUBLE_CLICK ),
+_time_s_last_event     ( 0.0 ),
+_frameCount            ( 0 ),
+_findNodeTraversalMask ( 0x01 )
+{
+    reinitialize();
+    configureDefaultSettings();
+    _lastTetherMode = _settings->getTetherMode();
+
+    getSettings()->apply( args );
 }
 
 EarthManipulator::EarthManipulator( const EarthManipulator& rhs ) :
@@ -1276,6 +1310,7 @@ void EarthManipulator::collisionDetect()
     // Try to intersect the terrain with a vector going straight up and down.
     double r = std::min( _srs->getEllipsoid()->getRadiusEquator(), _srs->getEllipsoid()->getRadiusPolar() );
     osg::Vec3d ip, normal;
+
     if (intersect(eye + eyeUp * r, eye - eyeUp * r, ip, normal))
     {
         double eps = _settings->getMinDistance();
@@ -1291,6 +1326,8 @@ void EarthManipulator::collisionDetect()
         {
             setByLookAtRaw(ip + adjVector * eps, _center, eyeUp);
         }
+
+        //OE_INFO << "hit at " << ip.x() << ", " << ip.y() << ", " << ip.z() << "\n";
     }
 
 }
@@ -1309,7 +1346,6 @@ EarthManipulator::intersect(const osg::Vec3d& start, const osg::Vec3d& end, osg:
         osgUtil::IntersectionVisitor iv(lsi.get());
         iv.setTraversalMask(_intersectTraversalMask);
 
-        //safeNode->accept(iv);
         mapNode->getTerrainEngine()->accept(iv);
 
         if (lsi->containsIntersections())
@@ -1603,47 +1639,47 @@ EarthManipulator::handle(const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapt
             
                 setViewpointFrame( time_s_now );
             }
-
+            
             aa.requestContinuousUpdate( isSettingViewpoint() );
-        }
 
-        else if (_thrown)
-        {
-            double decayFactor = 1.0 - _settings->getThrowDecayRate();
-
-            _throw_dx = osg::absolute(_throw_dx) > osg::absolute(_dx * 0.01) ? _throw_dx * decayFactor : 0.0;
-            _throw_dy = osg::absolute(_throw_dy) > osg::absolute(_dy * 0.01) ? _throw_dy * decayFactor : 0.0;
-
-            if (_throw_dx == 0.0 && _throw_dy == 0.0)
-                _thrown = false;
-            else            
-                handleMovementAction(_last_action._type, _throw_dx, _throw_dy, aa.asView());
-        }
-
-        if ( _continuous )
-        {
-            handleContinuousAction( _last_action, aa.asView() );
-            aa.requestRedraw();
-        }
-        else
-        {
-            _continuous_dx = 0.0;
-            _continuous_dy = 0.0;
-        }
-        
-        if ( _task.valid() && _task->_type != TASK_NONE )
-        {
-            bool stillRunning = serviceTask();
-            if ( stillRunning ) 
+            if (_thrown)
             {
-                aa.requestContinuousUpdate( true );
+                double decayFactor = 1.0 - _settings->getThrowDecayRate();
+
+                _throw_dx = osg::absolute(_throw_dx) > osg::absolute(_dx * 0.01) ? _throw_dx * decayFactor : 0.0;
+                _throw_dy = osg::absolute(_throw_dy) > osg::absolute(_dy * 0.01) ? _throw_dy * decayFactor : 0.0;
+
+                if (_throw_dx == 0.0 && _throw_dy == 0.0)
+                    _thrown = false;
+                else            
+                    handleMovementAction(_last_action._type, _throw_dx, _throw_dy, aa.asView());
+            }
+
+            if ( _continuous )
+            {
+                handleContinuousAction( _last_action, aa.asView() );
+                aa.requestRedraw();
             }
             else
             {
-                // turn off the continuous, but we still need one last redraw
-                // to process the final state.
-                aa.requestContinuousUpdate( false );
-                aa.requestRedraw();
+                _continuous_dx = 0.0;
+                _continuous_dy = 0.0;
+            }
+        
+            if ( _task.valid() && _task->_type != TASK_NONE )
+            {
+                bool stillRunning = serviceTask();
+                if ( stillRunning ) 
+                {
+                    aa.requestContinuousUpdate( true );
+                }
+                else
+                {
+                    // turn off the continuous, but we still need one last redraw
+                    // to process the final state.
+                    aa.requestContinuousUpdate( false );
+                    aa.requestRedraw();
+                }
             }
         }
 

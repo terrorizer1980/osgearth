@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -23,6 +23,7 @@
 #include <osgEarth/TextureCompositor>
 #include <osgEarth/NodeUtils>
 #include <osgEarth/MapModelChange>
+#include <osgEarth/TerrainTileModelFactory>
 #include <osgDB/ReadFile>
 #include <osg/CullFace>
 #include <osg/PolygonOffset>
@@ -77,6 +78,7 @@ TerrainEngineNode::addEffect(TerrainEffect* effect)
     {
         effects_.push_back( effect );
         effect->onInstall( this );
+        dirtyState();
     }
 }
 
@@ -90,6 +92,7 @@ TerrainEngineNode::removeEffect(TerrainEffect* effect)
         TerrainEffectVector::iterator i = std::find(effects_.begin(), effects_.end(), effect);
         if ( i != effects_.end() )
             effects_.erase( i );
+        dirtyState();
     }
 }
 
@@ -121,7 +124,6 @@ _requireParentTextures   ( false )
     // register for event traversals so we can properly reset the dirtyCount
     ADJUST_EVENT_TRAV_COUNT( this, 1 );
 }
-
 
 TerrainEngineNode::~TerrainEngineNode()
 {
@@ -208,6 +210,10 @@ TerrainEngineNode::preInitialize( const Map* map, const TerrainOptions& options 
             << LC << "Mercator fast path " 
             << (options.enableMercatorFastPath()==true? "enabled" : "DISABLED") << std::endl;
     }
+    
+    // a default factory - this is the object that creates the data model for
+    // each terrain tile.
+    _tileModelFactory = new TerrainTileModelFactory(options);
 
     _initStage = INIT_PREINIT_COMPLETE;
 }
@@ -289,6 +295,57 @@ TerrainEngineNode::onMapModelChanged( const MapModelChange& change )
     requestRedraw();
 }
 
+TerrainTileModel*
+TerrainEngineNode::createTileModel(const MapFrame&   frame,
+                                   const TileKey&    key,
+                                   ProgressCallback* progress)
+{
+    TerrainEngineRequirements* requirements = this;
+
+    // Ask the factory to create a new tile model:
+    osg::ref_ptr<TerrainTileModel> model = _tileModelFactory->createTileModel(
+        frame, 
+        key, 
+        requirements, 
+        progress);
+
+    if ( model.valid() )
+    {
+        // Fire all registered tile model callbacks, so user code can 
+        // add to or otherwise customize the model before it's returned
+        Threading::ScopedReadLock sharedLock(_createTileModelCallbacksMutex);
+        for(CreateTileModelCallbacks::iterator i = _createTileModelCallbacks.begin();
+            i != _createTileModelCallbacks.end();
+            ++i)
+        {
+            i->get()->onCreateTileModel(this, model.get());
+        }
+    }
+    return model.release();
+}
+
+void 
+TerrainEngineNode::addCreateTileModelCallback(CreateTileModelCallback* callback)
+{
+    Threading::ScopedWriteLock exclusiveLock(_createTileModelCallbacksMutex);
+    _createTileModelCallbacks.push_back(callback);
+}
+
+void 
+TerrainEngineNode::removeCreateTileModelCallback(CreateTileModelCallback* callback)
+{
+    Threading::ScopedWriteLock exclusiveLock(_createTileModelCallbacksMutex);
+    for(CreateTileModelCallbacks::iterator i = _createTileModelCallbacks.begin(); i != _createTileModelCallbacks.end(); ++i)
+    {
+        if ( i->get() == callback )
+        {
+            _createTileModelCallbacks.erase( i );
+            break;
+        }
+    }
+}
+
+
 namespace
 {
     Threading::Mutex s_opqlock;
@@ -333,7 +390,7 @@ TerrainEngineNode::traverse( osg::NodeVisitor& nv )
 }
 
 void
-TerrainEngineNode::addTileNodeCallback(TerrainTileNodeCallback* cb)
+TerrainEngineNode::addTileNodeCallback(TerrainEngine::NodeCallback* cb)
 {
     Threading::ScopedMutexLock lock(_tileNodeCallbacksMutex);
     _tileNodeCallbacks.push_back( cb );
@@ -341,10 +398,10 @@ TerrainEngineNode::addTileNodeCallback(TerrainTileNodeCallback* cb)
 }
 
 void
-TerrainEngineNode::removeTileNodeCallback(TerrainTileNodeCallback* cb)
+TerrainEngineNode::removeTileNodeCallback(TerrainEngine::NodeCallback* cb)
 {
     Threading::ScopedMutexLock lock(_tileNodeCallbacksMutex);
-    for(TerrainTileNodeCallbackVector::iterator i = _tileNodeCallbacks.begin(); i != _tileNodeCallbacks.end(); ++i)
+    for(NodeCallbackVector::iterator i = _tileNodeCallbacks.begin(); i != _tileNodeCallbacks.end(); ++i)
     {
         if ( i->get() == cb )
         {
@@ -359,7 +416,9 @@ TerrainEngineNode::notifyOfTerrainTileNodeCreation(const TileKey& key, osg::Node
 {
     Threading::ScopedMutexLock lock(_tileNodeCallbacksMutex);
     for(unsigned i=0; i<_tileNodeCallbacks.size(); ++i)
+    {
         _tileNodeCallbacks[i]->operator()(key, node);
+    }
 }
 
 

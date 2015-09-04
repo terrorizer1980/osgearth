@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -70,7 +70,7 @@ ImageLayerOptions::setDefaults()
     _magFilter.init( osg::Texture::LINEAR );
     _texcomp.init( osg::Texture::USE_IMAGE_DATA_FORMAT ); // none
     _shared.init( false );
-    _coverage.init( false );
+    _coverage.init( false );    
 }
 
 void
@@ -311,9 +311,13 @@ ImageLayer::init()
 
     if ( _runtimeOptions.shareTexUniformName().isSet() )
         _shareTexUniformName = _runtimeOptions.shareTexUniformName().get();
+    else
+        _shareTexUniformName.init( Stringify() << "layer_" << getUID() << "_tex" );
 
     if ( _runtimeOptions.shareTexMatUniformName().isSet() )
         _shareTexMatUniformName = _runtimeOptions.shareTexMatUniformName().get();
+    else
+        _shareTexMatUniformName.init( Stringify()  << "layer_" << getUID() << "_texMatrix" );
 }
 
 void

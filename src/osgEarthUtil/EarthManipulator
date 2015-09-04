@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2008-2014 Pelican Mapping
+ * Copyright 2015 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -27,6 +27,7 @@
 #include <osgEarth/Terrain>
 #include <osgEarth/MapNode>
 #include <osg/Timer>
+#include <osg/ArgumentParser>
 #include <osgGA/CameraManipulator>
 #include <map>
 #include <list>
@@ -210,6 +211,9 @@ namespace osgEarth { namespace Util
 
             /** dtor */
             virtual ~Settings() { }
+
+            // look for settings in an AP
+            void apply(osg::ArgumentParser& args);
 
             /**
              * Assigns behavior to the action of dragging the mouse while depressing one or
@@ -559,7 +563,8 @@ namespace osgEarth { namespace Util
 
     public:
         EarthManipulator();
-        EarthManipulator( const EarthManipulator& rhs );
+        EarthManipulator(osg::ArgumentParser& args);
+        EarthManipulator(const EarthManipulator& rhs);
 
         /**
          * Applies a new settings object to the manipulator, which takes effect immediately.
