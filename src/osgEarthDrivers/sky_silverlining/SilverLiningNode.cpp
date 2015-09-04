@@ -30,10 +30,12 @@
 #undef  LC
 #define LC "[SilverLiningNode] "
 
+#define USE_ENV_MAP
+
 using namespace osgEarth::SilverLining;
 
 SilverLiningNode::SilverLiningNode(const osgEarth::Map*       map,
-                                   const SilverLiningOptions& options) :
+                                   const SilverLiningOptions& options) : SkyNode(options),
 _options     (options),
 _lastAltitude(DBL_MAX)
 {
@@ -81,8 +83,19 @@ _lastAltitude(DBL_MAX)
     // SL requires an update pass.
     ADJUST_UPDATE_TRAV_COUNT(this, +1);
 
+	_updateEnvMap = false;
+	if(options.updateEnvMap().isSet())
+	{
+		_updateEnvMap = options.updateEnvMap().get();
+	}
+	_SL->setUpdateEnvMap(_updateEnvMap);
+
     // initialize date/time
     onSetDateTime();
+	onSetMinimumAmbient();
+
+	
+	
 }
 
 
@@ -107,8 +120,7 @@ SilverLiningNode::onSetDateTime()
     ::SilverLining::LocalTime utcTime;
     utcTime.SetFromEpochSeconds( getDateTime().asTimeStamp() );
     _SL->getAtmosphere()->GetConditions()->SetTime( utcTime );
-	_SL->setUpdateEnvMap(true);
-	
+	_SL->setUpdateEnvMap(_updateEnvMap);
 }
 
 void
@@ -119,7 +131,10 @@ SilverLiningNode::onSetMinimumAmbient()
 
 int SilverLiningNode::getEnvMapID() const 
 {
-	return _SL->getEnvMapID();
+	if(_updateEnvMap)
+		return _SL->getEnvMapID();
+	else
+		return 0;
 }
 
 void
