@@ -195,6 +195,13 @@ SplatExtension::connect(MapNode* mapNode)
         if ( _options.scaleLevelOffset().isSet() )
             _effect->getScaleLevelOffsetUniform()->set( (float)_options.scaleLevelOffset().get() );
 
+		if ( _options.colorMinRange().isSet() )
+			_effect->_colorMinRange = ( (float)_options.colorMinRange().get() );
+
+		if ( _options.colorRatio().isSet() )
+			_effect->_colorRatio = ((float)_options.colorRatio().get());
+		
+
         // add it to the terrain.
         mapNode->getTerrainEngine()->addEffect( _effect.get() );
     }

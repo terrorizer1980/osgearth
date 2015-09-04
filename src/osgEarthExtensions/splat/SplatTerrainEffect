@@ -96,7 +96,8 @@ namespace osgEarth { namespace Splat
 
         void onUninstall(TerrainEngineNode* engine);
 
-
+		float _colorRatio;
+		float _colorMinRange;
     protected:
         virtual ~SplatTerrainEffect() { }
 
