@@ -61,6 +61,10 @@ namespace osgEarth { namespace SilverLining
 		optional<double>& cloudsMaxAltitude() { return _cloudsMaxAltitude; }
 		const optional<double>& cloudsMaxAltitude() const { return _cloudsMaxAltitude; }
 
+		optional<bool>& updateEnvMap() { return _updateEnvMap; }
+        const optional<bool>& updateEnvMap() const { return _updateEnvMap; }
+		
+
     public:
         osgEarth::Config getConfig() const {
             osgEarth::Config conf = osgEarth::Util::SkyOptions::getConfig();
@@ -69,6 +73,7 @@ namespace osgEarth { namespace SilverLining
             conf.addIfSet("resource_path", _resourcePath);
             conf.addIfSet("clouds", _drawClouds);
 			conf.addIfSet("clouds_max_altitude", _cloudsMaxAltitude);
+			conf.addIfSet("update_env_map", _updateEnvMap);
             return conf;
         }
 
@@ -85,6 +90,7 @@ namespace osgEarth { namespace SilverLining
             conf.getIfSet("resource_path", _resourcePath);
             conf.getIfSet("clouds", _drawClouds);
 			conf.getIfSet("clouds_max_altitude", _cloudsMaxAltitude);
+			conf.getIfSet("update_env_map", _updateEnvMap);
         }
 
         osgEarth::optional<std::string> _user;
@@ -93,6 +99,7 @@ namespace osgEarth { namespace SilverLining
         osgEarth::optional<bool>        _drawClouds;
 		osgEarth::optional<double>      _cloudsMaxAltitude;
 		int                             _lastCullFrameNumber;
+		osgEarth::optional<bool>        _updateEnvMap;
     };
 
 } } // namespace osgEarth::SilverLiningPlugin

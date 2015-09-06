@@ -67,6 +67,7 @@ namespace osgEarth { namespace SilverLining
 		const SilverLiningOptions _options;
         osg::ref_ptr<osgEarth::PhongLightingEffect> _lighting;
 		int _envID;
+		bool _updateEnvMap;
     };
 
 } } // namespace osgEarth::SilverLining

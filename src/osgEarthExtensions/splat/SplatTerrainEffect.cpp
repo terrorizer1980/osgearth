@@ -53,7 +53,9 @@ _legend     ( legend ),
 _renderOrder( -1.0f ),
 _ok         ( false ),
 _editMode   ( false ),
-_gpuNoise   ( false )
+_gpuNoise   ( false ),
+_colorRatio(0),
+_colorMinRange(1000)
 {
     if ( biomes.size() == 0 )
     {
@@ -161,12 +163,13 @@ SplatTerrainEffect::onInstall(TerrainEngineNode* engine)
             package.define( "SPLAT_GPU_NOISE",   _gpuNoise );
             package.define( "OE_USE_NORMAL_MAP", engine->normalTexturesRequired() );
 
-			bool use_color_map = (::getenv("SPLAT_USE_COLOR_IMAGE") != 0L);
-			package.define( "SPLAT_USE_COLOR_IMAGE", use_color_map );
-			if(use_color_map)
+
+			if(_colorRatio > 0)
 			{
-				stateset->addUniform(new osg::Uniform("oe_splat_color_ratio",  0.5f));
-				stateset->addUniform(new osg::Uniform("oe_splat_color_start_dist", 1000.0f));
+				//bool use_color_map = (::getenv("SPLAT_USE_COLOR_IMAGE") != 0L);
+				package.define( "SPLAT_USE_COLOR_IMAGE", true );
+				stateset->addUniform(new osg::Uniform("oe_splat_color_ratio",  _colorRatio));
+				stateset->addUniform(new osg::Uniform("oe_splat_color_start_dist", _colorMinRange));
 			}
 
 			//HACK to support new unnormalized coverage
