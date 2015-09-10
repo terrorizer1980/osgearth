@@ -55,6 +55,7 @@ main(int argc, char** argv)
     float vfov = -1.0f;
     arguments.read("--vfov", vfov);
 
+	osg::DisplaySettings::instance()->setNumMultiSamples( 4 );
     // create a viewer:
     osgViewer::Viewer viewer(arguments);
 
