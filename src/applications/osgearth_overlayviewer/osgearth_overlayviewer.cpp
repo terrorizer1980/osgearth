@@ -33,6 +33,7 @@
 #include <osgEarthUtil/ExampleResources>
 #include <osgEarthUtil/Controls>
 #include <osgEarthSymbology/Color>
+#include <osgEarthUtil/Sky>
 
 #define LC "[viewer] "
 
@@ -212,8 +213,23 @@ main(int argc, char** argv)
     {
         mainView->setSceneData( node );
 
-        osg::Group* group = new osg::Group();
-        group->addChild( MapNode::get(node) );
+		osg::Group* group = new osg::Group();
+
+		osgEarth::Util::SkyNode* skynode = NULL;
+		if ( node->getNumParents() > 0 )
+		{
+			skynode = osgEarth::findTopMostNodeOfType<osgEarth::Util::SkyNode>(node->getParent(0));
+		}
+		else
+		{
+			skynode = osgEarth::findTopMostNodeOfType<osgEarth::Util::SkyNode>(node);
+		}
+		group->addChild( MapNode::get(node) );
+		if(skynode)
+			group->addChild( skynode);
+
+       
+        
         overlayView->setSceneData( group );
 
         setupOverlayView( overlayView, group, MapNode::get(node) );
