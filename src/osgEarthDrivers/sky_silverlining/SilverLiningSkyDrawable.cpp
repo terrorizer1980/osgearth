@@ -18,6 +18,7 @@
  */
 #include <SilverLining.h>
 #include "SilverLiningSkyDrawable"
+#include "SilverLiningSkyNode"
 #include "SilverLiningContext"
 #include <osgEarth/SpatialReference>
 
@@ -26,8 +27,9 @@
 using namespace osgEarth::SilverLining;
 
 
-SkyDrawable::SkyDrawable(SilverLiningContext* SL) :
-_SL( SL )
+SkyDrawable::SkyDrawable(SilverLiningSkyNode *sky_node, SilverLiningContext* SL) :
+_SL( SL ),
+	_skyNode(sky_node)
 {
     // call this to ensure draw() gets called every frame.
     setSupportsDisplayList( false );
@@ -40,14 +42,14 @@ void
 SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 {
     osg::Camera* camera = renderInfo.getCurrentCamera();
-    if ( camera )
+	SilverLiningSkyNode *camera_sky_node = dynamic_cast<SilverLiningSkyNode *>(camera->getUserData());
+	if ( camera && _skyNode == camera_sky_node)
     {
         renderInfo.getState()->disableAllVertexArrays();
         _SL->initialize( renderInfo );
 
         double fovy, ar, znear, zfar;
-        _SL->setCamera(camera);
-
+       _SL->setCamera(camera);
         //renderInfo.getCurrentCamera()->setNearFarRatio(.00000001);
 
         camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
@@ -60,6 +62,18 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
             true,
             false );
 		_SL->updateEnvMap();
+
+		_SL->getAtmosphere()->DrawSky(
+			true, 
+			_SL->getSRS()->isGeographic(),
+			_SL->getSkyBoxSize(),
+			true,
+			false );
+
+		_SL->getAtmosphere()->CullObjects();
+
+		_SL->getAtmosphere()->DrawObjects(true);
+
         renderInfo.getState()->dirtyAllVertexArrays();
     }
 }
