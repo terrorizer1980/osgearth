@@ -6,6 +6,7 @@ SET(TARGET_SRC
     SilverLiningContext.cpp
     SilverLiningSkyDrawable.cpp
     SilverLiningCloudsDrawable.cpp
+	SilverLiningSkyNode.cpp
 )
 SET(TARGET_H
     SilverLiningOptions
@@ -13,6 +14,7 @@ SET(TARGET_H
     SilverLiningContext
     SilverLiningSkyDrawable
     SilverLiningCloudsDrawable
+	SilverLiningSkyNode
 )
 
 INCLUDE_DIRECTORIES( 
