@@ -3,6 +3,7 @@ IF(SILVERLINING_FOUND)
 SET(TARGET_SRC 
     SilverLiningDriver.cpp
     SilverLiningNode.cpp
+	SilverLiningSkyNode.cpp
     SilverLiningContext.cpp
     SilverLiningSkyDrawable.cpp
     SilverLiningCloudsDrawable.cpp
@@ -10,6 +11,7 @@ SET(TARGET_SRC
 SET(TARGET_H
     SilverLiningOptions
     SilverLiningNode
+	SilverLiningSkyNode
     SilverLiningContext
     SilverLiningSkyDrawable
     SilverLiningCloudsDrawable
