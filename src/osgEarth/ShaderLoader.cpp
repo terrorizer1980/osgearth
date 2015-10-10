@@ -89,12 +89,15 @@ ShaderLoader::load(const std::string&    filename,
     std::string output;
     bool useInlineSource = false;
 
+    URIContext context( dbOptions );
+    URI uri(filename, context);
+
     std::string inlineSource;
-    ShaderPackage::SourceMap::const_iterator source = package._sources.find(filename); //.context().find(filename);
-    if ( source != package._sources.end() ) //.context().end() )
+    ShaderPackage::SourceMap::const_iterator source = package._sources.find(filename);
+    if ( source != package._sources.end() )
         inlineSource = source->second;
 
-    std::string path = osgDB::findDataFile(filename, dbOptions);
+    std::string path = osgDB::findDataFile(uri.full(), dbOptions);
     if ( path.empty() )
     {
         output = inlineSource;
@@ -106,7 +109,7 @@ ShaderLoader::load(const std::string&    filename,
     }
     else
     {
-        std::string externalSource = URI(path).getString(dbOptions);
+        std::string externalSource = URI(path, context).getString(dbOptions);
         if (!externalSource.empty())
         {
             OE_DEBUG << LC << "Loaded external shader " << filename << " from " << path << "\n";
@@ -192,13 +195,26 @@ ShaderLoader::load(const std::string&    filename,
         osgEarth::replaceIn( output, defineStatement, newStatement );
     }
 
-    // Finally, do any replacements.
+    // Finally, process any replacements.
     for(ShaderPackage::ReplaceMap::const_iterator i = package._replaces.begin();
         i != package._replaces.end();
         ++i)
     {
         osgEarth::replaceIn( output, i->first, i->second );
     }
+
+#if 0
+    // And remove all quotation marks since they are illegal in GLSL.
+    std::string::size_type pos = 0;
+    while(true)
+    {
+        pos = output.find('\"', pos);
+        if ( pos != std::string::npos )
+            output[pos] = ' ';
+        else
+            break;
+    }
+#endif
 
     return output;
 }
@@ -211,6 +227,9 @@ ShaderLoader::load(const std::string&    filename,
     std::string output;
     bool useInlineSource = false;
 
+    URIContext context( dbOptions );
+    URI uri(filename, context );
+
     std::string path = osgDB::findDataFile(filename, dbOptions);
     if ( path.empty() )
     {
@@ -219,7 +238,7 @@ ShaderLoader::load(const std::string&    filename,
     }
     else
     {
-        std::string externalSource = URI(path).getString(dbOptions);
+        std::string externalSource = URI(path, context).getString(dbOptions);
         if (!externalSource.empty())
         {
             OE_DEBUG << LC << "Loaded external shader " << filename << " from " << path << "\n";
@@ -267,13 +286,9 @@ ShaderLoader::load(VirtualProgram*       vp,
     }
 
     std::string loc = getQuotedPragmaValue(source, "vp_location");
-    if ( loc.empty() )
-    {
-        OE_WARN << LC << "Illegal: shader \"" << filename << "\" missing required #pragma vp_location\n";
-        return false;
-    }
-
     ShaderComp::FunctionLocation location;
+    bool locationSet = true;
+
     if      ( ciEquals(loc, "vertex_model") )
         location = ShaderComp::LOCATION_VERTEX_MODEL;
     else if ( ciEquals(loc, "vertex_view") )
@@ -296,14 +311,19 @@ ShaderLoader::load(VirtualProgram*       vp,
         location = ShaderComp::LOCATION_FRAGMENT_OUTPUT;
     else
     {
-        OE_WARN << LC << "Illegal: shader \"" << filename << "\" has invalid #pragma vp_location \"" << loc << "\"\n";
-        return false;
+        locationSet = false;
     }
 
     // If entry point is set, this is a function; otherwise a simple library.
     std::string entryPoint = getQuotedPragmaValue(source, "vp_entryPoint");
     if ( !entryPoint.empty() )
     {
+        if ( !locationSet )
+        {
+            OE_WARN << LC << "Illegal: shader \"" << filename << "\" has invalid #pragma vp_location when vp_entryPoint is set\n";
+            return false;
+        }
+
         // order is optional.
         std::string orderStr = getQuotedPragmaValue(source, "vp_order");
         float order;
@@ -321,13 +341,30 @@ ShaderLoader::load(VirtualProgram*       vp,
     else
     {
         // install as a simple shader.
-        osg::Shader::Type type =
-            location == ShaderComp::LOCATION_VERTEX_MODEL || location == ShaderComp::LOCATION_VERTEX_VIEW || location == ShaderComp::LOCATION_VERTEX_CLIP ? osg::Shader::VERTEX :
-            osg::Shader::FRAGMENT;
+        if ( locationSet )
+        {
+            // If a location is set, install in that location only
+            osg::Shader::Type type =
+                location == ShaderComp::LOCATION_VERTEX_MODEL || location == ShaderComp::LOCATION_VERTEX_VIEW || location == ShaderComp::LOCATION_VERTEX_CLIP ? osg::Shader::VERTEX :
+                osg::Shader::FRAGMENT;
 
-        osg::Shader* shader = new osg::Shader(type, source);
-        shader->setName( filename );
-        vp->setShader( filename, shader );
+            osg::Shader* shader = new osg::Shader(type, source);
+            shader->setName( filename );
+            vp->setShader( filename, shader );
+        }
+
+        else
+        {
+            // If no location was set, install in all stages.
+            osg::Shader::Type types[5] = { osg::Shader::VERTEX, osg::Shader::FRAGMENT, osg::Shader::GEOMETRY, osg::Shader::TESSCONTROL, osg::Shader::TESSEVALUATION };
+            for(int i=0; i<5; ++i)
+            {
+                osg::Shader* shader = new osg::Shader(types[i], source);
+                std::string name = Stringify() << filename + "_" + shader->getTypename();
+                shader->setName( name );
+                vp->setShader( name, shader );
+            }
+        }
     }
 
     return true;

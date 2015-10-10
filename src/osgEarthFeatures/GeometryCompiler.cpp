@@ -238,7 +238,7 @@ GeometryCompiler::compile(FeatureList&          workingSet,
     const MarkerSymbol*    marker    = style.get<MarkerSymbol>();    // to be deprecated
     const IconSymbol*      icon      = style.get<IconSymbol>();
     const ModelSymbol*     model     = style.get<ModelSymbol>();
-	const BillboardSymbol* billboard = style.get<BillboardSymbol>();
+	const BillboardSymbol2* billboard = style.get<BillboardSymbol2>();
 
     // Perform tessellation first.
     if ( line )

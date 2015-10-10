@@ -7,27 +7,27 @@
 	    <styles>
             <style type="text/css">
                 ForestStyle1 {
-                   billboard-image:../data/textures/pine.png;
-                   billboard-width:8;
-				   billboard-height:14;
-				   billboard-density: 1000;
-				   billboard-scaleVariance: 0.4;
-				   billboard-brightnessVariance: 0.7;
-				   billboard-randomSeed: 0;
-				   billboard-alphaRefValue: 0.1;
-				   billboard-alphaBlend: 0;
+                   billboard2-image:../data/splat/pine.png;
+                   billboard2-width:8;
+				   billboard2-height:14;
+				   billboard2-density: 1000;
+				   billboard2-scaleVariance: 0.4;
+				   billboard2-brightnessVariance: 0.7;
+				   billboard2-randomSeed: 0;
+				   billboard2-alphaRefValue: 0.1;
+				   billboard2-alphaBlend: 0;
 				   altitude-clamping: terrain;
                 }
 				ForestStyle2 {
-                   billboard-image:../data/tree.gif;
-                   billboard-width:6;
-				   billboard-height:8;
-				   billboard-density: 1000;
-				   billboard-scaleVariance: 0.4;
-				   billboard-brightnessVariance: 0.1;
-				   billboard-randomSeed: 2;
-				   billboard-alphaRefValue: 0.4;
-				   billboard-alphaBlend: 1;
+                   billboard2-image:../data/tree.gif;
+                   billboard2-width:6;
+				   billboard2-height:8;
+				   billboard2-density: 1000;
+				   billboard2-scaleVariance: 0.4;
+				   billboard2-brightnessVariance: 0.1;
+				   billboard2-randomSeed: 2;
+				   billboard2-alphaRefValue: 0.4;
+				   billboard2-alphaBlend: 1;
 				   altitude-clamping: terrain;
                 }
 		    </style>
@@ -53,27 +53,27 @@
 	    <styles>
             <style type="text/css">
                 ForestStyle1 {
-                   billboard-image:../data/textures/pine.png;
-                   billboard-width:8;
-				   billboard-height:14;
-				   billboard-density: 3000;
-				   billboard-scaleVariance: 0.4;
-				   billboard-brightnessVariance: 0.7;
-				   billboard-randomSeed: 0;
-				   billboard-alphaRefValue: 0.1;
-				   billboard-alphaBlend: 0;
+                   billboard2-image:../data/splat/pine.png;
+                   billboard2-width:8;
+				   billboard2-height:14;
+				   billboard2-density: 3000;
+				   billboard2-scaleVariance: 0.4;
+				   billboard2-brightnessVariance: 0.7;
+				   billboard2-randomSeed: 0;
+				   billboard2-alphaRefValue: 0.1;
+				   billboard2-alphaBlend: 0;
 				   altitude-clamping: terrain;
                 }
 				ForestStyle2 {
-                   billboard-image:../data/tree.gif;
-                   billboard-width:6;
-				   billboard-height:8;
-				   billboard-density: 3000;
-				   billboard-scaleVariance: 0.4;
-				   billboard-brightnessVariance: 0.1;
-				   billboard-randomSeed: 2;
-				   billboard-alphaRefValue: 0.4;
-				   billboard-alphaBlend: 1;
+                   billboard2-image:../data/tree.gif;
+                   billboard2-width:6;
+				   billboard2-height:8;
+				   billboard2-density: 3000;
+				   billboard2-scaleVariance: 0.4;
+				   billboard2-brightnessVariance: 0.1;
+				   billboard2-randomSeed: 2;
+				   billboard2-alphaRefValue: 0.4;
+				   billboard2-alphaBlend: 1;
 				   altitude-clamping: terrain;
                 }
 		    </style>

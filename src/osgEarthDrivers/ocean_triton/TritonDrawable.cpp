@@ -283,6 +283,7 @@ namespace
 
             //horizonDistance *= 0.25;
 
+/*<<<<<<< HEAD
 			_heightCam->setProjectionMatrix(osg::Matrix::ortho(-horizonDistance,horizonDistance,-horizonDistance,horizonDistance,near,far) );
 			_heightCam->setViewMatrixAsLookAt( heightCamEye, osg::Vec3d(0.0,0.0,0.0), osg::Vec3d(0.0,0.0,1.0));
 
@@ -314,14 +315,46 @@ namespace
 #ifdef DEBUG_HEIGHTMAP
 			_mapNode->getParent(0)->removeChild(0 ,1);
 			_mapNode->getParent(0)->insertChild(0, makeFrustumFromCamera(_heightCam));
-#endif /* DEBUG_HEIGHTMAP */
+#endif 
 
 		}
+=======*/
+            _heightCam->setProjectionMatrix(osg::Matrix::ortho(-horizonDistance,horizonDistance,-horizonDistance,horizonDistance,near,far) );
+            _heightCam->setViewMatrixAsLookAt( heightCamEye, osg::Vec3d(0.0,0.0,0.0), osg::Vec3d(0.0,0.0,1.0));
 
+            const osg::Matrixd bias(0.5, 0.0, 0.0, 0.0,
+                                    0.0, 0.5, 0.0, 0.0,
+                                    0.0, 0.0, 0.5, 0.0,
+                                    0.5, 0.5, 0.5, 1.0);
+
+            osg::Matrix hMM = _heightCam->getViewMatrix() * _heightCam->getProjectionMatrix() * bias;
+            ::Triton::Matrix4 heightMapMatrix(hMM(0,0),hMM(0,1),hMM(0,2),hMM(0,3),
+                                              hMM(1,0),hMM(1,1),hMM(1,2),hMM(1,3),
+                                              hMM(2,0),hMM(2,1),hMM(2,2),hMM(2,3),
+                                              hMM(3,0),hMM(3,1),hMM(3,2),hMM(3,3));
+
+            //unsigned int contextID = _viewer->getCamera()->getGraphicsContext()->getState()->getContextID();
+            _texObj = _heightMap->getTextureObject(_contextID);
+            //osg::notify( osg::ALWAYS ) << "_contextID " << _contextID << std::endl;
+
+            if(_texObj)
+            {
+                PassHeightMapToTritonCallback* cb = dynamic_cast<PassHeightMapToTritonCallback*>(_heightCam->getFinalDrawCallback());
+                if( cb )
+                {
+                    cb->_enable = true;
+                    cb->_id = _texObj->id();
+                    cb->_heightMapMatrix = heightMapMatrix;
+                }
+            }
+    #ifdef DEBUG_HEIGHTMAP
+            _mapNode->getParent(0)->removeChild(0 ,1);
+            _mapNode->getParent(0)->insertChild(0, makeFrustumFromCamera(_heightCam));
+    #endif /* DEBUG_HEIGHTMAP */
+        }
 		void setViewMatrix(const osg::Matrix& viewMatrix) { _viewMatrix = viewMatrix; };
 		void setProjectionMatrix(const osg::Matrix& projectionMatrix) { _projectionMatrix = projectionMatrix; };
 		void setContextID(unsigned int contextID) {_contextID = contextID;}
-
 	private:
 		osg::observer_ptr<TritonContext> _TRITON;
 		osg::observer_ptr<osgEarth::MapNode> _mapNode;
@@ -332,18 +365,19 @@ namespace
 		unsigned int _contextID;
 	};
 
-
 	const char* vertexShader =
 		"#version " GLSL_VERSION_STR "\n"
 		GLSL_DEFAULT_PRECISION_FLOAT "\n"
 
-		"attribute vec4 oe_terrain_attr; \n"
-		"varying float oe_triton_height;\n"
+        "// terrain SDK:\n"
+        "float oe_terrain_getElevation(); \n"
 
-		"void setupContour(inout vec4 VertexModel) \n"
-		"{ \n"
-		"    oe_triton_height = oe_terrain_attr[3]; \n"
-		"} \n";
+        "varying float oe_triton_elev;\n"
+
+        "void setupContour(inout vec4 VertexModel) \n"
+        "{ \n"
+        "    oe_triton_elev = oe_terrain_getElevation(); \n"
+        "} \n";
 
 	// The fragment shader simply takes the texture index that we generated
 	// in the vertex shader and does a texture lookup. In this case we're
@@ -354,15 +388,15 @@ namespace
 		"#version " GLSL_VERSION_STR "\n"
 		GLSL_DEFAULT_PRECISION_FLOAT "\n"
 
-		"varying float oe_triton_height;\n"
+        "varying float oe_triton_elev;\n"
 
 		"void colorContour( inout vec4 color ) \n"
 		"{ \n"
 #ifdef DEBUG_HEIGHTMAP
-		// Map to black = -500m, white = +500m
-		"   float nHeight = clamp(oe_triton_height / 1000.0 + 0.5, 0.0, 1.0);\n"
+          // Map to black = -500m, white = +500m
+          "   float nHeight = clamp(oe_triton_elev / 1000.0 + 0.5, 0.0, 1.0);\n"
 #else
-		"   float nHeight = oe_triton_height;\n"
+          "   float nHeight = oe_triton_elev;\n"
 #endif
         "    gl_FragColor = vec4( nHeight, 0.0, 0.0, 1.0 ); \n"
 		"} \n";
@@ -621,6 +655,7 @@ void
 
 void TritonDrawable::setupHeightMap(osgEarth::MapNode* mapNode)
 {
+/*
 	int textureUnit = 0;
 	int textureSize = 1024;
 	// Create our height map texture
@@ -662,6 +697,49 @@ void TritonDrawable::setupHeightMap(osgEarth::MapNode* mapNode)
 		_terrainChangedCallback = new OceanTerrainChangedCallback( _TRITON.get(), mapNode, _heightCamera.get(), _heightMap.get());
 		mapNode->getTerrain()->addTerrainCallback( _terrainChangedCallback.get() );
 	}
+*/
+    int textureUnit = 0;
+    int textureSize = 512;
+    // Create our height map texture
+    _heightMap = new osg::Texture2D;
+    _heightMap->setTextureSize(textureSize, textureSize);
+    _heightMap->setInternalFormat(GL_LUMINANCE32F_ARB);
+    _heightMap->setSourceFormat(GL_LUMINANCE);
+    _heightMap->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::LINEAR);
+    _heightMap->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::LINEAR);
+
+    // Create its camera and render to it
+    _heightCamera = new osg::Camera;
+    _heightCamera->setReferenceFrame(osg::Transform::ABSOLUTE_RF_INHERIT_VIEWPOINT);
+    _heightCamera->setClearMask(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    _heightCamera->setClearColor(osg::Vec4(-1000.0, -1000.0, -1000.0, 1.0f));
+    _heightCamera->setViewport(0, 0, textureSize, textureSize);
+    _heightCamera->setRenderOrder(osg::Camera::PRE_RENDER);
+    _heightCamera->setRenderTargetImplementation( osg::Camera::FRAME_BUFFER_OBJECT );
+    _heightCamera->attach(osg::Camera::COLOR_BUFFER, _heightMap);
+    _heightCamera->setCullMask( ~TRITON_OCEAN_MASK );
+    _heightCamera->setAllowEventFocus(false);
+    _heightCamera->setFinalDrawCallback(new PassHeightMapToTritonCallback(_TRITON.get()));
+
+    // Install the shaders. We also bind osgEarth's elevation data attribute, which the
+    // terrain engine automatically generates at the specified location.
+    osgEarth::VirtualProgram* heightProgram = new osgEarth::VirtualProgram();
+    heightProgram->setFunction( "setupContour", vertexShader,   osgEarth::ShaderComp::LOCATION_VERTEX_MODEL);
+    heightProgram->setFunction( "colorContour", fragmentShader, osgEarth::ShaderComp::LOCATION_FRAGMENT_OUTPUT);
+
+    // Link with the terrain SDK
+    //mapNode->getTerrainEngine()->includeShaderLibrary( heightProgram );
+
+    osg::StateSet *stateSet = _heightCamera->getOrCreateStateSet();
+    stateSet->setAttribute(heightProgram, osg::StateAttribute::ON);
+    stateSet->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+    
+    if( mapNode && _heightCamera )
+    {
+        _heightCamera->addChild( mapNode->getTerrainEngine() );
+        _terrainChangedCallback = new OceanTerrainChangedCallback( _TRITON.get(), mapNode, _heightCamera.get(), _heightMap.get());
+        mapNode->getTerrain()->addTerrainCallback( _terrainChangedCallback.get() );
+    }
 
 	osg::Group* root = osgEarth::findTopMostNodeOfType<osg::Group>(mapNode);
 	root->addChild(_heightCamera);
