@@ -83,7 +83,13 @@ namespace osgEarth { namespace Drivers { namespace RexTerrainEngine
         void getPooledGeometry(
             const TileKey&               tileKey,
             const MapInfo&               mapInfo,
-            osg::ref_ptr<osg::Geometry>& out);
+            osg::ref_ptr<osg::Geometry>& out,
+            MaskGenerator*               maskSet=0L);
+
+        /**
+         * The number of elements (incides) in the terrain skirt, if applicable
+         */
+        int getSkirtSize() const;
 
     protected:
         virtual ~GeometryPool() { }
