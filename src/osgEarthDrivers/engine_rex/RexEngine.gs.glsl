@@ -1,8 +1,8 @@
 #version 330 compatibility
 
-#pragma vp_name       "REX Engine - GS"
-#pragma vp_entryPoint "oe_rexEngine_gs"
-#pragma vp_location   "geometry"
+#pragma vp_name       REX Engine - GS
+#pragma vp_entryPoint oe_rexEngine_gs
+#pragma vp_location   geometry
 
 layout(triangles)      in;
 layout(triangle_strip) out;
@@ -22,7 +22,7 @@ void oe_rexEngine_gs(void)
         masked = masked * oe_layer_tilec.z;
     }
 
-    if (masked == 1.0)
+    if (masked > 0.0)
     {
         for(int i=0; i < 3; ++i )
         {

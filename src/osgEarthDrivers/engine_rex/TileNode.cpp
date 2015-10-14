@@ -323,13 +323,23 @@ void TileNode::cull(osg::NodeVisitor& nv)
     // determine whether we can and should subdivide to a higher resolution:
     bool subdivide = shouldSubDivide(nv, selectionInfo, cv->getLODScale());
 
-    // If this is an inherit-viewpoint camera, we don't need it to invoke subdivision
-    // because we want only the tiles loaded by the true viewpoint.
     bool canCreateChildren = subdivide;
-    const osg::Camera* cam = cv->getCurrentCamera();
-    if ( cam && cam->getReferenceFrame() == osg::Camera::ABSOLUTE_RF_INHERIT_VIEWPOINT )
+
+    if ( _dirty && context->getOptions().progressive() == true )
     {
+        // Don't create children in progressive mode until content is in place
         canCreateChildren = false;
+    }
+    
+    else
+    {
+        // If this is an inherit-viewpoint camera, we don't need it to invoke subdivision
+        // because we want only the tiles loaded by the true viewpoint.
+        const osg::Camera* cam = cv->getCurrentCamera();
+        if ( cam && cam->getReferenceFrame() == osg::Camera::ABSOLUTE_RF_INHERIT_VIEWPOINT )
+        {
+            canCreateChildren = false;
+        }
     }
 
     // If *any* of the children are visible, subdivide.
@@ -613,11 +623,26 @@ TileNode::load(osg::NodeVisitor& nv)
         }
     }
 
+#if 0
+    double range0, range1;
+    int lod = getTileKey().getLOD();
+    if ( lod > context->getOptions().firstLOD().get() )
+        range0 = context->getSelectionInfo().visParameters(lod-1)._fVisibility;
+    else
+        range0 = 0.0;
+    double range1 = context->getSelectionInfo().visParameters(lod)._fVisibility;
+
+    priority = 
+#endif
+
     // Prioritize by LOD. (negated because lower order gets priority)
     float priority = - (float)getTileKey().getLOD();
 
     if ( context->getOptions().highResolutionFirst() == true )
-        priority = -priority;
+    {
+        priority = context->getSelectionInfo().numLods() - priority;
+        //priority = -priority;
+    }
 
     // then sort by distance within each LOD.
     float distance = nv.getDistanceToViewPoint( getBound().center(), true );

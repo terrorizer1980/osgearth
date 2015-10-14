@@ -182,14 +182,6 @@ namespace
                     header = line;
                 }
 
-                else if ( tokens[0] == "#pragma")
-                {
-                    // Discards all pragmas, since the double-quotes in them are illegal in at least
-                    // GLSL ES compiler (on Android). We should consider doing this for all GLSL
-                    // since technically quoting characters are not part of the GLSL grammar at all.
-                    continue;
-                }
-
                 else
                 {
                     body << (*line_iter) << "\n";
@@ -291,25 +283,6 @@ namespace
     }
 
     /**
-     * As mentioned in parseShaderForMerging(), double quotes in pragmas are illegal.  This
-     * eliminates the issue by turning the pragma lines into a comment.
-     */
-    bool discardPragmas(std::string& shaderSource)
-    {
-        bool changed = false;
-        std::string::size_type pos = 0;
-        static const std::string POUND_PRAGMA = "#pragma ";
-        while ((pos = shaderSource.find(POUND_PRAGMA, pos)) != std::string::npos)
-        {
-            // Just replace with a comment
-            shaderSource.insert(pos, "// ");
-            changed = true;
-            pos += POUND_PRAGMA.size();
-        }
-        return changed;
-    }
-
-    /**
     * Populates the specified Program with passed-in shaders.
     */
     void addShadersToProgram(const VirtualProgram::ShaderVector&      shaders, 
@@ -318,16 +291,6 @@ namespace
                              osg::Program*                            program,
                              ShaderComp::StageMask                    stages)
     {
-        // Remove the pragmas before going to OSG
-        for( VirtualProgram::ShaderVector::const_iterator i = shaders.begin(); i != shaders.end(); ++i )
-        {
-            std::string source = (*i)->getShaderSource();
-            if ( discardPragmas( source ) )
-            {
-                (*i)->setShaderSource(source);
-            }
-        }
-
 #ifdef USE_ATTRIB_ALIASES
         // apply any vertex attribute aliases. But first, sort them from longest to shortest 
         // so we don't get any overlap and bad replacements.
@@ -1031,47 +994,16 @@ VirtualProgram::setFunction(const std::string&           functionName,
         function._accept = accept;
         ofm.insert( OrderedFunction(ordering, function) );
 
-        // create and add the new shader function.
-        //osg::Shader::Type type;
+        // Remove any quotes in the shader source (illegal)
+        std::string source(shaderSource);
+        osgEarth::replaceIn(source, "\"", " ");
 
         // assemble the poly shader.
         PolyShader* shader = new PolyShader();
         shader->setName( functionName );
         shader->setLocation( location );
-        shader->setShaderSource( shaderSource );
+        shader->setShaderSource( source );
         shader->prepare();
-
-#if 0
-        switch(location)
-        {
-            case LOCATION_VERTEX_MODEL:
-            case LOCATION_VERTEX_VIEW:
-            case LOCATION_VERTEX_CLIP:
-                type = osg::Shader::VERTEX; // depends where it gets inserted.....
-                break;
-                
-            case LOCATION_VERTEX_GEOMETRY:
-                type = osg::Shader::GEOMETRY;
-                break;
-                
-            case LOCATION_VERTEX_TESSCONTROL:
-                type = osg::Shader::TESSCONTROL;
-                break;
-                
-            case LOCATION_VERTEX_TESSEVALUATION:
-                type = osg::Shader::TESSEVALUATION;
-                break;
-
-            default:
-                type = osg::Shader::FRAGMENT;
-        }
-
-        osg::Shader* shader = new osg::Shader(type, shaderSource);
-        shader->setName( functionName );
-
-        // pre-processes the shader's source to include GLES uniforms as necessary
-        ShaderPreProcessor::run( shader );
-#endif
 
         ShaderEntry& entry = _shaderMap[MAKE_SHADER_ID(functionName)];
         entry._shader        = shader;
