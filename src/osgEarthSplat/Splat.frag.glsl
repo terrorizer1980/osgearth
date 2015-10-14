@@ -12,9 +12,9 @@
 #pragma vp_define SPLAT_GPU_NOISE
 
 // define to activate color image layer mixing.
-#pragma vp_define "SPLAT_USE_COLOR_IMAGE"
+#pragma vp_define SPLAT_USE_COLOR_IMAGE
 
-#pragma vp_define "SPLAT_USE_UNNORMALIZED_COVERAGE"
+#pragma vp_define SPLAT_USE_UNNORMALIZED_COVERAGE
 
 // include files
 #pragma include Splat.types.glsl
@@ -299,7 +299,11 @@ void oe_splat_complex(inout vec4 color)
 	float fade_dist = oe_splat_color_start_dist + 0.1;
 	float fade = clamp(oe_splat_range, 0, fade_dist);
 	fade = fade/fade_dist;
-	color.rgb = mix(color.rgb, color.rgb*(2.4*groundColor), oe_splat_color_ratio*fade);
+	color.rgb = mix(color.rgb, color.rgb*(2.2*groundColor), oe_splat_color_ratio*fade);
+	fade_dist = 50000;
+	fade = clamp(oe_splat_range, 0, fade_dist);
+	fade = fade/fade_dist;
+	color.rgb = mix(color.rgb, groundColor, fade);
 #endif
 
     // uncomment to visualize slope.
