@@ -128,7 +128,7 @@ TileNode::create(const TileKey& key, EngineContext* context)
             SelectionInfo& selectionInfo = const_cast<SelectionInfo&>(context->getSelectionInfo());
 
             unsigned uiFirstLOD = *(context->_options.firstLOD());
-            unsigned uiMaxLod   = std::min( context->_options.maxLOD().get(), 19u ); // beyond LOD 19 or 20, morphing starts to lose precision.
+            unsigned uiMaxLod   = std::min( context->_options.maxLOD().get(), 20u ); // beyond LOD 19 or 20, morphing starts to lose precision.
             unsigned uiTileSize = *(context->_options.tileSize());
 
             selectionInfo.initialize(uiFirstLOD, uiMaxLod, uiTileSize, getVisibilityRangeHint(uiFirstLOD));
