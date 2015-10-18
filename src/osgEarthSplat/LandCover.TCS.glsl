@@ -30,7 +30,7 @@ void oe_landcover_configureTess()
 
         oe_landcover_biomeIndex = oe_landcover_getBiomeIndex(oe_layer_tilec);
         if ( oe_landcover_biomeIndex >= 0 )
-        {
+	    {
             float d = oe_landcover_density * r0;
 
             gl_TessLevelOuter[0] = d;

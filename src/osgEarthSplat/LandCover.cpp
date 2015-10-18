@@ -227,12 +227,16 @@ LandCoverLayer::createPredicateShader(const Coverage* coverage) const
         const std::string& sampler = layer->shareTexUniformName().get();
         const std::string& matrix  = layer->shareTexMatUniformName().get();
 
-        buf << "uniform sampler2D " << sampler << ";\n"
-            << "uniform mat4 " << matrix << ";\n"
-            << "int oe_landcover_getBiomeIndex(in vec4 coords) { \n"
-            << "    float value = textureLod(" << sampler << ", (" << matrix << " * coords).st, 0).r;\n";
+		buf << "uniform sampler2D " << sampler << ";\n"
+			<< "uniform mat4 " << matrix << ";\n"
+			<< "int oe_landcover_getBiomeIndex(in vec4 coords) { \n";
+		if (::getenv("SPLAT_USE_UNNORMALIZED_COVERAGE") != 0L)
+			buf << "    float value = textureLod(" << sampler << ", (" << matrix << " * coords).st, 0).r;\n";
+		else
+			buf << "    float value = texture(" << sampler << ", (" << matrix << " * coords).st).r*255.0;\n";
+			
 
-        for(int biomeIndex=0; biomeIndex<getBiomes().size(); ++biomeIndex)
+	    for(int biomeIndex=0; biomeIndex<getBiomes().size(); ++biomeIndex)
         {
             const LandCoverBiome* biome = getBiomes().at(biomeIndex).get();
 
