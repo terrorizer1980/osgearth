@@ -35,8 +35,6 @@ using namespace osgEarth::Triton;
 
 namespace
 {
-
-
 #ifdef DEBUG_HEIGHTMAP
 	osg::Node*
 		makeFrustumFromCamera(osg::Camera* camera)
@@ -257,7 +255,6 @@ namespace
 
 		"// terrain SDK:\n"
 		"float oe_terrain_getElevation(); \n"
-		
 
 		"varying float oe_triton_elev;\n"
 
@@ -429,12 +426,13 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 	osgEarth::NativeProgramAdapterCollection& adapters = _adapters[state->getContextID()];
 	if (adapters.empty())
 	{
-		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::GOD_RAYS)));
-		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::SPRAY_PARTICLES)));
-		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WAKE_SPRAY_PARTICLES)));
-		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_DECALS)));
-		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE)));
-		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE_PATCH)));
+		const char* prefix = "oe_";
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::GOD_RAYS), prefix));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::SPRAY_PARTICLES), prefix));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WAKE_SPRAY_PARTICLES), prefix));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_DECALS), prefix));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE_PATCH), prefix));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE), prefix));
 	}
 	adapters.apply(state);
 
@@ -521,12 +519,12 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
 		osg::ref_ptr< osg::RefMatrix > localToWorld = new osg::RefMatrix;
 		osg::ref_ptr< osg::RefMatrix > worldToLocal = new osg::RefMatrix;
-		double lat,lon,alt;
+		double lat, lon, alt;
 		osg::ref_ptr< osg::EllipsoidModel > ellipsoidModel = new osg::EllipsoidModel;
-		ellipsoidModel->convertXYZToLatLongHeight(eye.x(),eye.y(),eye.z(),lat,lon,alt);
-		ellipsoidModel->computeLocalToWorldTransformFromLatLongHeight( lat, lon, alt, *localToWorld );
-		worldToLocal->set( osg::Matrix::inverse( *localToWorld ) );
-		
+		ellipsoidModel->convertXYZToLatLongHeight(eye.x(), eye.y(), eye.z(), lat, lon, alt);
+		ellipsoidModel->computeLocalToWorldTransformFromLatLongHeight(lat, lon, alt, *localToWorld);
+		worldToLocal->set(osg::Matrix::inverse(*localToWorld));
+
 
 
 		// Build transform from our cube map orientation space to native Triton orientation
@@ -555,7 +553,6 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 		// GLenum texture = renderInfo.getState()->getLastAppliedTextureAttribute( _stage, osg::StateAttribute::TEXTURE );
 		if (update_env &&_cubeMap.valid())
 		{
-
 			environment->SetEnvironmentMap(
 				(::Triton::TextureHandle)_cubeMap->getTextureObject(state->getContextID())->id(), transformFromYUpToZUpCubeMapCoords);
 
@@ -571,7 +568,6 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 					_planarReflectionMap->getTextureObject(state->getContextID())->id(),
 					planarProjection, 0.125);
 			}
-
 		}
 
 		// Draw the ocean for the current time sample
@@ -617,7 +613,7 @@ void TritonDrawable::setupHeightMap(osgEarth::MapNode* mapNode)
 	heightProgram->setFunction("colorContour", fragmentShader, osgEarth::ShaderComp::LOCATION_FRAGMENT_OUTPUT);
 
 	// Link with the terrain SDK
-	//mapNode->getTerrainEngine()->includeShaderLibrary( heightProgram );
+	mapNode->getTerrainEngine()->includeShaderLibrary( heightProgram );
 
 	osg::StateSet *stateSet = _heightCamera->getOrCreateStateSet();
 	stateSet->setAttribute(heightProgram, osg::StateAttribute::ON);

@@ -296,8 +296,7 @@ MPTerrainEngineNode::includeShaderLibrary(VirtualProgram* vp)
     static const char* libVS =
         "#version 330\n"
         "#pragma vp_name MP Terrain SDK (VS)\n"
-
-        "in vec4 oe_terrain_attr; \n"
+		"in vec4 oe_terrain_attr; \n"
         "uniform vec4 oe_tile_key; \n"
         "vec3 vp_Normal; \n"
 

@@ -58,6 +58,7 @@ main(int argc, char** argv)
 	osg::DisplaySettings::instance()->setNumMultiSamples( 4 );
     // create a viewer:
     osgViewer::Viewer viewer(arguments);
+    viewer.setLightingMode( osg::View::NO_LIGHT );
 
     // Tell the database pager to not modify the unref settings
     viewer.getDatabasePager()->setUnrefImageDataAfterApplyPolicy( false, false );
