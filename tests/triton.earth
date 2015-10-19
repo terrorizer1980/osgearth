@@ -5,7 +5,17 @@ http://sundog-soft.com/sds/features/real-time-3d-clouds/
 <map name="readymap.org" type="geocentric" version="2">
     
     <options>
-        <terrain first_lod="1" tile_size="7"/>
+        <!--<terrain first_lod="1" tile_size="7"/>-->
+		<terrain driver="rex"
+                 skirt_ratio="0.0"
+                 tile_size="9"
+                 merges_per_frame="2"
+                 morph_terrain="true"
+                 morph_imagery="true"
+                 high_resolution_first="false" 
+				 max_lod="20"
+				 normal_maps="false"
+				 min_tile_range_factor="3"/>
     </options>
     
     <image name="readymap_imagery" driver="tms" visible="true">
@@ -21,7 +31,8 @@ http://sundog-soft.com/sds/features/real-time-3d-clouds/
         <ocean driver="triton"
                user="my_user_name"
                license_code="my_license_code"
-			   max_altitude="10000"/>
+			   use_height_map="true"
+			   max_altitude="30000"/>
                
         <sky hours="18" driver="gl"/>
         

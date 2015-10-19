@@ -55,7 +55,8 @@ _lastAltitude(DBL_MAX)
 
     // Clouds draw after everything else
     _cloudsDrawable = new CloudsDrawable( this,_SL.get() );
-    _cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 99, "DepthSortedBin" );
+    _cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 22, "DepthSortedBin" );
+	//_cloudsDrawable->getOrCreateStateSet()->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
     _geode->addDrawable( _cloudsDrawable.get() );
 	
     // ensure it's depth sorted and draws after the terrain

@@ -31,10 +31,16 @@
         <tile_size>256</tile_size>
         <cache_policy usage="none"/>
         <images>
-            <image name="ESA" driver="gdal" coverage="true">
+            <!--<image name="ESA" driver="gdal" coverage="true">
                 <url>d:/dev_zone/osgearth/gtiff_tiled_lzw.tif</url>
                 <warp>0.01</warp>
-            </image>
+            </image>-->
+			<image name="ESA" driver="tms" coverage="true">
+				<url>D:\terrain\osgEarth\tms/coverage_merged/tms.xml</url>
+				<!--<url>C:\dev\OSGEarthDemo\merged_land_cover/tms.xml</url>-->
+				<cache_policy usage="no_cache"/>
+				<warp>0.01</warp>
+			</image>
         </images>
         <shared_sampler> landUseTex       </shared_sampler>
         <shared_matrix>  landUseTexMatrix </shared_matrix>

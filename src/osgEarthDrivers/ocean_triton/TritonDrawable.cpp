@@ -1,4 +1,3 @@
-/* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
 * Copyright 2015 Pelican Mapping
 * http://osgearth.org
@@ -384,10 +383,9 @@ TritonDrawable::updateHeightMap(osg::RenderInfo& renderInfo) const
 		hMM(2, 0), hMM(2, 1), hMM(2, 2), hMM(2, 3),
 		hMM(3, 0), hMM(3, 1), hMM(3, 2), hMM(3, 3));
 
-	//unsigned int contextID = _viewer->getCamera()->getGraphicsContext()->getState()->getContextID();
 	osg::Texture::TextureObject* texObj = _heightMap->getTextureObject(renderInfo.getContextID());
-	//osg::notify( osg::ALWAYS ) << "_contextID " << _contextID << std::endl;
 
+	//osg::notify( osg::ALWAYS ) << "_contextID " << _contextID << std::endl;
 	if (texObj)
 	{
 		PassHeightMapToTritonCallback* cb = dynamic_cast<PassHeightMapToTritonCallback*>(_heightCamera->getFinalDrawCallback());
@@ -397,6 +395,10 @@ TritonDrawable::updateHeightMap(osg::RenderInfo& renderInfo) const
 			cb->_id = texObj->id();
 			cb->_heightMapMatrix = heightMapMatrix;
 		}
+	}
+	else
+	{
+		OE_WARN << LC << "Texture object is NULL (Internal error)" << std::endl;
 	}
 
 #ifdef DEBUG_HEIGHTMAP
@@ -418,7 +420,7 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
 	if (_TRITON->passHeightMapToTriton() && !_terrainChangedCallback.valid())
 	{
-		const_cast< TritonDrawable *>(this)->setupHeightMap(_mapNode.get());
+		const_cast<TritonDrawable *>(this)->setupHeightMap(_mapNode.get());
 	}
 
 	::Triton::Environment* environment = _TRITON->getEnvironment();
@@ -443,10 +445,8 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 		environment->SetProjectionMatrix(state->getProjectionMatrix().ptr());
 	}
 
-	if (_terrainChangedCallback.valid())
+	if (_TRITON->passHeightMapToTriton())
 	{
-		OceanTerrainChangedCallback* c = static_cast<OceanTerrainChangedCallback*>(_terrainChangedCallback.get());
-
 		unsigned cid = renderInfo.getContextID();
 
 		bool dirty =
@@ -457,16 +457,10 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 		if (dirty)
 		{
 			updateHeightMap(renderInfo);
-			//c->setViewMatrix( renderInfo.getView()->getCamera()->getViewMatrix() );
-			//c->setProjectionMatrix(renderInfo.getView()->getCamera()->getProjectionMatrix() );
-			//updateHeightMap( renderInfo );
 			_contextDirty[renderInfo.getContextID()] = 0;
 			_viewMatrix = renderInfo.getView()->getCamera()->getViewMatrix();
 			_projMatrix = renderInfo.getView()->getCamera()->getProjectionMatrix();
 		}
-
-		//c->setContextID(renderInfo.getView()->getCamera()->getGraphicsContext()->getState()->getContextID() );
-		//c->update();
 	}
 
 	state->dirtyAllVertexArrays();
@@ -508,10 +502,26 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 				::Triton::Vector3(position[0], position[1], position[2]),
 				::Triton::Vector3(diffuse[0], diffuse[1], diffuse[2]));
 
+			// Sun-based ambient value:
 			// Ambient color based on the zenith color in the cube map
-			environment->SetAmbientLight(
-				::Triton::Vector3(ambient[0], ambient[1], ambient[2]));
+			osg::Vec3d up = osg::Vec3d(0, 0, 0) * renderInfo.getCurrentCamera()->getInverseViewMatrix();
+			up.normalize();
+			osg::Vec3d pos3 = osg::Vec3d(position.x(), position.y(), position.z());
+			pos3.normalize();
+			float dot = osg::clampAbove(up*pos3, 0.0); dot *= dot;
+			float sunAmbient = (float)osg::clampBetween(dot, 0.0f, 0.88f);
+			float fa = std::max(sunAmbient, ambient[0]);
+
+			// Ambient color based on the zenith color in the cube map
+			environment->SetAmbientLight(::Triton::Vector3(fa, fa, fa));
+			//::Triton::Vector3( ambient[0], ambient[1], ambient[2] ) );
 		}
+		else
+		{
+			environment->SetDirectionalLight(::Triton::Vector3(0, 0, 1), ::Triton::Vector3(1, 1, 1));
+			environment->SetAmbientLight(::Triton::Vector3(0.88f, 0.88f, 0.88f));
+		}
+
 
 		osg::Vec3d eye, center, up;
 		osg::Camera* camera = renderInfo.getCurrentCamera();
@@ -524,9 +534,6 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 		ellipsoidModel->convertXYZToLatLongHeight(eye.x(), eye.y(), eye.z(), lat, lon, alt);
 		ellipsoidModel->computeLocalToWorldTransformFromLatLongHeight(lat, lon, alt, *localToWorld);
 		worldToLocal->set(osg::Matrix::inverse(*localToWorld));
-
-
-
 		// Build transform from our cube map orientation space to native Triton orientation
 		// See worldToCubeMap function used in SkyBox to orient sky texture so that sky is up and earth is down
 		//osg::Matrix m = osg::Matrix::rotate( osg::PI_2, osg::X_AXIS ); // = worldToCubeMap
@@ -536,7 +543,6 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 			m(0, 0), m(0, 1), m(0, 2),
 			m(1, 0), m(1, 1), m(1, 2),
 			m(2, 0), m(2, 1), m(2, 2));
-
 
 		static bool update_env = true;
 		if (_skyNode)
@@ -577,11 +583,19 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 		}
 	}
 
+	// Put GL back in a state that won't confuse the OSG state tracking:
 	state->dirtyAllVertexArrays();
+	state->dirtyAllAttributes();
+	osg::GL2Extensions* api = osg::GL2Extensions::Get(state->getContextID(), true);
+	api->glUseProgram((GLuint)0);
+	state->setLastAppliedProgramObject(0L);
 }
 
 void TritonDrawable::setupHeightMap(osgEarth::MapNode* mapNode)
 {
+	if (!mapNode)
+		return;
+
 	int textureUnit = 0;
 	int textureSize = _TRITON->getHeightMapSize();
 
@@ -608,80 +622,82 @@ void TritonDrawable::setupHeightMap(osgEarth::MapNode* mapNode)
 
 	// Install the shaders. We also bind osgEarth's elevation data attribute, which the
 	// terrain engine automatically generates at the specified location.
-	osgEarth::VirtualProgram* heightProgram = new osgEarth::VirtualProgram();
+	osg::StateSet* stateSet = _heightCamera->getOrCreateStateSet();
+	osgEarth::VirtualProgram* heightProgram = osgEarth::VirtualProgram::getOrCreate(stateSet);
 	heightProgram->setFunction("setupContour", vertexShader, osgEarth::ShaderComp::LOCATION_VERTEX_MODEL);
 	heightProgram->setFunction("colorContour", fragmentShader, osgEarth::ShaderComp::LOCATION_FRAGMENT_OUTPUT);
 
 	// Link with the terrain SDK
-	mapNode->getTerrainEngine()->includeShaderLibrary( heightProgram );
+	//mapNode->getTerrainEngine()->includeShaderLibrary( heightProgram );
 
-	osg::StateSet *stateSet = _heightCamera->getOrCreateStateSet();
-	stateSet->setAttribute(heightProgram, osg::StateAttribute::ON);
-	stateSet->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+	//stateSet->setAttribute(heightProgram, osg::StateAttribute::ON);
+	//stateSet->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
 
 	if (mapNode && _heightCamera)
 	{
 		_heightCamera->addChild(mapNode->getTerrainEngine());
+		_heightCamera->addChild(mapNode->getTerrainEngine());
 		_terrainChangedCallback = new OceanTerrainChangedCallback(this); //_TRITON.get(), mapNode, _heightCamera.get(), _heightMap.get());
 		mapNode->getTerrain()->addTerrainCallback(_terrainChangedCallback.get());
-	}
+		mapNode->getTerrain()->addTerrainCallback(_terrainChangedCallback.get());
 
-	osg::Group* root = osgEarth::findTopMostNodeOfType<osg::Group>(mapNode);
-	root->addChild(_heightCamera);
+		osg::Group* root = osgEarth::findTopMostNodeOfType<osg::Group>(mapNode);
+		root->addChild(_heightCamera.get());
 
 #ifdef DEBUG_HEIGHTMAP
-	mapNode->getParent(0)->addChild(CreateTextureQuadOverlay(_heightMap, 0.65, 0.05, 0.3, 0.3));
-	mapNode->getParent(0)->insertChild(0, makeFrustumFromCamera(_heightCamera));
+		mapNode->getParent(0)->addChild(CreateTextureQuadOverlay(_heightMap, 0.65, 0.05, 0.3, 0.3));
+		mapNode->getParent(0)->insertChild(0, makeFrustumFromCamera(_heightCamera));
 #endif /* DEBUG_HEIGHTMAP */
+	}
 }
 
-osg::TextureCubeMap* TritonDrawable::readCubeMap()
-{
-	osg::ref_ptr< osg::TextureCubeMap> cubemap = new osg::TextureCubeMap();
+	osg::TextureCubeMap* TritonDrawable::readCubeMap()
+	{
+		osg::ref_ptr< osg::TextureCubeMap> cubemap = new osg::TextureCubeMap();
 
-	const char *tritonPath = getenv("TRITON_PATH");
-	if (!tritonPath) {
-		printf("Can't find Triton; set the TRITON_PATH environment variable ");
-		printf("to point to the directory containing the SDK.\n");
-		exit(0);
-	}
+		const char *tritonPath = getenv("TRITON_PATH");
+		if (!tritonPath) {
+			printf("Can't find Triton; set the TRITON_PATH environment variable ");
+			printf("to point to the directory containing the SDK.\n");
+			exit(0);
+		}
 
-	std::string resPath(tritonPath);
+		std::string resPath(tritonPath);
 #ifdef _WIN32
-	resPath += "\\Samples\\";
+		resPath += "\\Samples\\";
 #else
-	resPath += "/Samples/";
+		resPath += "/Samples/";
 #endif
 
 #if OSG_TEST_CUBEMAP
-	// OSG test cubemap - useful for testing reflections
+		// OSG test cubemap - useful for testing reflections
 #define CUBEMAP_FILENAME(face) "cubemap_test/" #face ".png"
 #else
 #define CUBEMAP_FILENAME(face) #face ".tga"
 #endif
 
-	osg::Image* imagePosX = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(posX));
-	osg::Image* imageNegX = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negX));
-	osg::Image* imagePosY = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(posY));
-	osg::Image* imageNegY = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negY));
-	osg::Image* imagePosZ = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(posZ));
-	osg::Image* imageNegZ = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negZ));
+		osg::Image* imagePosX = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(posX));
+		osg::Image* imageNegX = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negX));
+		osg::Image* imagePosY = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(posY));
+		osg::Image* imageNegY = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negY));
+		osg::Image* imagePosZ = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(posZ));
+		osg::Image* imageNegZ = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negZ));
 
-	if (imagePosX && imageNegX && imagePosY && imageNegY && imagePosZ && imageNegZ) {
-		cubemap->setImage(osg::TextureCubeMap::POSITIVE_X, imagePosX);
-		cubemap->setImage(osg::TextureCubeMap::NEGATIVE_X, imageNegX);
-		cubemap->setImage(osg::TextureCubeMap::POSITIVE_Y, imagePosY);
-		cubemap->setImage(osg::TextureCubeMap::NEGATIVE_Y, imageNegY);
-		cubemap->setImage(osg::TextureCubeMap::POSITIVE_Z, imagePosZ);
-		cubemap->setImage(osg::TextureCubeMap::NEGATIVE_Z, imageNegZ);
+		if (imagePosX && imageNegX && imagePosY && imageNegY && imagePosZ && imageNegZ) {
+			cubemap->setImage(osg::TextureCubeMap::POSITIVE_X, imagePosX);
+			cubemap->setImage(osg::TextureCubeMap::NEGATIVE_X, imageNegX);
+			cubemap->setImage(osg::TextureCubeMap::POSITIVE_Y, imagePosY);
+			cubemap->setImage(osg::TextureCubeMap::NEGATIVE_Y, imageNegY);
+			cubemap->setImage(osg::TextureCubeMap::POSITIVE_Z, imagePosZ);
+			cubemap->setImage(osg::TextureCubeMap::NEGATIVE_Z, imageNegZ);
 
-		cubemap->setWrap(osg::Texture::WRAP_S, osg::Texture::CLAMP_TO_EDGE);
-		cubemap->setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP_TO_EDGE);
-		cubemap->setWrap(osg::Texture::WRAP_R, osg::Texture::CLAMP_TO_EDGE);
+			cubemap->setWrap(osg::Texture::WRAP_S, osg::Texture::CLAMP_TO_EDGE);
+			cubemap->setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP_TO_EDGE);
+			cubemap->setWrap(osg::Texture::WRAP_R, osg::Texture::CLAMP_TO_EDGE);
 
-		cubemap->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR);
-		cubemap->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
+			cubemap->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR);
+			cubemap->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
+		}
+
+		return cubemap.release();
 	}
-
-	return cubemap.release();
-}

@@ -21,6 +21,7 @@
 #include "SilverLiningSkyNode"
 #include "SilverLiningContext"
 #include <osgEarth/SpatialReference>
+#include <osg/GL2Extensions>
 
 #define LC "[SilverLining:SkyDrawable] "
 
@@ -74,7 +75,12 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
 		_SL->getAtmosphere()->DrawObjects(true);
 
+        // Dirty the state and the program tracking to prevent GL state conflicts.
         renderInfo.getState()->dirtyAllVertexArrays();
+        renderInfo.getState()->dirtyAllAttributes();
+        osg::GL2Extensions* api = osg::GL2Extensions::Get(renderInfo.getState()->getContextID(), true);
+        api->glUseProgram((GLuint)0);
+        renderInfo.getState()->setLastAppliedProgramObject(0L);
     }
 }
 
