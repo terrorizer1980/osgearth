@@ -23,6 +23,7 @@
 #include <osgEarth/PhongLightingEffect>
 #include <osg/Light>
 #include <osg/LightSource>
+#include <OpenThreads/Mutex>
 
 namespace osgEarth { namespace SilverLining
 {
@@ -42,6 +43,8 @@ namespace osgEarth { namespace SilverLining
 
         void traverse(osg::NodeVisitor&);
 		osg::ref_ptr<SilverLiningContext> getContext() const {return _SL;}
+		mutable OpenThreads::Mutex _mutex;
+
     protected:
         virtual ~SilverLiningSkyNode();
 
@@ -49,8 +52,8 @@ namespace osgEarth { namespace SilverLining
 		
         osg::ref_ptr<osg::LightSource> _lightSource;
         osg::Drawable* _skyDrawable;
-		osg::ref_ptr<osg::Drawable> _cloudsDrawable;
-        //osg::ref_ptr<osg::Light> _light;
+		 osg::ref_ptr<osg::Drawable> _cloudsDrawable;
+       
 		double _lastAltitude;
 		const SilverLiningOptions _options;
         osg::ref_ptr<osgEarth::PhongLightingEffect> _lighting;

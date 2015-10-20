@@ -23,7 +23,7 @@
 #include <osgEarth/SpatialReference>
 
 #undef  LC
-#define LC "[SilverLining:SkyDrawable] "
+#define LC "[SilverLining:CloudsDrawable] "
 
 using namespace osgEarth::SilverLining;
 
@@ -47,7 +47,7 @@ void
 		osg::Camera* camera = renderInfo.getCurrentCamera();
 		if ( camera && _skyNode == dynamic_cast<SilverLiningSkyNode *>(camera->getUserData()))
 		{
-
+			OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
 			const osg::State* state = renderInfo.getState();
 
 			osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ]; // thread safe.
@@ -79,6 +79,7 @@ osg::BoundingBox
 	CloudsDrawable::computeBound() const
 #endif
 {
+	OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
 	osg::BoundingBox cloudBoundBox;
 	if ( !_SL->ready() )
 		return cloudBoundBox;

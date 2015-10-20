@@ -33,7 +33,6 @@ _SL( SL ),
 {
     // call this to ensure draw() gets called every frame.
     setSupportsDisplayList( false );
-
     // not MT-safe (camera updates, etc)
     this->setDataVariance( osg::Object::DYNAMIC );
 }
@@ -45,23 +44,18 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 	SilverLiningSkyNode *camera_sky_node = dynamic_cast<SilverLiningSkyNode *>(camera->getUserData());
 	if ( camera && _skyNode == camera_sky_node)
     {
+		OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
         renderInfo.getState()->disableAllVertexArrays();
         _SL->initialize( renderInfo );
 
+		const osg::State* state = renderInfo.getState();
+		
         double fovy, ar, znear, zfar;
        _SL->setCamera(camera);
         //renderInfo.getCurrentCamera()->setNearFarRatio(.00000001);
 
         camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
         _SL->setSkyBoxSize( zfar < 100000.0 ? zfar : 100000.0 );
-		
-        _SL->getAtmosphere()->DrawSky(
-            true, 
-            _SL->getSRS()->isGeographic(),
-            _SL->getSkyBoxSize(),
-            true,
-            false );
-		_SL->updateEnvMap();
 
 		_SL->getAtmosphere()->DrawSky(
 			true, 
@@ -69,11 +63,6 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 			_SL->getSkyBoxSize(),
 			true,
 			false );
-
-		_SL->getAtmosphere()->CullObjects();
-
-		_SL->getAtmosphere()->DrawObjects(true);
-
         renderInfo.getState()->dirtyAllVertexArrays();
     }
 }
@@ -85,6 +74,7 @@ SkyDrawable::computeBoundingBox() const
 SkyDrawable::computeBound() const
 #endif
 {
+	OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
     osg::BoundingBox skyBoundBox;
     if ( !_SL->ready() )
         return skyBoundBox;

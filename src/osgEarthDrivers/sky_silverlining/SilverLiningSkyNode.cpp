@@ -26,7 +26,7 @@
 #include <osg/Light>
 #include <osg/LightSource>
 #include <osgEarth/CullingUtils>
-
+#include <osg/Depth>
 #undef  LC
 #define LC "[SilverLiningSkyNode] "
 
@@ -39,6 +39,7 @@ SilverLiningSkyNode::SilverLiningSkyNode(osg::Light* light, const osgEarth::Map*
 _options     (options),
 _lastAltitude(DBL_MAX)
 {
+	OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _mutex );
     // The main silver lining data:
     _SL = new SilverLiningContext( options );
     _SL->setLight( light);
@@ -50,13 +51,22 @@ _lastAltitude(DBL_MAX)
 
     // Draws the sky before everything else
     _skyDrawable = new SkyDrawable( this,_SL.get() );
-    _skyDrawable->getOrCreateStateSet()->setRenderBinDetails( -99, "RenderBin" );
+   _skyDrawable->getOrCreateStateSet()->setRenderBinDetails( -99, "RenderBin" );
+   //_skyDrawable->getOrCreateStateSet()->setRenderBinDetails( 91, "RenderBin" );
+   //_skyDrawable->getOrCreateStateSet()->setAttributeAndModes( new osg::Depth(osg::Depth::LEQUAL, 0.0, 1.0, false) );
     _geode->addDrawable( _skyDrawable );
 
     // Clouds draw after everything else
-    _cloudsDrawable = new CloudsDrawable( this,_SL.get() );
-    _cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 99, "DepthSortedBin" );
-    _geode->addDrawable( _cloudsDrawable.get() );
+
+	if(options.drawClouds().get())
+	{
+		_cloudsDrawable = new CloudsDrawable( this,_SL.get() );
+		//_cloudsDrawable->getOrCreateStateSet()->setRenderingHint( osg::StateSet::TRANSPARENT_BIN );
+		_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 17, "RenderBin" );
+		//_cloudsDrawable->setCullCallback( new AlwaysKeepCallback );  // This seems to avoid cloud to twinkle sometimes
+		//_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 99, "DepthSortedBin" );
+		//_geode->addDrawable( _cloudsDrawable );
+	}
 	
     // ensure it's depth sorted and draws after the terrain
     //stateset->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
@@ -95,22 +105,24 @@ SilverLiningSkyNode::traverse(osg::NodeVisitor& nv)
         {
 			int frameNumber = nv.getFrameStamp()->getFrameNumber();
             _skyDrawable->dirtyBound();
-			_cloudsDrawable->dirtyBound();
-         /*   if( _cloudsDrawable )
+			
+            if( _cloudsDrawable )
             {
-                if ( _lastAltitude <= *_options.cloudsMaxAltitude() )
+				//_cloudsDrawable->dirtyBound();
+			    if ( _lastAltitude <= *_options.cloudsMaxAltitude() )
                 {
                     if ( _cloudsDrawable->getNumParents() == 0 )
+					{
                         _geode->addDrawable( _cloudsDrawable.get() );
-
-                    _cloudsDrawable->dirtyBound();
+					}
+					_cloudsDrawable->dirtyBound();
                 }
                 else
                 {
                     if ( _cloudsDrawable->getNumParents() > 0 )
                         _geode->removeDrawable( _cloudsDrawable.get() );
                 }
-            }*/
+            }
         }
 
         else if ( nv.getVisitorType() == nv.CULL_VISITOR )
@@ -124,6 +136,7 @@ SilverLiningSkyNode::traverse(osg::NodeVisitor& nv)
 				SilverLiningSkyNode *sky_node = dynamic_cast<SilverLiningSkyNode *>(camera->getUserData());
 				if(sky_node == this)
 				{
+					OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _mutex );
 					_SL->setCamera(camera);
 					_SL->setCameraPosition( nv.getEyePoint() );
 					_SL->getAtmosphere()->SetCameraMatrix( cv->getModelViewMatrix()->ptr() );
