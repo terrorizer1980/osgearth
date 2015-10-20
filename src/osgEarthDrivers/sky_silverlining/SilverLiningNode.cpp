@@ -61,8 +61,8 @@ _map(map)
     _lighting->attach( stateset );
 
     // initialize date/time
-    onSetDateTime();
-	onSetMinimumAmbient();
+    //onSetDateTime();
+	//onSetMinimumAmbient();
 }
 
 
@@ -139,13 +139,19 @@ SilverLiningNode::traverse(osg::NodeVisitor& nv)
 
 					_skyNodes.push_back(sky_node);
 
+					::SilverLining::LocalTime utcTime;
+					utcTime.SetFromEpochSeconds( getDateTime().asTimeStamp() );
+					sky_node->getContext()->getAtmosphere()->GetConditions()->SetTime(utcTime);
+					sky_node->getContext()->setMinimumAmbient( getMinimumAmbient() );
+					//std::cout << "---------------------Camera added---------------------------" << std::endl;
 					static int nodeMask = 0x1;
-				//	sky_node->setNodeMask(nodeMask);
+					//	sky_node->setNodeMask(nodeMask);
 					sky_node->_geode->setNodeMask(nodeMask);
 					camera->setNodeMask(nodeMask);
 					nodeMask = nodeMask << 1;
 					camera->setUserData(sky_node);
 					addChild(sky_node);
+					//std::cout << "---------------------sky_node added---------------------------" << std::endl;
 				}
 			}
 		}
