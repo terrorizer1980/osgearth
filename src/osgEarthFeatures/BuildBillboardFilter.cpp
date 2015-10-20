@@ -24,6 +24,9 @@
 #include <osgEarth/Clamping>
 #include <osgText/Text>
 #include <osg/AlphaFunc>
+#include <osg/BlendFunc>
+#include <osg/Multisample>
+
 
 #define LC "[BuildBillboardFilter] "
 
@@ -117,7 +120,7 @@ osg::Geode*
 				//(*normals)[i] = normal;//osg::Matrix::transform3x3(normal, w2l);
 				
 				(*normals)[i] = osg::Vec3(0,0,1); //all points are localized, up-vector == +z  
-				double intensity = 0.5 + int_var*(rng.next() - 0.5);
+				double intensity = (0.5 + int_var*(rng.next() - 0.5))*0.3;
 				double scale_factor = 1.0 + (rng.next()) * scale_var;
 				(*colors)[i].set( intensity, intensity, scale_factor, 1 );
 			}
@@ -180,18 +183,32 @@ osg::Geode*
 			geode_ss->getOrCreateUniform("billboard_width", osg::Uniform::FLOAT)->set( bbWidth );
 			geode_ss->getOrCreateUniform("billboard_height", osg::Uniform::FLOAT)->set( bbHeight );
 		
-			osg::AlphaFunc* alphaFunc = new osg::AlphaFunc;
-			alphaFunc->setFunction(osg::AlphaFunc::GEQUAL, billboard_symb->alphaRefValue().get());
-			
-			geode_ss->setAttributeAndModes( alphaFunc, osg::StateAttribute::ON );
-		
-			if(billboard_symb->alphaBlend().get())
+
+			if(!osg::DisplaySettings::instance()->getMultiSamples())
 			{
-				geode_ss->setMode(GL_BLEND, osg::StateAttribute::ON);
-				//geode_ss->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+				osg::AlphaFunc* alphaFunc = new osg::AlphaFunc;
+				alphaFunc->setFunction(osg::AlphaFunc::GEQUAL, billboard_symb->alphaRefValue().get());
+
+				geode_ss->setAttributeAndModes( alphaFunc, osg::StateAttribute::ON );
+
+				if(billboard_symb->alphaBlend().get())
+				{
+					geode_ss->setMode(GL_BLEND, osg::StateAttribute::ON);
+					//geode_ss->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+				}
+				else
+					geode_ss->setMode(GL_BLEND, osg::StateAttribute::OFF);
 			}
 			else
-				geode_ss->setMode(GL_BLEND, osg::StateAttribute::OFF);
+			{
+				geode_ss->setAttributeAndModes(new osg::Multisample, osg::StateAttribute::ON);
+				geode_ss->setMode(GL_MULTISAMPLE_ARB, osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+				geode_ss->setMode(GL_SAMPLE_ALPHA_TO_COVERAGE_ARB,  osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+				geode_ss->setAttributeAndModes(
+					new osg::BlendFunc(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO),
+					osg::StateAttribute::OVERRIDE );
+			}
+
 		
 			//for now just using an osg::Program
 			//TODO: need to add GeometryShader support to the shader comp setup
