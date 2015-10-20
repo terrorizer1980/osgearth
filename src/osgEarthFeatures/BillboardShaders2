@@ -81,26 +81,30 @@ namespace
         "    vec4 right_v = gl_ModelViewMatrix * vec4(billboard_width*scale,0.,0.,1.);\n"
         "    float width = distance(right_v, center_v);\n"
         "    \n"
-        "    brightness = color[0].r;\n"
-        "    gl_Position = gl_ProjectionMatrix * (v + vec4(width, 0., 0., 0.)); \n"
+
+		"    brightness = color[0].r*2.0;\n"
+		"    gl_Position = gl_ProjectionMatrix * (v2 + vec4(-width, 0., 0., 0.)); \n"
 		"	 gl_Position = clip(gl_Position);\n"
-        "    tex_coord = vec2(1.0, 0.0); \n"
+        "    tex_coord = vec2(0.0, 1.0); \n"
         "    EmitVertex(); \n"
+
+        "    gl_Position = gl_ProjectionMatrix * (v2 + vec4(width, 0., 0., 0.)); \n"
+		"	 gl_Position = clip(gl_Position);\n"
+        "    tex_coord = vec2(1.0, 1.0); \n"
+		"    EmitVertex(); \n"
+        
+		"    brightness = color[0].r;\n"
         "    gl_Position = gl_ProjectionMatrix * (v + vec4(-width, 0., 0., 0.)); \n"
 		"	 gl_Position = clip(gl_Position);\n"
         "    tex_coord = vec2(0.0, 0.0); \n"
         "    brightness = color[0].r;\n"
         "    EmitVertex(); \n"
-        
-        "    brightness = color[0].r*2.0;\n"
-        "    gl_Position = gl_ProjectionMatrix * (v2 + vec4(width, 0., 0., 0.)); \n"
+
+        "    gl_Position = gl_ProjectionMatrix * (v + vec4(width, 0., 0., 0.)); \n"
 		"	 gl_Position = clip(gl_Position);\n"
-        "    tex_coord = vec2(1.0, 1.0); \n"
+        "    tex_coord = vec2(1.0, 0.0); \n"
         "    EmitVertex(); \n"
-        "    gl_Position = gl_ProjectionMatrix * (v2 + vec4(-width, 0., 0., 0.)); \n"
-		"	 gl_Position = clip(gl_Position);\n"
-        "    tex_coord = vec2(0.0, 1.0); \n"
-        "    EmitVertex(); \n"
+
         "    EndPrimitive(); \n"
         "}\n";
 
