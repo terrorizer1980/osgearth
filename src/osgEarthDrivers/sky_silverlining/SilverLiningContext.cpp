@@ -39,6 +39,7 @@ _updateEnvMap		  ( false )
 {
     // Create a SL atmosphere (the main SL object).
     // TODO: plug in the username + license key.
+	::srand(1234);
     _atmosphere = new ::SilverLining::Atmosphere(
         options.user()->c_str(),
         options.licenseCode()->c_str() );
@@ -135,6 +136,7 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 void
 SilverLiningContext::setupClouds()
 {
+	::srand(1234);
     _clouds = ::SilverLining::CloudLayerFactory::Create( CUMULUS_CONGESTUS );
     _clouds->SetIsInfinite( true );
     _clouds->SetFadeTowardEdges(true);
@@ -253,10 +255,10 @@ SilverLiningContext::updateLocation()
 
         _atmosphere->GetConditions()->SetLocation( loc );
 
-#if 0
+#if 0 //TODO: figure out why we need to call this a couple times before
         if ( _clouds )
         {
-#if 1 //TODO: figure out why we need to call this a couple times before
+
       //      it takes effect. -gw
             static int c = 2;
             if ( c > 0 ) {
@@ -264,7 +266,6 @@ SilverLiningContext::updateLocation()
                 _clouds->SetLayerPosition(0, 0);
             }
         }
-#endif
 #endif
     }
 }

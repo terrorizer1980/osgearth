@@ -41,7 +41,8 @@ _key         ( key ),
 _bindings    ( bindings ),
 _geom        ( geometry ),
 _tileSize    ( tileSize ),
-_drawPatch   ( false )
+_drawPatch   ( false ),
+_skirtSize   ( 0 )
 {
     setUseVertexBufferObjects( true );
     setUseDisplayList( false );
@@ -58,15 +59,34 @@ _drawPatch   ( false )
 
     _textureImageUnit       = SamplerBinding::findUsage(bindings, SamplerBinding::COLOR)->unit();
     _textureParentImageUnit = SamplerBinding::findUsage(bindings, SamplerBinding::COLOR_PARENT)->unit();
+    
+    int tileSize2 = tileSize*tileSize;
+    _heightCache = new float[ tileSize2 ];
+    for(int i=0; i<tileSize2; ++i) _heightCache[i] = 0.0f;    
+}
+
+TileDrawable::~TileDrawable()
+{
+    delete [] _heightCache;
 }
 
 void
 TileDrawable::drawPrimitivesImplementation(osg::RenderInfo& renderInfo) const
 {
     if ( _drawPatch )
+    {
         drawPatches( renderInfo );
+    }
     else
-        drawSurface( renderInfo );
+    {
+        const osg::Camera* camera = renderInfo.getCurrentCamera();
+
+        bool renderColor =
+            (camera->getRenderOrder() != osg::Camera::PRE_RENDER) ||
+            ((camera->getClearMask() & GL_COLOR_BUFFER_BIT) != 0L);
+
+        drawSurface( renderInfo, renderColor );
+    }
 }
 
 
@@ -82,30 +102,14 @@ TileDrawable::drawPatches(osg::RenderInfo& renderInfo) const
     osg::GLBufferObject* ebo = de->getOrCreateGLBufferObject(state.getContextID());
     state.bindElementBufferObject(ebo);
     if (ebo)
-        glDrawElements(GL_PATCHES, de->size(), GL_UNSIGNED_SHORT, (const GLvoid *)(ebo->getOffset(de->getBufferIndex())));
+        glDrawElements(GL_PATCHES, de->size()-_skirtSize, GL_UNSIGNED_SHORT, (const GLvoid *)(ebo->getOffset(de->getBufferIndex())));
     else
-        glDrawElements(GL_PATCHES, de->size(), GL_UNSIGNED_SHORT, &de->front());
+        glDrawElements(GL_PATCHES, de->size()-_skirtSize, GL_UNSIGNED_SHORT, &de->front());
 }
-
-struct StateHack : public osg::State {
-    void check() const {
-        const UniformMap::const_iterator i = _uniformMap.find("oe_tile_elevationTexMatrix");
-        if ( i != _uniformMap.end() ) {
-            const UniformStack& s = i->second;
-            const UniformStack::UniformPair& p = s.uniformVec.back();
-            osg::Matrixf mat;
-            p.first->get(mat);
-            OE_INFO << "scale=" << mat(0,0) << " x " << mat(1,1) << "; u=" << mat(3,0) << ", " << mat(3,1) << "\n";
-        }
-        else {
-            OE_WARN << "ETEXMAT NOT FOUND!\n";
-        }
-    }
-};
 
 
 void
-TileDrawable::drawSurface(osg::RenderInfo& renderInfo) const
+TileDrawable::drawSurface(osg::RenderInfo& renderInfo, bool renderColor) const
 {
     unsigned layersDrawn = 0;
 
@@ -156,15 +160,9 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo) const
         texMatrixParentLocation     = pcp->getUniformLocation( _texMatrixParentUniformNameID );
         texParentExistsLocation     = pcp->getUniformLocation( _texParentExistsUniformNameID );
     }
-    
-    //if ( _key.str() == "22/2538301/1110225" )
-    //{
-    //    const StateHack* hack = reinterpret_cast<const StateHack*>(renderInfo.getState());
-    //    hack->check();
-    //}
 
     float prevOpacity = -1.0f;
-    if ( _mptex.valid() && !_mptex->getPasses().empty() )
+    if ( renderColor && _mptex.valid() && !_mptex->getPasses().empty() )
     {
         float prevOpacity = -1.0f;
 
@@ -233,7 +231,8 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo) const
                     }
                 }
 
-                _geom->getPrimitiveSet(0)->draw(state, true);
+                for (int i=0; i < _geom->getNumPrimitiveSets(); i++)
+                    _geom->getPrimitiveSet(i)->draw(state, true);
 
                 ++layersDrawn;
             }
@@ -252,7 +251,8 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo) const
         if ( orderLocation >= 0 )
             ext->glUniform1i( orderLocation, (GLint)0 );
         
-        _geom->getPrimitiveSet(0)->draw(state, true);
+        for (int i=0; i < _geom->getNumPrimitiveSets(); i++)
+            _geom->getPrimitiveSet(i)->draw(state, true);
     }
 
 }
@@ -270,6 +270,41 @@ TileDrawable::setElevationRaster(const osg::Image*   image,
         OE_WARN << "("<<_key.str()<<") precision error\n";
     }
 
+    if ( _elevationRaster.valid() )
+    {
+        const osg::Vec3Array& verts   = *static_cast<osg::Vec3Array*>(_geom->getVertexArray());
+        const osg::Vec3Array& normals = *static_cast<osg::Vec3Array*>(_geom->getNormalArray());
+
+        //OE_INFO << LC << _key.str() << " - rebuilding height cache" << std::endl;
+
+        ImageUtils::PixelReader elevation(_elevationRaster.get());
+        elevation.setBilinear(true);
+
+        float
+            scaleU = _elevationScaleBias(0,0),
+            scaleV = _elevationScaleBias(1,1),
+            biasU  = _elevationScaleBias(3,0),
+            biasV  = _elevationScaleBias(3,1);
+
+        if ( osg::equivalent(scaleU, 0.0f) || osg::equivalent(scaleV, 0.0f) )
+        {
+            OE_WARN << LC << "Precision loss in tile " << _key.str() << "\n";
+        }
+    
+        for(int t=0; t<_tileSize-1; ++t)
+        {
+            float v = (float)t / (float)(_tileSize-1);
+            v = v*scaleV + biasV;
+
+            for(int s=0; s<_tileSize-1; ++s)
+            {
+                float u = (float)s / (float)(_tileSize-1);
+                u = u*scaleU + biasU;
+                _heightCache[t*_tileSize+s] = elevation(u, v).r();
+            }
+        }
+    }
+
     dirtyBound();
 }
 
@@ -285,85 +320,27 @@ TileDrawable::getElevationMatrix() const
     return _elevationScaleBias;
 }
 
+// Functor supplies triangles to things like IntersectionVisitor, ComputeBoundsVisitor, etc.
 void
 TileDrawable::accept(osg::PrimitiveFunctor& f) const
 {
-    const osg::Vec3Array* verts   = static_cast<osg::Vec3Array*>(_geom->getVertexArray());
-    const osg::Vec3Array* normals = static_cast<osg::Vec3Array*>(_geom->getNormalArray());
-
-    if ( _elevationRaster.valid() )
+    const osg::Vec3Array& verts   = *static_cast<osg::Vec3Array*>(_geom->getVertexArray());
+    const osg::Vec3Array& normals = *static_cast<osg::Vec3Array*>(_geom->getNormalArray());
+        
+    for(int t=0; t<_tileSize-1; ++t)
     {
-        ImageUtils::PixelReader elevation(_elevationRaster.get());
-        elevation.setBilinear(true);
+        f.begin( GL_TRIANGLE_STRIP );
 
-        float
-            scaleU = _elevationScaleBias(0,0),
-            scaleV = _elevationScaleBias(1,1),
-            biasU  = _elevationScaleBias(3,0),
-            biasV  = _elevationScaleBias(3,1);
-
-        //float
-        //    texelScale = (float)(_elevationRaster->s()-1)/(float)_elevationRaster->s(),
-        //    texelBias  = 0.5f/(float)(_elevationRaster->s());
-
-        if ( osg::equivalent(scaleU, 0.0f) || osg::equivalent(scaleV, 0.0f) )
+        for(int s=0; s<_tileSize; ++s)
         {
-            OE_WARN << LC << "Precision loss in tile " << _key.str() << "\n";
+            int i = t*_tileSize + s;
+            f.vertex( verts[i] + normals[i] * _heightCache[i] );
+
+            i += _tileSize;
+            f.vertex( verts[i] + normals[i] * _heightCache[i] );
         }
-    
-        for(int t=0; t<_tileSize-1; ++t)
-        {
-            float v0 = (float)t     / (float)(_tileSize-1);
-            float v1 = (float)(t+1) / (float)(_tileSize-1);
 
-            v0 = v0*scaleV + biasV;
-            v1 = v1*scaleV + biasV;
-
-            f.begin( GL_QUAD_STRIP );
-
-            for(int s=0; s<_tileSize; ++s)
-            {
-                float u = (float)s / (float)(_tileSize-1);
-                
-                u = u*scaleU + biasU;
-
-                int index = t*_tileSize + s;
-                {
-                    const osg::Vec3f& vert   = (*verts)[index];
-                    const osg::Vec3f& normal = (*normals)[index];
-                    float h = elevation(u, v0).r();
-                    f.vertex( vert + normal*h );
-                }
-
-                index += _tileSize;
-                {
-                    const osg::Vec3f& vert = (*verts)[index];
-                    const osg::Vec3f& normal = (*normals)[index];
-                    float h = elevation(u, v1).r();
-                    f.vertex( vert + normal*h );
-                }
-            }
-
-            f.end();
-        }
-    }
-
-    // no elevation
-    else
-    {
-        for(int t=0; t<_tileSize-1; ++t)
-        {
-            f.begin( GL_QUAD_STRIP );
-
-            for(int s=0; s<_tileSize; ++s)
-            {
-                int index = t*_tileSize + s;
-                f.vertex( (*verts)[index] );
-                f.vertex( (*verts)[index + _tileSize] );
-            }
-
-            f.end();
-        }
+        f.end();
     }
 }
 
@@ -423,8 +400,8 @@ void
 TileDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 {
     State& state = *renderInfo.getState();
-    bool checkForGLErrors = state.getCheckForGLErrors() == osg::State::ONCE_PER_ATTRIBUTE;
-    if ( checkForGLErrors ) state.checkGLErrors("start of TileDrawable::drawImplementation()");
+    //bool checkForGLErrors = state.getCheckForGLErrors() == osg::State::ONCE_PER_ATTRIBUTE;
+    //if ( checkForGLErrors ) state.checkGLErrors("start of TileDrawable::drawImplementation()");
 
 #if OSG_MIN_VERSION_REQUIRED(3,3,1)
     _geom->drawVertexArraysImplementation( renderInfo );
@@ -434,7 +411,7 @@ TileDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
     drawPrimitivesImplementation( renderInfo );
 
-    if ( checkForGLErrors ) state.checkGLErrors("end of TileDrawable::drawImplementation()");
+    //if ( checkForGLErrors ) state.checkGLErrors("end of TileDrawable::drawImplementation()");
     
     // unbind the VBO's if any are used.
     state.unbindVertexBufferObject();
@@ -459,9 +436,9 @@ TileDrawable::drawVertexArraysImplementation(osg::RenderInfo& renderInfo) const
     arrayDispatchers.setUseVertexAttribAlias(state.getUseVertexAttributeAliasing());
 
     arrayDispatchers.activateNormalArray(_geom->getNormalArray());
-    arrayDispatchers.activateColorArray(_geom->getColorArray());
-    arrayDispatchers.activateSecondaryColorArray(_geom->getSecondaryColorArray());
-    arrayDispatchers.activateFogCoordArray(_geom->getFogCoordArray());
+    //arrayDispatchers.activateColorArray(_geom->getColorArray());
+    //arrayDispatchers.activateSecondaryColorArray(_geom->getSecondaryColorArray());
+    //arrayDispatchers.activateFogCoordArray(_geom->getFogCoordArray());
 
     if (handleVertexAttributes)
     {
@@ -483,14 +460,14 @@ TileDrawable::drawVertexArraysImplementation(osg::RenderInfo& renderInfo) const
     if (_geom->getNormalArray() && _geom->getNormalArray()->getBinding()==osg::Array::BIND_PER_VERTEX)
         state.setNormalPointer(_geom->getNormalArray());
 
-    if (_geom->getColorArray() && _geom->getColorArray()->getBinding()==osg::Array::BIND_PER_VERTEX)
-        state.setColorPointer(_geom->getColorArray());
+    //if (_geom->getColorArray() && _geom->getColorArray()->getBinding()==osg::Array::BIND_PER_VERTEX)
+    //    state.setColorPointer(_geom->getColorArray());
 
-    if (_geom->getSecondaryColorArray() && _geom->getSecondaryColorArray()->getBinding()==osg::Array::BIND_PER_VERTEX)
-        state.setSecondaryColorPointer(_geom->getSecondaryColorArray());
+    //if (_geom->getSecondaryColorArray() && _geom->getSecondaryColorArray()->getBinding()==osg::Array::BIND_PER_VERTEX)
+    //    state.setSecondaryColorPointer(_geom->getSecondaryColorArray());
 
-    if (_geom->getFogCoordArray() && _geom->getFogCoordArray()->getBinding()==osg::Array::BIND_PER_VERTEX)
-        state.setFogCoordPointer(_geom->getFogCoordArray());
+    //if (_geom->getFogCoordArray() && _geom->getFogCoordArray()->getBinding()==osg::Array::BIND_PER_VERTEX)
+    //    state.setFogCoordPointer(_geom->getFogCoordArray());
 
     for(unsigned int unit=0;unit<_geom->getTexCoordArrayList().size();++unit)
     {
@@ -522,7 +499,7 @@ TileDrawable::drawVertexArraysImplementation(osg::RenderInfo& renderInfo) const
             }
         }
     }
-
+    
     state.applyDisablingOfVertexAttributes();
 }
 

@@ -15,6 +15,12 @@ http://readymap.org
     
     <options>
         <terrain first_lod="1"/>
+		<cache type="filesystem">
+           <path>c:/OSGEarthCache/sweden_test3</path>
+        </cache>
+		<!--<cache_policy usage="no_cache"/>-->
+		<!--<cache_policy usage="cache_only"/>-->
+		<cache_policy usage="read_write"/>
     </options>
     
     <image name="readymap_imagery" driver="tms">
@@ -24,4 +30,8 @@ http://readymap.org
     <elevation name="readymap_elevation" driver="tms">
         <url>http://readymap.org/readymap/tiles/1.0.0/116/</url>
     </elevation>
+    
+    <extensions>
+        <xi:include href="viewpoints.xml"/>
+    </extensions>
 </map>

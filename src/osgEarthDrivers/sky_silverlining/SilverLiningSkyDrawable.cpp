@@ -18,16 +18,17 @@
  */
 #include <SilverLining.h>
 #include "SilverLiningSkyDrawable"
-#include "SilverLiningSkyNode"
+#include "SilverLiningContextNode"
 #include "SilverLiningContext"
 #include <osgEarth/SpatialReference>
+#include <osg/GL2Extensions>
 
 #define LC "[SilverLining:SkyDrawable] "
 
 using namespace osgEarth::SilverLining;
 
 
-SkyDrawable::SkyDrawable(SilverLiningSkyNode *sky_node, SilverLiningContext* SL) :
+SkyDrawable::SkyDrawable(SilverLiningContextNode *sky_node, SilverLiningContext* SL) :
 _SL( SL ),
 	_skyNode(sky_node)
 {
@@ -41,10 +42,10 @@ void
 SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 {
     osg::Camera* camera = renderInfo.getCurrentCamera();
-	SilverLiningSkyNode *camera_sky_node = dynamic_cast<SilverLiningSkyNode *>(camera->getUserData());
+	SilverLiningContextNode *camera_sky_node = dynamic_cast<SilverLiningContextNode *>(camera->getUserData());
 	if ( camera && _skyNode == camera_sky_node)
     {
-		OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
+		//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
         renderInfo.getState()->disableAllVertexArrays();
         _SL->initialize( renderInfo );
 
@@ -63,7 +64,12 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 			_SL->getSkyBoxSize(),
 			true,
 			false );
+        // Dirty the state and the program tracking to prevent GL state conflicts.
         renderInfo.getState()->dirtyAllVertexArrays();
+        renderInfo.getState()->dirtyAllAttributes();
+        osg::GL2Extensions* api = osg::GL2Extensions::Get(renderInfo.getState()->getContextID(), true);
+        api->glUseProgram((GLuint)0);
+        renderInfo.getState()->setLastAppliedProgramObject(0L);
     }
 }
 
@@ -74,7 +80,7 @@ SkyDrawable::computeBoundingBox() const
 SkyDrawable::computeBound() const
 #endif
 {
-	OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
+	//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
     osg::BoundingBox skyBoundBox;
     if ( !_SL->ready() )
         return skyBoundBox;

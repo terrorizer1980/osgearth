@@ -17,8 +17,6 @@
 * along with this program.  If not, see <http://www.gnu.org/licenses/>
 */
 #include "EngineContext"
-#include "FileLocationCallback"
-#include "SurfaceNodeFactory"
 
 using namespace osgEarth::Drivers::RexTerrainEngine;
 using namespace osgEarth;
@@ -29,7 +27,7 @@ using namespace osgEarth;
 
 
 EngineContext::EngineContext(const Map*                     map,
-                             TerrainEngine*                 terrainEngine,
+                             TerrainEngineNode*             terrainEngine,
                              GeometryPool*                  geometryPool,
                              Loader*                        loader,
                              TileNodeRegistry*              liveTiles,

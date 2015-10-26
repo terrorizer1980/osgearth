@@ -123,6 +123,9 @@ _requireParentTextures   ( false )
 {
     // register for event traversals so we can properly reset the dirtyCount
     ADJUST_EVENT_TRAV_COUNT( this, 1 );
+
+    // So we can draw coplanar geometry on flat ground if necessary.
+    this->getOrCreateStateSet()->setAttributeAndModes( new osg::PolygonOffset(1,1), 1 );
 }
 
 TerrainEngineNode::~TerrainEngineNode()
@@ -194,8 +197,11 @@ TerrainEngineNode::preInitialize( const Map* map, const TerrainOptions& options 
     if ( !_map->isGeocentric() )
         this->setEllipsoidModel( NULL );
     
-    // install the proper layer composition technique:
+    // install an object to manage texture image unit usage:
     _texCompositor = new TextureCompositor();
+    std::set<int> offLimits = osgEarth::Registry::instance()->getOffLimitsTextureImageUnits();
+    for(std::set<int>::const_iterator i = offLimits.begin(); i != offLimits.end(); ++i)
+        _texCompositor->setTextureImageUnitOffLimits( *i );
 
     // then register the callback so we can process further map model changes
     _map->addMapCallback( new TerrainEngineNodeCallbackProxy( this ) );
@@ -389,6 +395,7 @@ TerrainEngineNode::traverse( osg::NodeVisitor& nv )
     osg::CoordinateSystemNode::traverse( nv );
 }
 
+#if 0
 void
 TerrainEngineNode::addTileNodeCallback(TerrainEngine::NodeCallback* cb)
 {
@@ -410,7 +417,9 @@ TerrainEngineNode::removeTileNodeCallback(TerrainEngine::NodeCallback* cb)
         }
     }
 }
+#endif
 
+//todo: remove?
 void
 TerrainEngineNode::notifyOfTerrainTileNodeCreation(const TileKey& key, osg::Node* node)
 {

@@ -3,18 +3,20 @@ IF(SILVERLINING_FOUND)
 SET(TARGET_SRC 
     SilverLiningDriver.cpp
     SilverLiningNode.cpp
+	SilverLiningContextNode.cpp
     SilverLiningContext.cpp
     SilverLiningSkyDrawable.cpp
     SilverLiningCloudsDrawable.cpp
-	SilverLiningSkyNode.cpp
+	SilverLiningContextNode.cpp
 )
 SET(TARGET_H
     SilverLiningOptions
     SilverLiningNode
+	SilverLiningContextNode
     SilverLiningContext
     SilverLiningSkyDrawable
     SilverLiningCloudsDrawable
-	SilverLiningSkyNode
+	SilverLiningContextNode
 )
 
 INCLUDE_DIRECTORIES( 

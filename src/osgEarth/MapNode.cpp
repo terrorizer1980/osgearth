@@ -536,6 +536,13 @@ MapNode::findMapNode( osg::Node* graph, unsigned travmask )
     return findRelativeNodeOfType<MapNode>( graph, travmask );
 }
 
+MapNode*
+MapNode::get(osg::NodeVisitor& nv)
+{
+    MapNode* mapNode = dynamic_cast<MapNode*>(nv.getUserData());
+    return mapNode;
+}
+
 bool
 MapNode::isGeocentric() const
 {
@@ -720,6 +727,14 @@ MapNode::traverse( osg::NodeVisitor& nv )
         std::for_each( _children.begin(), _children.end(), osg::NodeAcceptOp(nv) );
     }
 
+    else if ( nv.getVisitorType() == nv.UPDATE_VISITOR )
+    {
+        osg::ref_ptr<osg::Referenced> oldUserData = nv.getUserData();
+        nv.setUserData( this );
+        std::for_each( _children.begin(), _children.end(), osg::NodeAcceptOp(nv) );
+        nv.setUserData( oldUserData.get() );
+    }
+
     else if ( nv.getVisitorType() == nv.CULL_VISITOR )
     {
         osgUtil::CullVisitor* cv = static_cast<osgUtil::CullVisitor*>(&nv);
@@ -732,8 +747,17 @@ MapNode::traverse( osg::NodeVisitor& nv )
 
             cullData->_mapNode = this;
 
-            // calculate altitude:
             osg::Vec3d eye = cv->getViewPoint();
+
+            // horizon:
+            if ( !cullData->_horizonInitialized )
+            {
+                cullData->_horizonInitialized = true;
+                cullData->_horizon.setEllipsoid( *getMapSRS()->getEllipsoid() );
+            }
+            cullData->_horizon.setEye( eye );
+
+            // calculate altitude:
             const SpatialReference* srs = getMapSRS();
             if ( srs && !srs->isProjected() )
             {
@@ -741,7 +765,6 @@ MapNode::traverse( osg::NodeVisitor& nv )
                 lla.fromWorld( srs, eye );
                 cullData->_cameraAltitude = lla.alt();
                 cullData->_cameraAltitudeUniform->set( (float)lla.alt() );
-                //OE_INFO << lla.alt() << std::endl;
             }
             else
             {

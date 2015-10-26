@@ -58,15 +58,21 @@ main(int argc, char** argv)
 	osg::DisplaySettings::instance()->setNumMultiSamples( 4 );
     // create a viewer:
     osgViewer::Viewer viewer(arguments);
+    viewer.setLightingMode( osg::View::NO_LIGHT );
 
     // Tell the database pager to not modify the unref settings
     viewer.getDatabasePager()->setUnrefImageDataAfterApplyPolicy( false, false );
+
+    osgDB::Registry::instance()->getObjectWrapperManager()->findWrapper("osg::Image");
 
     // install our default manipulator (do this before calling load)
     viewer.setCameraManipulator( new EarthManipulator(arguments) );
 
     // disable the small-feature culling
     viewer.getCamera()->setSmallFeatureCullingPixelSize(-1.0f);
+
+    // configure the near/far so we don't clip things that are up close
+    viewer.getCamera()->setNearFarRatio(0.00002);
 
     if ( vfov > 0.0 )
     {

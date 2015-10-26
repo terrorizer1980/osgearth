@@ -73,7 +73,7 @@ osg::Geode*
 	}
 
 
-	const BillboardSymbol* billboard_symb = _style.get<BillboardSymbol>();
+	const BillboardSymbol2* billboard_symb = _style.get<BillboardSymbol2>();
 	if ( !billboard_symb)
 		return NULL;
 

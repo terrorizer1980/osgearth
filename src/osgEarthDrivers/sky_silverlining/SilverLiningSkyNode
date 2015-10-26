@@ -30,23 +30,25 @@ namespace osgEarth { namespace SilverLining
     class SilverLiningContext;
 
     /**
-     * Node that roots the silverlining adapter.
+       Node that hold the silverlining context,
+	   one for each camera in the scene. 
+	   The parent node, SilverLiningNode, is responsible for 
+	   instantiate this node when new cameras are detected in
+	   it's traverse method
      */
-    class SilverLiningSkyNode : public osg::Geode
+    class SilverLiningContextNode : public osg::Geode
     {
     public:
-        SilverLiningSkyNode(osg::Light* light,
+        SilverLiningContextNode(osg::Light* light,
             const osgEarth::Map*       map,
             const SilverLiningOptions& options );
 			osg::ref_ptr<osg::Geode> _geode;
     public: // osg::Node
-
         void traverse(osg::NodeVisitor&);
 		osg::ref_ptr<SilverLiningContext> getContext() const {return _SL;}
-		mutable OpenThreads::Mutex _mutex;
-
+		//mutable OpenThreads::Mutex _mutex;
     protected:
-        virtual ~SilverLiningSkyNode();
+        virtual ~SilverLiningContextNode();
 
         osg::ref_ptr<SilverLiningContext> _SL;
 		

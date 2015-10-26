@@ -18,7 +18,7 @@
 */
 #include <SilverLining.h>
 #include "SilverLiningCloudsDrawable"
-#include "SilverLiningSkyNode"
+#include "SilverLiningContextNode"
 #include "SilverLiningContext"
 #include <osgEarth/SpatialReference>
 
@@ -28,7 +28,7 @@
 using namespace osgEarth::SilverLining;
 
 
-CloudsDrawable::CloudsDrawable(SilverLiningSkyNode *sky_node, SilverLiningContext* SL) :
+CloudsDrawable::CloudsDrawable(SilverLiningContextNode *sky_node, SilverLiningContext* SL) :
 _SL( SL ),
 	_skyNode(sky_node)
 {
@@ -45,10 +45,10 @@ void
 	if( _SL->ready() )
 	{
 		osg::Camera* camera = renderInfo.getCurrentCamera();
-		if ( camera && _skyNode == dynamic_cast<SilverLiningSkyNode *>(camera->getUserData()))
+		if ( camera && _skyNode == dynamic_cast<SilverLiningContextNode *>(camera->getUserData()))
 		{
-			OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
-			const osg::State* state = renderInfo.getState();
+			//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
+			osg::State* state = renderInfo.getState();
 
 			osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ]; // thread safe.
 			if ( adapters.empty() )
@@ -67,7 +67,13 @@ void
 
 			renderInfo.getState()->disableAllVertexArrays();
 			_SL->getAtmosphere()->DrawObjects( true, true, true );
-			renderInfo.getState()->dirtyAllVertexArrays();
+
+			// Dirty the state and the program tracking to prevent GL state conflicts.
+			state->dirtyAllVertexArrays();
+			state->dirtyAllAttributes();
+			osg::GL2Extensions* api = osg::GL2Extensions::Get(state->getContextID(), true);
+			api->glUseProgram((GLuint)0);
+			state->setLastAppliedProgramObject(0L);    
 		}
 	}
 }
@@ -79,7 +85,9 @@ osg::BoundingBox
 	CloudsDrawable::computeBound() const
 #endif
 {
-	OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
+	
+
+	//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
 	osg::BoundingBox cloudBoundBox;
 	if ( !_SL->ready() )
 		return cloudBoundBox;

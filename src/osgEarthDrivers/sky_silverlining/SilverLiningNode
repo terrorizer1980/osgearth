@@ -27,7 +27,7 @@
 namespace osgEarth { namespace SilverLining
 {
     class SilverLiningContext;
-	class SilverLiningSkyNode;
+	class SilverLiningContextNode;
 
     /**
      * Node that roots the silverlining adapter.
@@ -57,7 +57,7 @@ namespace osgEarth { namespace SilverLining
 
     protected:
         virtual ~SilverLiningNode();
-		std::vector<SilverLiningSkyNode*> _skyNodes;
+		std::vector<SilverLiningContextNode*> _skyNodes;
        // osg::ref_ptr<SilverLiningContext> _SL;
 	//	osg::ref_ptr<osg::Geode> _geode;
         osg::ref_ptr<osg::LightSource> _lightSource;

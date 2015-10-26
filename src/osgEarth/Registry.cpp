@@ -579,6 +579,7 @@ Registry::startActivity(const std::string& activity,
                         const std::string& value)
 {
     Threading::ScopedMutexLock lock(_activityMutex);
+    _activities.erase(Activity(activity,std::string()));
     _activities.insert(Activity(activity,value));
 }
 
@@ -634,6 +635,20 @@ Registry::getMimeTypeForExtension(const std::string& ext)
         }
     }
     return std::string();
+}
+
+void
+Registry::setTextureImageUnitOffLimits(int unit)
+{
+    Threading::ScopedWriteLock exclusive(_regMutex);
+    _offLimitsTextureImageUnits.insert(unit);
+}
+
+const std::set<int>
+Registry::getOffLimitsTextureImageUnits() const
+{
+    Threading::ScopedReadLock exclusive(_regMutex);
+    return _offLimitsTextureImageUnits;
 }
 
 

@@ -81,6 +81,7 @@ namespace
         std::string type;        // float, vec4, etc.
         std::string name;        // name without any array specifiers, etc.
         std::string declaration; // name including array specifiers (for decl)
+        int         arraySize;   // 0 if not an array; else array size.
     };
 
     typedef std::vector<Variable> Variables;
@@ -165,7 +166,7 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
         osg::Shader* shader = s->data()._shader->getNominalShader();
         if ( shader )
         {
-            ShaderLoader::getAllQuotedPragmaValues(shader->getShaderSource(), "vp_varying", varDefs);
+            ShaderLoader::getAllPragmaValues(shader->getShaderSource(), "vp_varying", varDefs);
         }
     }
 
@@ -195,10 +196,12 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
                 if ( p+2 < tokens.size() && tokens[p] == "[" && tokens[p+2] == "]" )
                 {
                     v.declaration = Stringify() << v.type << " " << v.name << tokens[p] << tokens[p+1] << tokens[p+2];
+                    v.arraySize = as<int>(tokens[p+1], 0);
                 }
                 else
                 {
                     v.declaration = Stringify() << v.type << " " << v.name;
+                    v.arraySize = 0;
                 }
             }
 
@@ -221,12 +224,12 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
         gl_FrontColor                = "gl_FrontColor",
         gl_FragColor                 = "gl_FragColor";
 
-    int version = 120;
+    #define VS_GLSL_VERSION  "330 compatibility"
+    #define FS_GLSL_VERSION  "330 compatibility"
+    #define GS_GLSL_VERSION  "330 compatibility"
+    #define TCS_GLSL_VERSION "400 compatibility"
+    #define TES_GLSL_VERSION "400 compatibility"
 
-    std::string
-        varying_in  = version <= 110 ? "varying" : version <= 120? "varying in"  : "in",
-        varying_out = version <= 110 ? "varying" : version <= 120? "varying out" : "out";
-    
     // build the vertex data interface block definition:
     std::string vertdata;
     {
@@ -238,12 +241,8 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
         vertdata = buf.str();
     }
 
-
+    // TODO: perhaps optimize later to not include things we don't need in the FS
     std::string fragdata = vertdata;
-        //"VP_FragData { \n"
-        //"    vec4 vp_Color; \n"
-        //"    vec3 vp_Normal; \n"
-        //"}";
 
     // Build the vertex shader.
     if ( hasVS )
@@ -253,8 +252,8 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
         std::stringstream buf;
 
         buf <<
-            "#version " GLSL_VERSION_STR "\n"
-            "#pragma name \"VP Vertex Shader Main\" \n"
+            "#version " VS_GLSL_VERSION "\n"
+            "#pragma vp_name VP Vertex Shader Main\n"
             "#extension GL_ARB_gpu_shader5 : enable \n";
 
         buf << "\n// Vertex stage globals:\n";
@@ -394,8 +393,8 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
         stages |= ShaderComp::STAGE_TESSCONTROL;
         std::stringstream buf;
 
-        buf << "#version 400\n"
-            << "#pragma name \"VP Tessellation Control Shader (TCS) Main\" \n";
+        buf << "#version " TCS_GLSL_VERSION "\n"
+            << "#pragma vp_name VP Tessellation Control Shader (TCS) Main\n";
 
         if ( hasVS )
         {
@@ -465,12 +464,12 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
 
     if ( hasTES )
     {
-        stages |= ShaderComp::STAGE_TESSEVALULATION;
+        stages |= ShaderComp::STAGE_TESSEVALUATION;
 
         std::stringstream buf;
 
-        buf << "#version 400 compatibility\n"
-            << "#pragma name \"VP Tessellation Evaluation (TES) Shader MAIN\" \n";
+        buf << "#version " TES_GLSL_VERSION "\n"
+            << "#pragma vp_name VP Tessellation Evaluation (TES) Shader MAIN\n";
 
         buf << "\n// TES stage inputs (required):\n"
             << "in " << vertdata << " vp_in []; \n";
@@ -486,12 +485,21 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
         else
             buf << "out " << fragdata << " vp_out; \n";
 
-        buf <<
-            "\n// TES user-supplied interpolators: \n"
-            "float VP_Interpolate3(float,float,float); \n"
-            "vec2  VP_Interpolate3(vec2,vec2,vec2); \n"
-            "vec3  VP_Interpolate3(vec3,vec3,vec3); \n"
-            "vec4  VP_Interpolate3(vec4,vec4,vec4); \n";
+        std::set<std::string> types;
+        for(Variables::const_iterator i=vars.begin(); i != vars.end(); ++i)
+            types.insert(i->type);
+
+        for(std::set<std::string>::const_iterator i = types.begin(); i != types.end(); ++i)
+        {
+            buf << *i << " VP_Interpolate3(" << *i << "," << *i << "," << *i << ");\n";
+        }       
+
+        //buf <<
+        //    "\n// TES user-supplied interpolators: \n"
+        //    "float VP_Interpolate3(float,float,float); \n"
+        //    "vec2  VP_Interpolate3(vec2,vec2,vec2); \n"
+        //    "vec3  VP_Interpolate3(vec3,vec3,vec3); \n"
+        //    "vec4  VP_Interpolate3(vec4,vec4,vec4); \n";
 
 #if 0
         buf <<
@@ -545,40 +553,30 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
             {
                 if ( i->interp != "flat" )
                 {
-                    buf << INDENT << i->name << " = VP_Interpolate3"
-                        << "( vp_in[0]." << i->name
-                        << ", vp_in[1]." << i->name
-                        << ", vp_in[2]." << i->name << " ); \n";
+                    if ( i->arraySize == 0 )
+                    {
+                        buf << INDENT << i->name << " = VP_Interpolate3"
+                            << "( vp_in[0]." << i->name
+                            << ", vp_in[1]." << i->name
+                            << ", vp_in[2]." << i->name << " ); \n";
+                    }
+                    else
+                    {
+                        for(int n=0; n<i->arraySize; ++n)
+                        {
+                            buf << INDENT << i->name << "[" << n << "] = VP_Interpolate3"
+                                << "( vp_in[0]." << i->name << "[" << n << "]"
+                                << ", vp_in[1]." << i->name << "[" << n << "]"
+                                << ", vp_in[2]." << i->name << "[" << n << "] ); \n";
+                        }
+                    }
+                }
+                else
+                {
+                    buf << INDENT << i->name << " = vp_in[0]." << i->name << "; \n";
                 }
             }
             buf << "} \n";
-
-#if 0
-            // Bezier interpolator
-            buf << "\nvoid VP_Interpolate16() \n"
-                << "{ \n";
-            for(Variables::const_iterator i = vars.begin(); i != vars.end(); ++i)
-            {
-                buf << INDENT << i->name << " = VP_Interpolate16"
-                    << "( vp_in[0]." << i->name
-                    << ", vp_in[1]." << i->name
-                    << ", vp_in[2]." << i->name
-                    << ", vp_in[3]." << i->name
-                    << ", vp_in[4]." << i->name
-                    << ", vp_in[5]." << i->name
-                    << ", vp_in[6]." << i->name
-                    << ", vp_in[7]." << i->name
-                    << ", vp_in[8]." << i->name
-                    << ", vp_in[9]." << i->name
-                    << ", vp_in[10]." << i->name
-                    << ", vp_in[11]." << i->name
-                    << ", vp_in[12]." << i->name
-                    << ", vp_in[13]." << i->name
-                    << ", vp_in[14]." << i->name
-                    << ", vp_in[15]." << i->name << " ); \n";
-            }
-            buf << "} \n";
-#endif
 
             buf << "\nvoid VP_EmitVertex() \n"
                 << "{ \n";
@@ -671,8 +669,8 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
 
         std::stringstream buf;
 
-        buf << "#version 330 compatibility\n"
-            << "#pragma name \"VP Geometry Shader Main\" \n";
+        buf << "#version " GS_GLSL_VERSION "\n"
+            << "#pragma vp_name VP Geometry Shader Main\n";
 
         if ( hasVS || hasTCS || hasTES )
         {
@@ -859,8 +857,8 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
 
         std::stringstream buf;
 
-        buf << "#version " GLSL_VERSION_STR "\n"
-            << "#pragma name \"VP Fragment Shader Main\" \n"
+        buf << "#version " FS_GLSL_VERSION "\n"
+            << "#pragma vp_name VP Fragment Shader Main\n"
             << "#extension GL_ARB_gpu_shader5 : enable \n";
 
         buf << "\n// Fragment stage inputs:\n";

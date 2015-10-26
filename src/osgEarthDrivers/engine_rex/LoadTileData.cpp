@@ -19,6 +19,7 @@
 #include "LoadTileData"
 #include "MPTexture"
 #include <osgEarth/TerrainEngineNode>
+#include <osgEarth/Terrain>
 #include <osg/NodeVisitor>
 
 using namespace osgEarth::Drivers::RexTerrainEngine;
@@ -31,8 +32,9 @@ namespace
     // Visitor that recalculates the sampler inheritance matrices in a graph.
     struct UpdateInheritance : public osg::NodeVisitor
     {
-        UpdateInheritance(EngineContext* context) 
-            : _context(context)
+        UpdateInheritance(EngineContext* context, Loader::Request::ChangeSet& changeSet)
+            : _context(context),
+              _changeSet(changeSet)
         {
             setTraversalMode( TRAVERSE_ALL_CHILDREN );
         }
@@ -42,13 +44,18 @@ namespace
             TileNode* tilenode = dynamic_cast<TileNode*>(&node);
             if ( tilenode )
             {
-                tilenode->inheritState( _context );
+                if ( tilenode->inheritState( _context ) )
+                {
+                    // return true = changes occurred.
+                    _changeSet.push_back( tilenode );
+                }
             }
 
             traverse(node);
         }
 
-        EngineContext* _context;
+        Loader::Request::ChangeSet& _changeSet;
+        EngineContext*              _context;
     };
 }
 
@@ -190,11 +197,16 @@ LoadTileData::apply()
             tilenode->mergeStateSet( getStateSet(), mptex.get(), bindings);
 
             // Update existing inheritance matrices as necessary.
-            UpdateInheritance update( _context ); //bindings, selectionInfo, mapInfo, *_context->_options.tileSize() );
+            UpdateInheritance update( _context, getChangeSet() );
             tilenode->accept( update );
 
             // Mark as complete. TODO: per-data requests will do something different.
             tilenode->setDirty( false );
+
+            // Notify listeners that we've added a tile.
+            _context->getEngine()->getTerrain()->notifyTileAdded( _key, tilenode );
+
+            OE_DEBUG << LC << "apply " << _model->getKey().str() << "\n";
 
             // Delete the model immediately
             _model = 0L;
