@@ -57,7 +57,7 @@ namespace osgEarth { namespace SilverLining
 
     protected:
         virtual ~SilverLiningNode();
-		std::vector<SilverLiningContextNode*> _contextNodes;
+		//std::vector<SilverLiningContextNode*> _contextNodes;
         osg::ref_ptr<osg::LightSource> _lightSource;
         osg::ref_ptr<osg::Light> _light;
 		const SilverLiningOptions _options;
