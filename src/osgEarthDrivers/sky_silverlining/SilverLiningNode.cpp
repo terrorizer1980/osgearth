@@ -38,7 +38,8 @@ SilverLiningNode::SilverLiningNode(const osgEarth::Map*       map,
 	const SilverLiningOptions& options) : SkyNode(options),
 	_options     (options),
 	//_lastAltitude(DBL_MAX),
-	_map(map)
+	_map(map),
+	_envID(0)
 {
 	// Create a new Light for the Sun.
 	_light = new osg::Light();
@@ -112,7 +113,7 @@ int SilverLiningNode::getEnvMapID() const
 	//	if(_updateEnvMap)
 	//		return _SL->getEnvMapID();
 	//	else
-	return 0;
+	return _envID;
 }
 
 void
@@ -163,8 +164,8 @@ void
 			utcTime.SetFromEpochSeconds(getDateTime().asTimeStamp());
 			sky_node->getContext()->getAtmosphere()->GetConditions()->SetTime(utcTime);
 			sky_node->getContext()->setMinimumAmbient(getMinimumAmbient());
-
-			
+			_envID = sky_node->getContext()->getEnvMapID();
+			sky_node->getContext()->setUpdateEnvMap(_updateEnvMap);
 		}
 	}
 	osgEarth::Util::SkyNode::traverse( nv );

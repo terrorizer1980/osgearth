@@ -68,6 +68,8 @@ void
 			renderInfo.getState()->disableAllVertexArrays();
 			_SL->getAtmosphere()->DrawObjects( true, true, true );
 
+			_SL->updateEnvMap();
+
 			// Dirty the state and the program tracking to prevent GL state conflicts.
 			state->dirtyAllVertexArrays();
 			state->dirtyAllAttributes();
