@@ -240,9 +240,9 @@ SilverLiningContext::updateLocation()
         _srs->transformFromWorld(_cameraPos, latLonAlt);
 
         ::SilverLining::Location loc;
-        loc.SetAltitude (osg::clampBelow(latLonAlt.z(), 10000.0 ); );
-        loc.SetLongitude( latLonAlt.x() ); //osg::DegreesToRadians(latLonAlt.x()) );
-        loc.SetLatitude ( latLonAlt.y() ); //osg::DegreesToRadians(latLonAlt.y()) );
+        loc.SetAltitude (osg::clampBelow(latLonAlt.z(), 5000.0 )); //hack to avoid cloud flickering at high altitude
+        loc.SetLongitude( latLonAlt.x() );
+        loc.SetLatitude ( latLonAlt.y() );
 
 
         _atmosphere->GetConditions()->SetLocation( loc );
