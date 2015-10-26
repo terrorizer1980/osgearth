@@ -172,7 +172,7 @@ main(int argc, char** argv)
 
     osgViewer::CompositeViewer viewer(arguments);
     viewer.setThreadingModel( osgViewer::CompositeViewer::SingleThreaded );
-
+	osg::DisplaySettings::instance()->setNumMultiSamples( 4 );
     // query the screen size.
     osg::GraphicsContext::ScreenIdentifier si;
     si.readDISPLAY();

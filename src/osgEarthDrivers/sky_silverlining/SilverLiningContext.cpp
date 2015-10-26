@@ -39,6 +39,7 @@ _updateEnvMap		  ( false )
 {
     // Create a SL atmosphere (the main SL object).
     // TODO: plug in the username + license key.
+	//::srand(1234);
     _atmosphere = new ::SilverLining::Atmosphere(
         options.user()->c_str(),
         options.licenseCode()->c_str() );
@@ -51,7 +52,6 @@ SilverLiningContext::~SilverLiningContext()
 
     OE_INFO << LC << "Destroyed\n";
 }
-
 
 void SilverLiningContext::updateEnvMap()
 {
@@ -88,7 +88,7 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
     if ( !_initAttempted && !_initFailed )
     {
         // lock/double-check:
-        Threading::ScopedMutexLock excl(_initMutex);
+        //Threading::ScopedMutexLock excl(_initMutex);
         if ( !_initAttempted && !_initFailed )
         {
             _initAttempted = true;
@@ -96,6 +96,7 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
             // constant random seed ensures consistent clouds across windows
             // TODO: replace this with something else since this is global! -gw
             ::srand(1234);
+			std::cout << "srand\n";
 
             int result = _atmosphere->Initialize(
                 ::SilverLining::Atmosphere::OPENGL,
@@ -223,13 +224,6 @@ SilverLiningContext::updateLocation()
         osg::Vec3d north = osg::Vec3d(0, 1, 0);
         osg::Vec3d east = north ^ up;
 
-
-		/*if(abs(_cameraPos.length() - _lastCamPos.length()) > 1000)
-		{
-			_updateEnvMap = true;
-			_lastCamPos = _cameraPos;
-		}*/
-
         // Check for edge case of north or south pole
         if (east.length2() == 0)
         {
@@ -246,17 +240,17 @@ SilverLiningContext::updateLocation()
         _srs->transformFromWorld(_cameraPos, latLonAlt);
 
         ::SilverLining::Location loc;
-        loc.SetAltitude ( latLonAlt.z() );
-        loc.SetLongitude( latLonAlt.x() ); //osg::DegreesToRadians(latLonAlt.x()) );
-        loc.SetLatitude ( latLonAlt.y() ); //osg::DegreesToRadians(latLonAlt.y()) );
+        loc.SetAltitude (osg::clampBelow(latLonAlt.z(), 5000.0 )); //hack to avoid cloud flickering at high altitude
+        loc.SetLongitude( latLonAlt.x() );
+        loc.SetLatitude ( latLonAlt.y() );
 
 
         _atmosphere->GetConditions()->SetLocation( loc );
 
-#if 0
+#if 0 //TODO: figure out why we need to call this a couple times before
         if ( _clouds )
         {
-#if 1 //TODO: figure out why we need to call this a couple times before
+
       //      it takes effect. -gw
             static int c = 2;
             if ( c > 0 ) {
@@ -264,7 +258,6 @@ SilverLiningContext::updateLocation()
                 _clouds->SetLayerPosition(0, 0);
             }
         }
-#endif
 #endif
     }
 }

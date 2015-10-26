@@ -29,7 +29,7 @@ oe_splat_getLodBlend(in float range, in float baseLOD, out float out_LOD0, out f
     float clampedRange = clamp(range, oe_SplatRanges[0], oe_SplatRanges[RANGE_COUNT-1]);
 
     out_blend = -1.0;
-    for(int i=0; i<RANGE_COUNT-1 && out_blend < 0; ++i)
+    for(int i=0; i<RANGE_COUNT-1 /*&& out_blend < 0*/; ++i)
     {
         if ( clampedRange >= oe_SplatRanges[i] && clampedRange <= oe_SplatRanges[i+1] )
         {

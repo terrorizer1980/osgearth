@@ -27,7 +27,7 @@
 namespace osgEarth { namespace SilverLining
 {
     class SilverLiningContext;
-	class SilverLiningSkyNode;
+	class SilverLiningContextNode;
 
     /**
      * Node that roots the silverlining adapter.
@@ -57,19 +57,14 @@ namespace osgEarth { namespace SilverLining
 
     protected:
         virtual ~SilverLiningNode();
-		std::vector<SilverLiningSkyNode*> _skyNodes;
-       // osg::ref_ptr<SilverLiningContext> _SL;
-	//	osg::ref_ptr<osg::Geode> _geode;
+		std::vector<SilverLiningContextNode*> _contextNodes;
         osg::ref_ptr<osg::LightSource> _lightSource;
-      //  osg::Drawable* _skyDrawable;
-	//	osg::ref_ptr<osg::Drawable> _cloudsDrawable;
         osg::ref_ptr<osg::Light> _light;
-		//double _lastAltitude;
 		const SilverLiningOptions _options;
         osg::ref_ptr<osgEarth::PhongLightingEffect> _lighting;
 		int _envID;
 		bool _updateEnvMap;
-		const osgEarth::Map*       _map;
+		const osgEarth::Map* _map;
     };
 
 } } // namespace osgEarth::SilverLining

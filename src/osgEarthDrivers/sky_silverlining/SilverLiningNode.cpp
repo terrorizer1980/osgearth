@@ -1,25 +1,25 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2015 Pelican Mapping
- * http://osgearth.org
- *
- * osgEarth is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>
- */
+* Copyright 2015 Pelican Mapping
+* http://osgearth.org
+*
+* osgEarth is free software; you can redistribute it and/or modify
+* it under the terms of the GNU Lesser General Public License as published by
+* the Free Software Foundation; either version 2 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU Lesser General Public License for more details.
+*
+* You should have received a copy of the GNU Lesser General Public License
+* along with this program.  If not, see <http://www.gnu.org/licenses/>
+*/
 #include <SilverLining.h>
 
 #include "SilverLiningNode"
-#include "SilverLiningSkyNode"
+#include "SilverLiningContextNode"
 
 #include "SilverLiningContext"
 #include "SilverLiningSkyDrawable"
@@ -32,194 +32,132 @@
 #undef  LC
 #define LC "[SilverLiningNode] "
 
-#define USE_ENV_MAP
-
 using namespace osgEarth::SilverLining;
 
 SilverLiningNode::SilverLiningNode(const osgEarth::Map*       map,
-                                   const SilverLiningOptions& options) : SkyNode(options),
-_options     (options),
-//_lastAltitude(DBL_MAX),
-_map(map)
+	const SilverLiningOptions& options) : SkyNode(options),
+	_options     (options),
+	//_lastAltitude(DBL_MAX),
+	_map(map)
 {
-    // Create a new Light for the Sun.
-    _light = new osg::Light();
-    _light->setLightNum( 0 );
-    _light->setDiffuse( osg::Vec4(1,1,1,1) );
-    _light->setAmbient( osg::Vec4(0.2f, 0.2f, 0.2f, 1) );
-    _light->setPosition( osg::Vec4(1, 0, 0, 0) ); // w=0 means infinity
-    _light->setDirection( osg::Vec3(-1,0,0) );
+	// Create a new Light for the Sun.
+	_light = new osg::Light();
+	_light->setLightNum( 0 );
+	_light->setDiffuse( osg::Vec4(1,1,1,1) );
+	_light->setAmbient( osg::Vec4(0.2f, 0.2f, 0.2f, 1) );
+	_light->setPosition( osg::Vec4(1, 0, 0, 0) ); // w=0 means infinity
+	_light->setDirection( osg::Vec3(-1,0,0) );
 
-    _lightSource = new osg::LightSource();
-    _lightSource->setLight( _light.get() );
-    _lightSource->setReferenceFrame(osg::LightSource::RELATIVE_RF);
-  
-    // scene lighting
-    osg::StateSet* stateset = this->getOrCreateStateSet();
-    _lighting = new PhongLightingEffect();
-    _lighting->setCreateLightingUniform( false );
-    _lighting->attach( stateset );
+	_lightSource = new osg::LightSource();
+	_lightSource->setLight( _light.get() );
+	_lightSource->setReferenceFrame(osg::LightSource::RELATIVE_RF);
 
-    // initialize date/time
-    onSetDateTime();
-	onSetMinimumAmbient();
+	// scene lighting
+	osg::StateSet* stateset = this->getOrCreateStateSet();
+	_lighting = new PhongLightingEffect();
+	_lighting->setCreateLightingUniform( false );
+	_lighting->attach( stateset );
+
+
+	//::srand(1234);
+
+	// initialize date/time
+	//onSetDateTime();
+	//onSetMinimumAmbient();
 }
 
 
 SilverLiningNode::~SilverLiningNode()
 {
-    if ( _lighting.valid() )
-        _lighting->detach();
+	if ( _lighting.valid() )
+		_lighting->detach();
 }
 
 void
-SilverLiningNode::attach(osg::View* view, int lightNum)
+	SilverLiningNode::attach(osg::View* view, int lightNum)
 {
-    _light->setLightNum( lightNum );
-    view->setLight( _light.get() );
-    view->setLightingMode( osg::View::SKY_LIGHT );
+	_light->setLightNum( lightNum );
+	view->setLight( _light.get() );
+	view->setLightingMode( osg::View::SKY_LIGHT );
 }
 
 void
-SilverLiningNode::onSetDateTime()
+	SilverLiningNode::onSetDateTime()
 {
-    // set the SL local time to UTC/epoch.
-    ::SilverLining::LocalTime utcTime;
-    utcTime.SetFromEpochSeconds( getDateTime().asTimeStamp() );
-//   _SL->getAtmosphere()->GetConditions()->SetTime( utcTime );
-//	_SL->setUpdateEnvMap(_updateEnvMap);
+	// set the SL local time to UTC/epoch.
+	::SilverLining::LocalTime utcTime;
+	utcTime.SetFromEpochSeconds( getDateTime().asTimeStamp() );
+	//   _SL->getAtmosphere()->GetConditions()->SetTime( utcTime );
+	//	_SL->setUpdateEnvMap(_updateEnvMap);
 
-	for(size_t i = 0; i < _skyNodes.size(); i++)
+	for(size_t i = 0; i < _contextNodes.size(); i++)
 	{
-		_skyNodes[i]->getContext()->getAtmosphere()->GetConditions()->SetTime( utcTime );
-		//_skyNodes[i]->getContext()->setUpdateEnvMap(_updateEnvMap);
+		_contextNodes[i]->getContext()->getAtmosphere()->GetConditions()->SetTime( utcTime );
+		//_contextNodes[i]->getContext()->setUpdateEnvMap(_updateEnvMap);
 	}
 }
 
 void
-SilverLiningNode::onSetMinimumAmbient()
+	SilverLiningNode::onSetMinimumAmbient()
 {
-	for(size_t i = 0; i < _skyNodes.size(); i++)
+	for(size_t i = 0; i < _contextNodes.size(); i++)
 	{
-		_skyNodes[i]->getContext()->setMinimumAmbient( getMinimumAmbient() );
+		_contextNodes[i]->getContext()->setMinimumAmbient( getMinimumAmbient() );
 	}
-  //  _SL->setMinimumAmbient( getMinimumAmbient() );
+	//  _SL->setMinimumAmbient( getMinimumAmbient() );
 }
 
 int SilverLiningNode::getEnvMapID() const 
 {
-//	if(_updateEnvMap)
-//		return _SL->getEnvMapID();
-//	else
-		return 0;
+	//	if(_updateEnvMap)
+	//		return _SL->getEnvMapID();
+	//	else
+	return 0;
 }
 
 void
-SilverLiningNode::traverse(osg::NodeVisitor& nv)
+	SilverLiningNode::traverse(osg::NodeVisitor& nv)
 {
 	if ( nv.getVisitorType() == nv.UPDATE_VISITOR )
 	{
-		for(size_t i =0 ; i< _skyNodes.size(); i++)
-			_skyNodes[i]->traverse(nv);
+		for(size_t i =0 ; i< _contextNodes.size(); i++)
+			_contextNodes[i]->traverse(nv);
 	}
 	else	if ( nv.getVisitorType() == nv.CULL_VISITOR )
+	{
+		osgUtil::CullVisitor* cv = Culling::asCullVisitor(nv);
+
+		osg::Camera* camera  = cv->getCurrentCamera();
+		if ( camera )
 		{
-			osgUtil::CullVisitor* cv = Culling::asCullVisitor(nv);
-
-			osg::Camera* camera  = cv->getCurrentCamera();
-			if ( camera )
+			SilverLiningContextNode *sky_node = dynamic_cast<SilverLiningContextNode *>(camera->getUserData());
+			if (!sky_node) 
 			{
-				SilverLiningSkyNode *sky_node = dynamic_cast<SilverLiningSkyNode *>(camera->getUserData());
-				if (!sky_node) 
-				{
-					if(_skyNodes.size() == 0)
-						sky_node = new SilverLiningSkyNode(_light.get(),_map,_options);
-					else
-						sky_node = new SilverLiningSkyNode(NULL,_map,_options);
+				if(_contextNodes.size() == 0)
+					sky_node = new SilverLiningContextNode(_light.get(),_map,_options);
+				else
+					sky_node = new SilverLiningContextNode(NULL,_map,_options);
 
-					_skyNodes.push_back(sky_node);
+				_contextNodes.push_back(sky_node);
 
-					static int nodeMask = 0x1;
-				//	sky_node->setNodeMask(nodeMask);
-					sky_node->_geode->setNodeMask(nodeMask);
-					camera->setNodeMask(nodeMask);
-					nodeMask = nodeMask << 1;
-					camera->setUserData(sky_node);
-					addChild(sky_node);
-				}
+				::SilverLining::LocalTime utcTime;
+				utcTime.SetFromEpochSeconds( getDateTime().asTimeStamp() );
+				sky_node->getContext()->getAtmosphere()->GetConditions()->SetTime(utcTime);
+				sky_node->getContext()->setMinimumAmbient( getMinimumAmbient() );
+				static int nodeMask = 0x1;
+				sky_node->_geode->setNodeMask(nodeMask);
+				camera->setNodeMask(nodeMask);
+				nodeMask = nodeMask << 1;
+				camera->setUserData(sky_node);
+				addChild(sky_node);
 			}
 		}
-		osgEarth::Util::SkyNode::traverse( nv );
-
-		
-		if ( _lightSource.valid() )
-		{
-			_lightSource->accept(nv);
-		}
+	}
+	osgEarth::Util::SkyNode::traverse( nv );
 
 
-  /*      if ( nv.getVisitorType() == nv.UPDATE_VISITOR )
-        {
-			int frameNumber = nv.getFrameStamp()->getFrameNumber();
-            _skyDrawable->dirtyBound();
-
-            if( _cloudsDrawable )
-            {
-                if ( _lastAltitude <= *_options.cloudsMaxAltitude() )
-                {
-                    if ( _cloudsDrawable->getNumParents() == 0 )
-                        _geode->addDrawable( _cloudsDrawable.get() );
-
-                    _cloudsDrawable->dirtyBound();
-                }
-                else
-                {
-                    if ( _cloudsDrawable->getNumParents() > 0 )
-                        _geode->removeDrawable( _cloudsDrawable.get() );
-                }
-            }
-        }
-
-        else if ( nv.getVisitorType() == nv.CULL_VISITOR )
-        {
-			osgUtil::CullVisitor* cv = Culling::asCullVisitor(nv);
-
-			osg::Camera* camera  = cv->getCurrentCamera();
-			if ( camera )
-			{
-				AtmosphereReference *ar = dynamic_cast<AtmosphereReference *>(camera->getUserData());
-				if (ar) 
-				{
-					ar->_camPos = nv.getEyePoint(); 
-				}
-			}
-
-
-            // TODO: make this multi-camera safe
-            _SL->setCameraPosition( nv.getEyePoint() );
-            _SL->getAtmosphere()->SetCameraMatrix( cv->getModelViewMatrix()->ptr() );
-            _SL->getAtmosphere()->SetProjectionMatrix( cv->getProjectionMatrix()->ptr() );
-
-			_lastAltitude = _SL->getSRS()->isGeographic() ?
-				cv->getEyePoint().length() - _SL->getSRS()->getEllipsoid()->getRadiusEquator() :
-				cv->getEyePoint().z();
-
-            _SL->updateLocation();
-            _SL->updateLight();
-            _SL->getAtmosphere()->UpdateSkyAndClouds();
-			_SL->getAtmosphere()->CullObjects();
-        }
-    }
-
-    osgEarth::Util::SkyNode::traverse( nv );
-
-    if ( _geode.valid() )
-    {
-        _geode->accept(nv);
-    }
-
-    if ( _lightSource.valid() )
-    {
-        _lightSource->accept(nv);
-    }*/
+	if ( _lightSource.valid() )
+	{
+		_lightSource->accept(nv);
+	}
 }
