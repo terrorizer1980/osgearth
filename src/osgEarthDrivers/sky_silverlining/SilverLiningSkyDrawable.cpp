@@ -30,7 +30,7 @@ using namespace osgEarth::SilverLining;
 
 SkyDrawable::SkyDrawable(SilverLiningContextNode *sky_node, SilverLiningContext* SL) :
 _SL( SL ),
-	_skyNode(sky_node)
+	_contextNode(sky_node)
 {
     // call this to ensure draw() gets called every frame.
     setSupportsDisplayList( false );
@@ -43,9 +43,9 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 {
     osg::Camera* camera = renderInfo.getCurrentCamera();
 	SilverLiningContextNode *camera_sky_node = dynamic_cast<SilverLiningContextNode *>(camera->getUserData());
-	if ( camera && _skyNode == camera_sky_node)
+	if ( camera && _contextNode == camera_sky_node)
     {
-		//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
+		//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
         renderInfo.getState()->disableAllVertexArrays();
         _SL->initialize( renderInfo );
 
@@ -80,7 +80,7 @@ SkyDrawable::computeBoundingBox() const
 SkyDrawable::computeBound() const
 #endif
 {
-	//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
+	//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
     osg::BoundingBox skyBoundBox;
     if ( !_SL->ready() )
         return skyBoundBox;

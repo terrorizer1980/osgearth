@@ -50,7 +50,7 @@ namespace osgEarth { namespace SilverLining
         virtual ~SkyDrawable() { }
 
         osg::observer_ptr<SilverLiningContext> _SL;
-        SilverLiningContextNode *_skyNode;
+        SilverLiningContextNode *_contextNode;
         SkyDrawable(const SkyDrawable& copy, const osg::CopyOp& op=osg::CopyOp::SHALLOW_COPY) { }
     };
 

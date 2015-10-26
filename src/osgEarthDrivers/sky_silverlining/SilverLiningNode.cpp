@@ -90,19 +90,19 @@ void
 	//   _SL->getAtmosphere()->GetConditions()->SetTime( utcTime );
 	//	_SL->setUpdateEnvMap(_updateEnvMap);
 
-	for(size_t i = 0; i < _skyNodes.size(); i++)
+	for(size_t i = 0; i < _contextNodes.size(); i++)
 	{
-		_skyNodes[i]->getContext()->getAtmosphere()->GetConditions()->SetTime( utcTime );
-		//_skyNodes[i]->getContext()->setUpdateEnvMap(_updateEnvMap);
+		_contextNodes[i]->getContext()->getAtmosphere()->GetConditions()->SetTime( utcTime );
+		//_contextNodes[i]->getContext()->setUpdateEnvMap(_updateEnvMap);
 	}
 }
 
 void
 	SilverLiningNode::onSetMinimumAmbient()
 {
-	for(size_t i = 0; i < _skyNodes.size(); i++)
+	for(size_t i = 0; i < _contextNodes.size(); i++)
 	{
-		_skyNodes[i]->getContext()->setMinimumAmbient( getMinimumAmbient() );
+		_contextNodes[i]->getContext()->setMinimumAmbient( getMinimumAmbient() );
 	}
 	//  _SL->setMinimumAmbient( getMinimumAmbient() );
 }
@@ -120,8 +120,8 @@ void
 {
 	if ( nv.getVisitorType() == nv.UPDATE_VISITOR )
 	{
-		for(size_t i =0 ; i< _skyNodes.size(); i++)
-			_skyNodes[i]->traverse(nv);
+		for(size_t i =0 ; i< _contextNodes.size(); i++)
+			_contextNodes[i]->traverse(nv);
 	}
 	else	if ( nv.getVisitorType() == nv.CULL_VISITOR )
 	{
@@ -133,12 +133,12 @@ void
 			SilverLiningContextNode *sky_node = dynamic_cast<SilverLiningContextNode *>(camera->getUserData());
 			if (!sky_node) 
 			{
-				if(_skyNodes.size() == 0)
+				if(_contextNodes.size() == 0)
 					sky_node = new SilverLiningContextNode(_light.get(),_map,_options);
 				else
 					sky_node = new SilverLiningContextNode(NULL,_map,_options);
 
-				_skyNodes.push_back(sky_node);
+				_contextNodes.push_back(sky_node);
 
 				::SilverLining::LocalTime utcTime;
 				utcTime.SetFromEpochSeconds( getDateTime().asTimeStamp() );

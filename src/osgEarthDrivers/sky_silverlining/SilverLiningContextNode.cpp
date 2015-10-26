@@ -142,6 +142,7 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 					_SL->updateLight();
 					//_SL->getAtmosphere()->UpdateSkyAndClouds();
 					//_SL->getAtmosphere()->CullObjects();
+
 				}
 			}
         }

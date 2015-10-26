@@ -28,9 +28,9 @@
 using namespace osgEarth::SilverLining;
 
 
-CloudsDrawable::CloudsDrawable(SilverLiningContextNode *sky_node, SilverLiningContext* SL) :
+CloudsDrawable::CloudsDrawable(SilverLiningContextNode *context_node, SilverLiningContext* SL) :
 _SL( SL ),
-	_skyNode(sky_node)
+	_contextNode(context_node)
 {
 	// call this to ensure draw() gets called every frame.
 	setSupportsDisplayList( false );
@@ -45,9 +45,9 @@ void
 	if( _SL->ready() )
 	{
 		osg::Camera* camera = renderInfo.getCurrentCamera();
-		if ( camera && _skyNode == dynamic_cast<SilverLiningContextNode *>(camera->getUserData()))
+		if ( camera && _contextNode == dynamic_cast<SilverLiningContextNode *>(camera->getUserData()))
 		{
-			//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
+			//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
 			osg::State* state = renderInfo.getState();
 
 			osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ]; // thread safe.
@@ -85,9 +85,7 @@ osg::BoundingBox
 	CloudsDrawable::computeBound() const
 #endif
 {
-	
-
-	//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _skyNode->_mutex );
+	//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
 	osg::BoundingBox cloudBoundBox;
 	if ( !_SL->ready() )
 		return cloudBoundBox;
