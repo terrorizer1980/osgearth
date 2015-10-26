@@ -83,7 +83,7 @@ EngineContext::endCull()
     if ( progress() )
     {
         OE_NOTICE << "Stats:\n";
-        for(ProgressCallback::Stats::const_iterator i = _progress->stats().begin(); i != _progress->stats().end(); ++i)
+        for(fast_map<std::string, double>::const_iterator i = _progress->stats().begin(); i != _progress->stats().end(); ++i)
         { 
             OE_NOTICE << "    " << i->first << " = " << i->second << std::endl;
         }

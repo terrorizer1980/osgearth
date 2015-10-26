@@ -97,6 +97,7 @@ TileNode::create(const TileKey& key, EngineContext* context)
         context->getRenderBindings(),
         surfaceDrawable );
 
+	#define OSGEARTH_MASK_TERRAIN_SURFACE 888
     _surface->setNodeMask( OSGEARTH_MASK_TERRAIN_SURFACE );
     
     // Slot it into the proper render bin:
@@ -121,7 +122,7 @@ TileNode::create(const TileKey& key, EngineContext* context)
         context->getMapFrame().getMapInfo(),
         context->getRenderBindings(),
         patchDrawable );
-
+#define	OSGEARTH_MASK_TERRAIN_LAND_COVER 889
     _landCover->setNodeMask( OSGEARTH_MASK_TERRAIN_LAND_COVER );
 
     // PPP: Better way to do this rather than here?
