@@ -48,17 +48,12 @@ namespace osgEarth { namespace SilverLining
         // callbacks from base class.
         void onSetDateTime();
         void onSetMinimumAmbient();
-
-		virtual int getEnvMapID() const;
-
     public: // osg::Node
-
         void traverse(osg::NodeVisitor&);
 
     protected:
         virtual ~SilverLiningNode();
-		//std::vector<SilverLiningContextNode*> _contextNodes;
-        osg::ref_ptr<osg::LightSource> _lightSource;
+	    osg::ref_ptr<osg::LightSource> _lightSource;
         osg::ref_ptr<osg::Light> _light;
 		const SilverLiningOptions _options;
         osg::ref_ptr<osgEarth::PhongLightingEffect> _lighting;

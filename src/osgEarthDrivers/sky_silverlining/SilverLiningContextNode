@@ -37,26 +37,27 @@ namespace osgEarth { namespace SilverLining
 	instantiate this node when new cameras are detected in
 	it's traverse method
 	*/
-	class SilverLiningContextNode : public osg::Geode
+	class SilverLiningContextNode : public osg::Geode, public osgEarth::Util::EnvironmentMapNode
 	{
 	public:
 		SilverLiningContextNode(osg::Light* light,
-			const osgEarth::MapNode*       map,
-			const SilverLiningOptions& options );
+		const osgEarth::MapNode*       map,
+		const SilverLiningOptions& options );
+		bool hasClouds() const { if( _cloudsDrawable) return true; else return false;}
 		osg::ref_ptr<osg::Geode> _geode;
 	public: // osg::Node
 		void traverse(osg::NodeVisitor&);
 		osg::ref_ptr<SilverLiningContext> getContext() const {return _SL;}
+		//osgEarth::Util::EnvironmentMapNode
+		int getEnvMapTextureID();
+
 		//mutable OpenThreads::Mutex _mutex;
 	protected:
 		virtual ~SilverLiningContextNode();
 
 		osg::ref_ptr<SilverLiningContext> _SL;
-		//osg::ref_ptr<osgEarth::PhongLightingEffect> _lighting;
-		//osg::ref_ptr<osg::LightSource> _lightSource;
 		osg::Drawable* _skyDrawable;
 		osg::ref_ptr<osg::Drawable> _cloudsDrawable;
-
 		double _lastAltitude;
 		const SilverLiningOptions _options;
 		int _envID;

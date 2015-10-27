@@ -545,9 +545,10 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 			m(2, 0), m(2, 1), m(2, 2));
 
 		static bool update_env = true;
-		if (_skyNode)
+		osgEarth::Util::EnvironmentMapNode* env_node = dynamic_cast< osgEarth::Util::EnvironmentMapNode *>(camera->getUserData());
+		if (env_node)
 		{
-			::Triton::TextureHandle env_id = (::Triton::TextureHandle)_skyNode->getEnvMapID();
+			::Triton::TextureHandle env_id = (::Triton::TextureHandle)env_node->getEnvMapTextureID();
 			if (env_id > 0)
 			{
 				environment->SetEnvironmentMap(env_id);

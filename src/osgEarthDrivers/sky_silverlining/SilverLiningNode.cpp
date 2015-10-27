@@ -37,7 +37,6 @@ using namespace osgEarth::SilverLining;
 SilverLiningNode::SilverLiningNode(const osgEarth::MapNode*       map,
 	const SilverLiningOptions& options) : SkyNode(options),
 	_options     (options),
-	//_lastAltitude(DBL_MAX),
 	_map(map),
 	_envID(0)
 {
@@ -58,13 +57,6 @@ SilverLiningNode::SilverLiningNode(const osgEarth::MapNode*       map,
 	_lighting = new PhongLightingEffect();
 	_lighting->setCreateLightingUniform( false );
 	_lighting->attach( stateset );
-
-
-	//::srand(1234);
-
-	// initialize date/time
-	//onSetDateTime();
-	//onSetMinimumAmbient();
 }
 
 
@@ -85,35 +77,13 @@ void
 void
 	SilverLiningNode::onSetDateTime()
 {
-	// set the SL local time to UTC/epoch.
-	::SilverLining::LocalTime utcTime;
-	utcTime.SetFromEpochSeconds( getDateTime().asTimeStamp() );
-	//   _SL->getAtmosphere()->GetConditions()->SetTime( utcTime );
-	//	_SL->setUpdateEnvMap(_updateEnvMap);
-
-	/*for(size_t i = 0; i < _contextNodes.size(); i++)
-	{
-		_contextNodes[i]->getContext()->getAtmosphere()->GetConditions()->SetTime( utcTime );
-		//_contextNodes[i]->getContext()->setUpdateEnvMap(_updateEnvMap);
-	}*/
+	
 }
 
 void
 	SilverLiningNode::onSetMinimumAmbient()
 {
-	/*for(size_t i = 0; i < _contextNodes.size(); i++)
-	{
-		_contextNodes[i]->getContext()->setMinimumAmbient( getMinimumAmbient() );
-	}*/
-	//  _SL->setMinimumAmbient( getMinimumAmbient() );
-}
-
-int SilverLiningNode::getEnvMapID() const 
-{
-	//	if(_updateEnvMap)
-	//		return _SL->getEnvMapID();
-	//	else
-	return _envID;
+	
 }
 
 void
@@ -121,19 +91,18 @@ void
 {
 	if ( nv.getVisitorType() == nv.UPDATE_VISITOR )
 	{
-		//for(size_t i =0 ; i< _contextNodes.size(); i++)
-		//	_contextNodes[i]->traverse(nv);
 		for (osg::NodeList::iterator itr = _children.begin();
 		itr != _children.end();
 			++itr)
 		{
-			(*itr)->accept(nv);
+			SilverLiningContextNode* sky_node = dynamic_cast<SilverLiningContextNode* > ((*itr).get());
+			if(sky_node)
+				sky_node->traverse(nv);
 		}
 	}
-	else	if ( nv.getVisitorType() == nv.CULL_VISITOR )
+	else if ( nv.getVisitorType() == nv.CULL_VISITOR )
 	{
 		osgUtil::CullVisitor* cv = Culling::asCullVisitor(nv);
-
 		osg::Camera* camera  = cv->getCurrentCamera();
 		if ( camera )
 		{
@@ -141,7 +110,6 @@ void
 			if (!sky_node) 
 			{
 				static bool first_camera = true;
-				//if(_contextNodes.size() == 0)
 				if (first_camera)
 				{
 					sky_node = new SilverLiningContextNode(_light.get(), _map, _options);
@@ -149,8 +117,6 @@ void
 				}
 				else
 					sky_node = new SilverLiningContextNode(NULL,_map,_options);
-
-				//_contextNodes.push_back(sky_node);
 
 				static int nodeMask = 0x1;
 				sky_node->_geode->setNodeMask(nodeMask);
@@ -164,8 +130,6 @@ void
 			utcTime.SetFromEpochSeconds(getDateTime().asTimeStamp());
 			sky_node->getContext()->getAtmosphere()->GetConditions()->SetTime(utcTime);
 			sky_node->getContext()->setMinimumAmbient(getMinimumAmbient());
-			_envID = sky_node->getContext()->getEnvMapID();
-			sky_node->getContext()->setUpdateEnvMap(_updateEnvMap);
 		}
 	}
 	osgEarth::Util::SkyNode::traverse( nv );

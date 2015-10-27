@@ -60,7 +60,6 @@ _map(map)
 	if(options.drawClouds().get())
 	{
 		_cloudsDrawable = new CloudsDrawable( this,_SL.get() );
-		//_cloudsDrawable->getOrCreateStateSet()->setRenderingHint( osg::StateSet::TRANSPARENT_BIN );
 		char* render_bin = ::getenv("SKY_RB");
 		if(render_bin)
 		{
@@ -71,18 +70,15 @@ _map(map)
 			_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 11, "DepthSortedBin" );
 	}
 
-	
-	
-    
-    // SL requires an update pass.
-    ADJUST_UPDATE_TRAV_COUNT(this, +1);
-
 	_updateEnvMap = false;
 	if(options.updateEnvMap().isSet())
 	{
 		_updateEnvMap = options.updateEnvMap().get();
 	}
 	_SL->setUpdateEnvMap(_updateEnvMap);
+    
+    // SL requires an update pass.
+    ADJUST_UPDATE_TRAV_COUNT(this, +1);
 }
 
 SilverLiningContextNode::~SilverLiningContextNode()
@@ -90,13 +86,17 @@ SilverLiningContextNode::~SilverLiningContextNode()
 
 }
 
-/*int SilverLiningContextNode::getEnvMapID() const 
-{
+int SilverLiningContextNode::getEnvMapTextureID() 
+{ 
+	int id = 0;
 	if(_updateEnvMap)
-		return _SL->getEnvMapID();
-	else
-		return 0;
-}*/
+	{
+		id = _SL->getEnvMapID();
+		//force new update
+		_SL->setUpdateEnvMap(true);
+	}
+	return id;
+}
 
 void
 SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
@@ -149,10 +149,6 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 					_SL->updateLight();
 
 					//update fog
-
-					
-
-					
 					if(_map)
 					{
 						float hazeDensity = 1.0 / 100000;
@@ -168,9 +164,6 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 						// Note, the fog color returned is already lit
 						//_SL->getAtmosphere()->GetFogSettings(&density, &r, &g, &b);
 						_SL->getAtmosphere()->GetHorizonColor(0,0,&r,&g,&b);
-
-					
-
 						osg::Fog* fog = (osg::Fog *) _map->getStateSet()->getAttribute(osg::StateAttribute::FOG);
 						fog->setColor( osg::Vec4(r,g,b,1.0)); 
 						fog->setDensity( hazeDensity);
@@ -187,7 +180,6 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 
 					//_SL->getAtmosphere()->UpdateSkyAndClouds();
 					//_SL->getAtmosphere()->CullObjects();
-
 				}
 			}
         }
