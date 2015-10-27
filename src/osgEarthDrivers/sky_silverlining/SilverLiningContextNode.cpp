@@ -23,25 +23,29 @@
 #include "SilverLiningSkyDrawable"
 #include "SilverLiningCloudsDrawable"
 
+#include <osgEarth/MapNode>
+
 #include <osg/Light>
 #include <osg/LightSource>
 #include <osgEarth/CullingUtils>
 #include <osg/Depth>
+#include <osg/Fog>
 #undef  LC
 #define LC "[SilverLiningContextNode] "
 
 using namespace osgEarth::SilverLining;
 
-SilverLiningContextNode::SilverLiningContextNode(osg::Light* light, const osgEarth::Map*       map,
+SilverLiningContextNode::SilverLiningContextNode(osg::Light* light, const osgEarth::MapNode*       map,
                                    const SilverLiningOptions& options):
 _options     (options),
-_lastAltitude(DBL_MAX)
+_lastAltitude(DBL_MAX),
+_map(map)
 {
 	//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _mutex );
     // The main silver lining data:
     _SL = new SilverLiningContext( options );
     _SL->setLight( light);
-    _SL->setSRS  ( map->getSRS() );
+    _SL->setSRS  ( map->getMap()->getSRS() );
 
     // Geode to hold each of the SL drawables:
     _geode = new osg::Geode();
@@ -66,6 +70,9 @@ _lastAltitude(DBL_MAX)
 		else
 			_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 11, "DepthSortedBin" );
 	}
+
+	
+	
     
     // SL requires an update pass.
     ADJUST_UPDATE_TRAV_COUNT(this, +1);
@@ -140,6 +147,44 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 
 					_SL->updateLocation();
 					_SL->updateLight();
+
+					//update fog
+
+					
+
+					
+					if(_map)
+					{
+						float hazeDensity = 1.0 / 100000;
+
+						// Decrease fog density with altitude, to avoid fog effects through the vacuum of space.
+						static const double H = 8435.0; // Pressure scale height of Earth's atmosphere
+						double isothermalEffect = exp(-(_SL->getAtmosphere()->GetConditions()->GetLocation().GetAltitude() / H));     
+						if (isothermalEffect <= 0) isothermalEffect = 1E-9;
+						if (isothermalEffect > 1.0) isothermalEffect = 1.0;
+						hazeDensity *= isothermalEffect;
+
+						float density, r, g, b;
+						// Note, the fog color returned is already lit
+						//_SL->getAtmosphere()->GetFogSettings(&density, &r, &g, &b);
+						_SL->getAtmosphere()->GetHorizonColor(0,0,&r,&g,&b);
+
+					
+
+						osg::Fog* fog = (osg::Fog *) _map->getStateSet()->getAttribute(osg::StateAttribute::FOG);
+						fog->setColor( osg::Vec4(r,g,b,1.0)); 
+						fog->setDensity( hazeDensity);
+					}
+					
+					/*osg::Vec4 fogColor(cr.get(), cg.get(), cb.get(), 1.0f);
+					osg::Fog* fog = new osg::Fog;        
+					fog->setColor( fogColor ); //viewer.getCamera()->getClearColor() );                
+					fog->setDensity( maxDensity.get() );
+					fog->setMode(osg::Fog::EXP);*/
+				   
+					//skynode = osgEarth::findTopMostNodeOfType<osgEarth::Util::FogEffect>(_map);
+					
+
 					//_SL->getAtmosphere()->UpdateSkyAndClouds();
 					//_SL->getAtmosphere()->CullObjects();
 

@@ -36,7 +36,7 @@ namespace osgEarth { namespace SilverLining
     {
     public:
         SilverLiningNode(
-            const osgEarth::Map*       map,
+            const osgEarth::MapNode*       map,
             const SilverLiningOptions& options );
 
     public: // SkyNode
@@ -64,7 +64,7 @@ namespace osgEarth { namespace SilverLining
         osg::ref_ptr<osgEarth::PhongLightingEffect> _lighting;
 		int _envID;
 		bool _updateEnvMap;
-		const osgEarth::Map* _map;
+		const osgEarth::MapNode* _map;
     };
 
 } } // namespace osgEarth::SilverLining

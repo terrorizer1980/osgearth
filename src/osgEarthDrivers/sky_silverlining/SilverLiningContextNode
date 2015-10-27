@@ -20,6 +20,7 @@
 #include "SilverLiningOptions"
 #include <osgEarthUtil/Sky>
 #include <osgEarth/Map>
+#include <osgEarth/MapNode>
 #include <osgEarth/PhongLightingEffect>
 #include <osg/Light>
 #include <osg/LightSource>
@@ -40,7 +41,7 @@ namespace osgEarth { namespace SilverLining
 	{
 	public:
 		SilverLiningContextNode(osg::Light* light,
-			const osgEarth::Map*       map,
+			const osgEarth::MapNode*       map,
 			const SilverLiningOptions& options );
 		osg::ref_ptr<osg::Geode> _geode;
 	public: // osg::Node
@@ -60,6 +61,7 @@ namespace osgEarth { namespace SilverLining
 		const SilverLiningOptions _options;
 		int _envID;
 		bool _updateEnvMap;
+		const osgEarth::MapNode * _map;
 	};
 
 } } // namespace osgEarth::SilverLining

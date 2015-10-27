@@ -34,7 +34,7 @@
 
 using namespace osgEarth::SilverLining;
 
-SilverLiningNode::SilverLiningNode(const osgEarth::Map*       map,
+SilverLiningNode::SilverLiningNode(const osgEarth::MapNode*       map,
 	const SilverLiningOptions& options) : SkyNode(options),
 	_options     (options),
 	//_lastAltitude(DBL_MAX),

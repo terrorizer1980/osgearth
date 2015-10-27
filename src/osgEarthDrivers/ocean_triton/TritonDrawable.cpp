@@ -24,7 +24,7 @@
 #include <osgEarth/VirtualProgram>
 #include <osgEarth/MapNode>
 #include <osgEarth/TerrainEngineNode>
-
+#include <osg/Fog>
 #undef  LC
 #define LC "[TritonDrawable] "
 
@@ -575,7 +575,15 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 					planarProjection, 0.125);
 			}
 		}
-
+		//update fog
+		
+		osg::Fog* fog = (osg::Fog *) _mapNode->getStateSet()->getAttribute(osg::StateAttribute::FOG);
+		if(fog)
+		{
+			osg::Vec4 fog_color = fog->getColor();
+			environment->SetAboveWaterVisibility(700000.0, ::Triton::Vector3(fog_color.x(),fog_color.y(),fog_color.z()));
+		}
+		
 		// Draw the ocean for the current time sample
 		if (_TRITON->getOcean())
 		{

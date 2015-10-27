@@ -69,8 +69,8 @@ namespace osgEarth { namespace SilverLining
             }
 
             osgEarth::MapNode* mapnode = getMapNode(options);
-            const Map* map = mapnode ? mapnode->getMap() : 0L;
-            return new SilverLiningNode( map, slOptions );
+            //const Map* map = mapnode ? mapnode->getMap() : 0L;
+            return new SilverLiningNode( mapnode, slOptions );
         }
 
     protected:
