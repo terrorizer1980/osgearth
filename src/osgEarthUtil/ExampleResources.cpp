@@ -54,6 +54,10 @@
 #include <osgViewer/View>
 #include <osgViewer/ViewerEventHandlers>
 
+#include <osg/Fog>
+#include <osgEarthUtil/Fog>
+
+
 #define KML_PUSHPIN_URL "../data/placemark32.png"
 
 #define VP_MIN_DURATION      2.0     // minimum fly time.
@@ -549,6 +553,36 @@ MapNodeHelper::parse(MapNode*             mapNode,
     const Config& lodBlendingConf = externals.child("lod_blending");
     const Config& vertScaleConf   = externals.child("vertical_scale");
     const Config& contourMapConf  = externals.child("contour_map");
+
+	const Config& fogConf         = externals.child("fog");
+
+	if(!fogConf.empty())
+	{
+
+		osgEarth::optional<float> fogStartHeight(10000.0f);
+		osgEarth::optional<float> maxDensity(0.000225);
+		osgEarth::optional<float> cr(0.66f);
+		osgEarth::optional<float> cg(0.7f);
+		osgEarth::optional<float> cb(0.81f);
+
+		fogConf.getIfSet("max_density", maxDensity);
+		fogConf.getIfSet("fog_start_height", fogStartHeight);
+		fogConf.getIfSet("color_r", cr);
+		fogConf.getIfSet("color_g", cg);
+		fogConf.getIfSet("color_b", cb);
+
+		osgEarth::Util::FogEffect* fogEffect = new osgEarth::Util::FogEffect;
+		fogEffect->attach( mapNode->getOrCreateStateSet() );
+
+		// Setup a Fog state attribute
+		osg::Vec4 fogColor(cr.get(), cg.get(), cb.get(), 1.0f);
+		osg::Fog* fog = new osg::Fog;        
+		fog->setColor( fogColor ); //viewer.getCamera()->getClearColor() );                
+		fog->setDensity( maxDensity.get() );
+		fog->setMode(osg::Fog::EXP);
+		mapNode->getOrCreateStateSet()->setAttributeAndModes( fog, osg::StateAttribute::ON );       
+	}
+
 
     // Adding a sky model:
     if ( useSky || !skyConf.empty() )

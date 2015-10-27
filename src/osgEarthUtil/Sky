@@ -173,9 +173,6 @@ namespace osgEarth { namespace Util
         /** Sets a minimum ambient lighting value. */
         virtual void setMinimumAmbient(const osg::Vec4f& ambient);
         const osg::Vec4& getMinimumAmbient() const { return _minimumAmbient; }
-
-		 virtual int getEnvMapID() const {return 0;}
-
     public:
         
         /** Attaches this sky node to a view (placing a sky light). Optional */
@@ -225,6 +222,13 @@ namespace osgEarth { namespace Util
         MapNode* getMapNode(const osgDB::Options* opt) const;
         const SkyOptions& getSkyOptions(const osgDB::Options* opt) const;
     };
+
+
+	class EnvironmentMapNode
+    {
+    public:
+		virtual int getEnvMapTextureID() = 0;
+	};
 
 } } // namespace osgEarth::Util
 

@@ -64,6 +64,11 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 			_SL->getSkyBoxSize(),
 			true,
 			false );
+
+	
+		if(!camera_sky_node->hasClouds())
+			_SL->updateEnvMap();
+
         // Dirty the state and the program tracking to prevent GL state conflicts.
         renderInfo.getState()->dirtyAllVertexArrays();
         renderInfo.getState()->dirtyAllAttributes();

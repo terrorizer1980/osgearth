@@ -24,7 +24,7 @@
 #include <osgEarth/VirtualProgram>
 #include <osgEarth/MapNode>
 #include <osgEarth/TerrainEngineNode>
-
+#include <osg/Fog>
 #undef  LC
 #define LC "[TritonDrawable] "
 
@@ -545,9 +545,10 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 			m(2, 0), m(2, 1), m(2, 2));
 
 		static bool update_env = true;
-		if (_skyNode)
+		osgEarth::Util::EnvironmentMapNode* env_node = dynamic_cast< osgEarth::Util::EnvironmentMapNode *>(camera->getUserData());
+		if (env_node)
 		{
-			::Triton::TextureHandle env_id = (::Triton::TextureHandle)_skyNode->getEnvMapID();
+			::Triton::TextureHandle env_id = (::Triton::TextureHandle)env_node->getEnvMapTextureID();
 			if (env_id > 0)
 			{
 				environment->SetEnvironmentMap(env_id);
@@ -575,7 +576,15 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 					planarProjection, 0.125);
 			}
 		}
-
+		//update fog
+		
+		osg::Fog* fog = (osg::Fog *) _mapNode->getStateSet()->getAttribute(osg::StateAttribute::FOG);
+		if(fog)
+		{
+			osg::Vec4 fog_color = fog->getColor();
+			environment->SetAboveWaterVisibility(700000.0, ::Triton::Vector3(fog_color.x(),fog_color.y(),fog_color.z()));
+		}
+		
 		// Draw the ocean for the current time sample
 		if (_TRITON->getOcean())
 		{
