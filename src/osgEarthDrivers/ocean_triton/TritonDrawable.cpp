@@ -513,8 +513,8 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 			float fa = std::max(sunAmbient, ambient[0]);
 
 			// Ambient color based on the zenith color in the cube map
-			environment->SetAmbientLight(::Triton::Vector3(fa, fa, fa));
-			//::Triton::Vector3( ambient[0], ambient[1], ambient[2] ) );
+			//environment->SetAmbientLight(::Triton::Vector3(fa, fa, fa));
+			environment->SetAmbientLight(::Triton::Vector3( ambient[0], ambient[1], ambient[2] ) );
 		}
 		else
 		{
