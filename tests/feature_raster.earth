@@ -13,20 +13,20 @@ osgEarth Sample - Raster to feature example.
     </elevation>
 
     
-    <image name="CLASSMAP" driver="landuse" shared="true" visible="false" coverage="true" max_data_level="12">
-        <warp>0.01</warp>
+    <image name="CLASSMAP" driver="landuse" shared="true" visible="false" coverage="true" max_data_level="15">
         <base_lod>12</base_lod>
         <tile_size>256</tile_size>
-        
-        <image name="ESA" driver="gdal" coverage="true">
-            <url>c:/temp/gtiff_tiled_lzw.tif</url>
-            <cache_policy usage="none"/>
-        </image>
-        
-        <shared_sampler>landUseTex</shared_sampler>
-        <shared_matrix>landUseTexMatrix</shared_matrix>
-    </image>
 
+        <cache_policy usage="none"/>
+        <images>
+            <image name="ESA" driver="gdal" coverage="true">
+                <url>H:/data/esa/GLOBCOVER_L4_200901_200912_V2.3_Ant_tiled.tif</url>
+                <warp>0.01</warp>
+            </image>
+        </images>
+        <shared_sampler> landUseTex       </shared_sampler>
+        <shared_matrix>  landUseTexMatrix </shared_matrix>
+    </image>
   
     <model name="trees" driver="feature_geom" enabled="true">
 
@@ -70,7 +70,7 @@ osgEarth Sample - Raster to feature example.
                 function selectStyle() {
                     var value = parseFloat(feature.properties.value);
                     if (value >= 40.0 && value <= 100.0) return "forest";
-                    return null;
+                    return null;                    
                 }
               ]]>
             </script>
@@ -80,20 +80,23 @@ osgEarth Sample - Raster to feature example.
 
     <extensions> 
       
-        <splat>
-            <coverage>CLASSMAP</coverage>
-            <legend>../data/splat/GLOBCOVER_legend.xml</legend>
-            <catalog>../data/splat/splat_catalog.xml</catalog>
-            <coverage_warp>0.0</coverage_warp>
-        </splat> 
-
-        <viewpoints>
-            <viewpoint name="Oahu" heading="-0.316509rad" height="0.05537051614373922" lat="21.36485463831751" long="-157.8517958313442" pitch="-0.156294rad" range="2282.41m"/>
-            <viewpoint name="Boston" heading="-0.531961rad" height="1.1395663022995e-005" lat="42.3545651464811" long="-71.06809017885439" pitch="-0.274288rad" range="36.0636m"/>
-            <viewpoint name="Mt R. Oblique 30K" heading="17.33521725357022" height="2462.60273069609" lat="46.82181702111031" long="-121.7814936386096" pitch="-21.29241356548601" range="23926.75258864516"/>
-            <viewpoint name="Mt R. Trees" heading="-98.36122712710565" height="1639.304918398149" lat="46.78673277044066" long="-121.743286318636" pitch="-10.85365380742088" range="257.5853045645545"/>
-            <viewpoint name="Matterhorn" heading="-1.429462844200832" height="2282.858508689329" lat="45.95106319557" long="7.642741711675961" pitch="-25.12269405854052" range="26690.10606054494"/>
+         <splat>        
+            <coverage>
+                <layer> CLASSMAP </layer>
+                <legend>../data/splat/GLOBCOVER_legend.xml</legend>
+            </coverage>
             
+            <zones>
+                <zone name="default" doc="Default Climate Zone">            
+                    <surface>
+                        <catalog>../data/splat/splat_catalog.xml</catalog>
+                    </surface>
+                </zone>                
+            </zones>
+            
+        </splat>
+
+        <viewpoints>            
             <viewpoint name="Trees 1">
               <heading>-66.2945</heading>
               <pitch>-14.0905</pitch>

@@ -298,7 +298,7 @@ MapNode::init()
     // model layer will still work OK though.
     _models = new osg::Group();
     _models->setName( "osgEarth::MapNode.modelsGroup" );
-    _models->getOrCreateStateSet()->setRenderBinDetails(2, "RenderBin");
+    //_models->getOrCreateStateSet()->setRenderBinDetails(1, "RenderBin");
     addChild( _models.get() );
 
     // a decorator for overlay models:
@@ -597,8 +597,17 @@ MapNode::onModelLayerAdded( ModelLayer* layer, unsigned int index )
                 // enfore a rendering bin if necessary:
                 if ( ms->getOptions().renderOrder().isSet() )
                 {
-                    node->getOrCreateStateSet()->setRenderBinDetails(
-                        ms->getOptions().renderOrder().value(), "RenderBin" );
+                    osg::StateSet* mss = node->getOrCreateStateSet();
+                    mss->setRenderBinDetails(
+                        ms->getOptions().renderOrder().value(),
+                        mss->getBinName().empty() ? "DepthSortedBin" : mss->getBinName());
+                }
+                if ( ms->getOptions().renderBin().isSet() )
+                {
+                    osg::StateSet* mss = node->getOrCreateStateSet();
+                    mss->setRenderBinDetails(
+                        mss->getBinNumber(),
+                        ms->getOptions().renderBin().get() );
                 }
             }
 
@@ -740,6 +749,17 @@ MapNode::traverse( osg::NodeVisitor& nv )
         osgUtil::CullVisitor* cv = static_cast<osgUtil::CullVisitor*>(&nv);
         if ( cv )
         {
+#if 1
+            osg::ref_ptr<osg::Referenced> oldUserData = cv->getUserData();
+            
+            TraversalData* data = new TraversalData();
+            cv->setUserData( data );
+            
+            std::for_each( _children.begin(), _children.end(), osg::NodeAcceptOp(nv) );
+
+            cv->setUserData( oldUserData.get() );
+#else
+
             // insert traversal data for this camera:
             osg::ref_ptr<osg::Referenced> oldUserData = cv->getUserData();
             MapNodeCullData* cullData = getCullData( cv->getCurrentCamera() );
@@ -782,6 +802,7 @@ MapNode::traverse( osg::NodeVisitor& nv )
 
             // restore:
             cv->setUserData( oldUserData.get() );
+#endif
         }
     }
 

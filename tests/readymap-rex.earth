@@ -6,7 +6,7 @@ osgEarth Sample - REX Engine.
     
     <options>        
         <terrain driver="rex"
-                 skirt_ratio="0.001"
+                 skirt_ratio="0.0"
                  tile_size="33"
                  merges_per_frame="25"
                  morph_terrain="true"

@@ -327,79 +327,79 @@ TritonDrawable::dirtyAllContexts()
 void
 TritonDrawable::updateHeightMap(osg::RenderInfo& renderInfo) const
 {
-	if (!_TRITON->ready())
-		return;
+    if ( !_TRITON->ready() )
+        return;
 
-	const osg::Matrix& viewMatrix = renderInfo.getCurrentCamera()->getViewMatrix();
-	const osg::Matrix& projectionMatrix = renderInfo.getCurrentCamera()->getProjectionMatrix();
+    const osg::Matrix& viewMatrix = renderInfo.getCurrentCamera()->getViewMatrix();
+    const osg::Matrix& projectionMatrix = renderInfo.getCurrentCamera()->getProjectionMatrix();
 
-	osg::Vec3d eye, center, up;
-	viewMatrix.getLookAt(eye, center, up);
-	double fovyDEG = 0.0, aspectRatio = 0.0, zNear = 0.0, zFar = 0.0;
-	projectionMatrix.getPerspective(fovyDEG, aspectRatio, zNear, zFar);
+    osg::Vec3d eye, center, up;
+    viewMatrix.getLookAt(eye, center, up);
+    double fovyDEG=0.0, aspectRatio=0.0, zNear=0.0, zFar=0.0;
+    projectionMatrix.getPerspective(fovyDEG, aspectRatio,zNear,zFar);
 
-	// aspect_ratio = tan( HFOV/2 ) / tan( VFOV/2 )
-	// tan( HFOV/2 ) = tan( VFOV/2 ) * aspect_ratio
-	// HFOV/2 = atan( tan( VFOV/2 ) * aspect_ratio )
-	// HFOV = 2.0 * atan( tan( VFOV/2 ) * aspect_ratio )
-	double fovxDEG = osg::RadiansToDegrees(2.0 * atan(tan(osg::DegreesToRadians(fovyDEG)) / 2.0 * aspectRatio));
+    // aspect_ratio = tan( HFOV/2 ) / tan( VFOV/2 )
+    // tan( HFOV/2 ) = tan( VFOV/2 ) * aspect_ratio
+    // HFOV/2 = atan( tan( VFOV/2 ) * aspect_ratio )
+    // HFOV = 2.0 * atan( tan( VFOV/2 ) * aspect_ratio )
+    double fovxDEG = osg::RadiansToDegrees( 2.0 * atan( tan(osg::DegreesToRadians(fovyDEG))/2.0 * aspectRatio ));
 
-	double eyeLat = 0.0, eyeLon = 0.0, eyeHeight = 0.0;
-	_mapNode->getMap()->getSRS()->getEllipsoid()->convertXYZToLatLongHeight(eye.x(), eye.y(), eye.z(), eyeLat, eyeLon, eyeHeight);
-	double clampedEyeX = 0.0, clampedEyeY = 0.0, clampedEyeZ = 0.0;
-	_mapNode->getMap()->getSRS()->getEllipsoid()->convertLatLongHeightToXYZ(eyeLat, eyeLon, 0.0, clampedEyeX, clampedEyeY, clampedEyeZ);
-	osg::Vec3 mslEye(clampedEyeX, clampedEyeY, clampedEyeZ);
-	double lookAtLat = 0.0, lookAtLon = 0.0, lookAtHeight = 0.0;
-	_mapNode->getMap()->getSRS()->getEllipsoid()->convertXYZToLatLongHeight(center.x(), center.y(), center.z(), lookAtLat, lookAtLon, lookAtHeight);
+    double eyeLat=0.0, eyeLon=0.0, eyeHeight=0.0;
+    _mapNode->getMap()->getSRS()->getEllipsoid()->convertXYZToLatLongHeight(eye.x(), eye.y(), eye.z(), eyeLat, eyeLon, eyeHeight);
+    double clampedEyeX=0.0, clampedEyeY=0.0,clampedEyeZ=0.0;
+    _mapNode->getMap()->getSRS()->getEllipsoid()->convertLatLongHeightToXYZ(eyeLat, eyeLon, 0.0, clampedEyeX, clampedEyeY, clampedEyeZ);
+    osg::Vec3 mslEye(clampedEyeX,clampedEyeY,clampedEyeZ);
+    double lookAtLat=0.0, lookAtLon=0.0, lookAtHeight=0.0;
+    _mapNode->getMap()->getSRS()->getEllipsoid()->convertXYZToLatLongHeight(center.x(), center.y(), center.z(), lookAtLat, lookAtLon, lookAtHeight);
 
-	// Calculate the distance to the horizon from the eyepoint
-	double eyeLen = eye.length();
-	double radE = mslEye.length();
-	double hmax = radE + 8848.0;
-	double hmin = radE - 12262.0;
-	double hasl = osg::maximum(0.1, eyeLen - radE);
-	double radius = eyeLen - hasl;
-	double horizonDistance = osg::minimum(radE, sqrt(2.0*radius*hasl + hasl*hasl));
+    // Calculate the distance to the horizon from the eyepoint
+    double eyeLen = eye.length();
+    double radE = mslEye.length();
+    double hmax = radE + 8848.0;
+    double hmin = radE - 12262.0;
+    double hasl = osg::maximum(0.1, eyeLen - radE);
+    double radius = eyeLen - hasl;
+    double horizonDistance = osg::minimum(radE, sqrt( 2.0*radius*hasl + hasl*hasl ));
 
-	osg::Vec3d heightCamEye(eye);
+    osg::Vec3d heightCamEye(eye);
 
-	double near = osg::maximum(1.0, heightCamEye.length() - hmax);
-	double far = osg::maximum(10.0, heightCamEye.length() - hmin + radE);
-	//osg::notify( osg::ALWAYS ) << "near = " << near << "; far = " << far << std::endl;
+    double near = osg::maximum(1.0, heightCamEye.length() - hmax);
+    double far = osg::maximum(10.0, heightCamEye.length() - hmin + radE);
+    //osg::notify( osg::ALWAYS ) << "near = " << near << "; far = " << far << std::endl;
 
-	//horizonDistance *= 0.25;
+    //horizonDistance *= 0.25;
 
-	_heightCamera->setProjectionMatrix(osg::Matrix::ortho(-horizonDistance, horizonDistance, -horizonDistance, horizonDistance, near, far));
-	_heightCamera->setViewMatrixAsLookAt(heightCamEye, osg::Vec3d(0.0, 0.0, 0.0), osg::Vec3d(0.0, 0.0, 1.0));
+    _heightCamera->setProjectionMatrix(osg::Matrix::ortho(-horizonDistance,horizonDistance,-horizonDistance,horizonDistance,near,far) );
+    _heightCamera->setViewMatrixAsLookAt( heightCamEye, osg::Vec3d(0.0,0.0,0.0), osg::Vec3d(0.0,0.0,1.0));
 
-	const osg::Matrixd bias(0.5, 0.0, 0.0, 0.0,
-		0.0, 0.5, 0.0, 0.0,
-		0.0, 0.0, 0.5, 0.0,
-		0.5, 0.5, 0.5, 1.0);
+    const osg::Matrixd bias(0.5, 0.0, 0.0, 0.0,
+        0.0, 0.5, 0.0, 0.0,
+        0.0, 0.0, 0.5, 0.0,
+        0.5, 0.5, 0.5, 1.0);
 
-	osg::Matrix hMM = _heightCamera->getViewMatrix() * _heightCamera->getProjectionMatrix() * bias;
-	::Triton::Matrix4 heightMapMatrix(hMM(0, 0), hMM(0, 1), hMM(0, 2), hMM(0, 3),
-		hMM(1, 0), hMM(1, 1), hMM(1, 2), hMM(1, 3),
-		hMM(2, 0), hMM(2, 1), hMM(2, 2), hMM(2, 3),
-		hMM(3, 0), hMM(3, 1), hMM(3, 2), hMM(3, 3));
+    osg::Matrix hMM = _heightCamera->getViewMatrix() * _heightCamera->getProjectionMatrix() * bias;
+    ::Triton::Matrix4 heightMapMatrix(hMM(0,0),hMM(0,1),hMM(0,2),hMM(0,3),
+        hMM(1,0),hMM(1,1),hMM(1,2),hMM(1,3),
+        hMM(2,0),hMM(2,1),hMM(2,2),hMM(2,3),
+        hMM(3,0),hMM(3,1),hMM(3,2),hMM(3,3));
 
-	osg::Texture::TextureObject* texObj = _heightMap->getTextureObject(renderInfo.getContextID());
+    osg::Texture::TextureObject* texObj = _heightMap->getTextureObject(renderInfo.getContextID());
 
-	//osg::notify( osg::ALWAYS ) << "_contextID " << _contextID << std::endl;
-	if (texObj)
-	{
-		PassHeightMapToTritonCallback* cb = dynamic_cast<PassHeightMapToTritonCallback*>(_heightCamera->getFinalDrawCallback());
-		if (cb)
-		{
-			cb->_enable = true;
-			cb->_id = texObj->id();
-			cb->_heightMapMatrix = heightMapMatrix;
-		}
-	}
-	else
-	{
-		OE_WARN << LC << "Texture object is NULL (Internal error)" << std::endl;
-	}
+    if(texObj)
+    {
+        PassHeightMapToTritonCallback* cb = dynamic_cast<PassHeightMapToTritonCallback*>(_heightCamera->getFinalDrawCallback());
+        if( cb )
+        {
+            cb->_enable = true;
+            cb->_id = texObj->id();
+            cb->_heightMapMatrix = heightMapMatrix;
+        }
+    }
+    else
+    {
+        // may happen on the first frame; ignore
+        //OE_WARN << LC << "Texture object is NULL (Internal error)" << std::endl;
+    }
 
 #ifdef DEBUG_HEIGHTMAP
 	_mapNode->getParent(0)->removeChild(0, 1);

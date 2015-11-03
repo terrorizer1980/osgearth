@@ -86,7 +86,8 @@ TileNode::create(const TileKey& key, EngineContext* context)
         key, 
         context->getRenderBindings(), 
         geom.get(),
-        context->getOptions().tileSize().get() );
+        context->getOptions().tileSize().get(),
+        context->getGeometryPool()->getNumSkirtElements() );
 
     surfaceDrawable->setDrawAsPatches(false);
 
@@ -97,8 +98,7 @@ TileNode::create(const TileKey& key, EngineContext* context)
         context->getRenderBindings(),
         surfaceDrawable );
 
-	#define OSGEARTH_MASK_TERRAIN_SURFACE 888
-    _surface->setNodeMask( OSGEARTH_MASK_TERRAIN_SURFACE );
+    //_surface->setNodeMask( OSGEARTH_MASK_TERRAIN_SURFACE );
     
     // Slot it into the proper render bin:
     osg::StateSet* surfaceSS = _surface->getOrCreateStateSet();
@@ -111,10 +111,10 @@ TileNode::create(const TileKey& key, EngineContext* context)
         key, 
         context->getRenderBindings(),
         geom.get(),
-        context->getOptions().tileSize().get() );
+        context->getOptions().tileSize().get(),
+        context->getGeometryPool()->getNumSkirtElements() );
     
-    int skirtSize = context->getGeometryPool()->getSkirtSize();
-    patchDrawable->setDrawAsPatches(true, skirtSize);
+    patchDrawable->setDrawAsPatches(true);
 
     // And a node to house that as well:
     _landCover = new SurfaceNode(
@@ -122,8 +122,8 @@ TileNode::create(const TileKey& key, EngineContext* context)
         context->getMapFrame().getMapInfo(),
         context->getRenderBindings(),
         patchDrawable );
-#define	OSGEARTH_MASK_TERRAIN_LAND_COVER 889
-    _landCover->setNodeMask( OSGEARTH_MASK_TERRAIN_LAND_COVER );
+
+	//_landCover->setNodeMask( OSGEARTH_MASK_TERRAIN_LAND_COVER );
 
     // PPP: Better way to do this rather than here?
     // Can't do it at RexTerrainEngineNode level, because the SurfaceNode is not valid yet
@@ -332,7 +332,8 @@ void TileNode::cull(osg::NodeVisitor& nv)
         context->progress()->stats()["TileNode::cull"]++;
 
     // determine whether we can and should subdivide to a higher resolution:
-    bool subdivide = shouldSubDivide(nv, selectionInfo, cv->getLODScale());
+    bool subdivide =
+        shouldSubDivide(nv, selectionInfo, cv->getLODScale());
 
     // whether it is OK to create child TileNodes is necessary.
     bool canCreateChildren = subdivide;
@@ -358,6 +359,9 @@ void TileNode::cull(osg::NodeVisitor& nv)
             canLoadData = false;
         }
     }
+
+    optional<bool> surfaceVisible;
+
 
     // If *any* of the children are visible, subdivide.
     if (subdivide)
@@ -386,14 +390,14 @@ void TileNode::cull(osg::NodeVisitor& nv)
         // If we don't traverse the children, traverse this node's payload.
         else if ( _surface.valid() )
         {
-            acceptSurface( cv, context );
+            surfaceVisible = acceptSurface( cv, context );
         }
     }
 
     // If children are outside camera range, draw the payload and expire the children.
     else if ( _surface.valid() )
     {
-        acceptSurface( cv, context );
+        surfaceVisible = acceptSurface( cv, context );
 
         if ( getNumChildren() >= 4 && context->maxLiveTilesExceeded() )
         {
@@ -407,26 +411,32 @@ void TileNode::cull(osg::NodeVisitor& nv)
         }
     }
 
-    // Traverse land cover bins at this LOD.
-    for(int i=0; i<context->landCoverBins()->size(); ++i)
+    // Traverse land cover data at this LOD.
+    int zoneIndex = context->_landCoverData->_currentZoneIndex;
+    if ( zoneIndex < (int)context->_landCoverData->_zones.size() )
     {
-        bool first = true;
-        const LandCoverBin& bin = context->landCoverBins()->at(i);
-        if ( bin._lod == getTileKey().getLOD() )
+        const LandCoverZone& zone = context->_landCoverData->_zones.at(zoneIndex);
+        for(int i=0; i<zone._bins.size(); ++i)
         {
-            if ( first )
+            bool pushedPayloadSS = false;
+
+            const LandCoverBin& bin = zone._bins.at(i);
+            if ( bin._lod == _key.getLOD() )
             {
-                cv->pushStateSet( _payloadStateSet.get() );
+                if ( !pushedPayloadSS )
+                {
+                    cv->pushStateSet( _payloadStateSet.get() );
+                    pushedPayloadSS = true;
+                }
+
+                cv->pushStateSet( bin._stateSet.get() ); // hopefully groups together for rendering.
+                _landCover->accept( nv );
+                cv->popStateSet();
             }
 
-            cv->pushStateSet( bin._stateSet.get() );
-            _landCover->accept( nv );
-            cv->popStateSet();
-
-            if ( first )
+            if ( pushedPayloadSS )
             {
                 cv->popStateSet();
-                first = false;
             }
         }
     }
@@ -434,14 +444,27 @@ void TileNode::cull(osg::NodeVisitor& nv)
     // If this tile is marked dirty, try loading data.
     if ( _dirty && canLoadData )
     {
-        load( nv );
+        // Only load data if the surface would be visible to the camera
+        if ( !surfaceVisible.isSet() )
+        {
+            surfaceVisible = _surface->isVisible(cv);
+        }
+
+        if ( surfaceVisible == true )
+        {
+            load( nv );
+        }
+        else
+        {
+            OE_DEBUG << LC << "load skipped for " << _key.str() << std::endl;
+        }
     }
 }
 
 bool
 TileNode::acceptSurface(osgUtil::CullVisitor* cv, EngineContext* context)
 {
-    if ( _surface->isVisible(cv->getViewPoint()) )
+    if ( _surface->isVisible(cv))
     {
         if ( context->progress() )
             context->progress()->stats()["TileNode::acceptSurface"]++;
