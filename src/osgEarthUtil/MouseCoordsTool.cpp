@@ -23,6 +23,7 @@
 #include <osgEarth/Terrain>
 #include <osgEarth/TerrainEngineNode>
 #include <osgViewer/View>
+#include <osgEarth/DPLineSegmentIntersector>
 
 using namespace osgEarth;
 using namespace osgEarth::Util;
@@ -65,6 +66,22 @@ MouseCoordsTool::handle( const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapt
             for( Callbacks::iterator i = _callbacks.begin(); i != _callbacks.end(); ++i )
                 i->get()->reset( aa.asView(), _mapNode );
         }
+
+#if 0 // testing AGL
+        osg::Vec3d eye, center, up;
+        aa.asView()->getCamera()->getViewMatrixAsLookAt(eye, center, up);
+        DPLineSegmentIntersector* lsi = new DPLineSegmentIntersector(eye, osg::Vec3d(0,0,0));
+        osgUtil::IntersectionVisitor iv(lsi);
+        lsi->setIntersectionLimit(lsi->LIMIT_NEAREST);
+        iv.setUserData( new Map() );
+        _mapNode->accept(iv);
+
+        if ( !lsi->getIntersections().empty() )
+        {            
+            double agl = (eye - lsi->getFirstIntersection().getWorldIntersectPoint()).length();
+            OE_NOTICE << "AGL = " << agl << "m" << std::endl;
+        }
+#endif
     }
 
     return false;

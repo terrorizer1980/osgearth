@@ -32,17 +32,25 @@ using namespace osgEarth;
 
 #define LC "[TileDrawable] "
 
+
+static Threading::Mutex _profMutex;
+static unsigned s_frame = 0;
+static unsigned s_draws = 0;
+static unsigned s_functors = 0;
+
+
 TileDrawable::TileDrawable(const TileKey&        key,
                            const RenderBindings& bindings,
                            osg::Geometry*        geometry,
-                           int                   tileSize) :
+                           int                   tileSize,
+                           int                   skirtSize) :
 osg::Drawable( ),
 _key         ( key ),
 _bindings    ( bindings ),
 _geom        ( geometry ),
 _tileSize    ( tileSize ),
 _drawPatch   ( false ),
-_skirtSize   ( 0 )
+_skirtSize   ( skirtSize )
 {
     setUseVertexBufferObjects( true );
     setUseDisplayList( false );
@@ -82,7 +90,7 @@ TileDrawable::drawPrimitivesImplementation(osg::RenderInfo& renderInfo) const
         const osg::Camera* camera = renderInfo.getCurrentCamera();
 
         bool renderColor =
-            (camera->getRenderOrder() != osg::Camera::PRE_RENDER) ||
+            //(camera->getRenderOrder() != osg::Camera::PRE_RENDER) ||
             ((camera->getClearMask() & GL_COLOR_BUFFER_BIT) != 0L);
 
         drawSurface( renderInfo, renderColor );
@@ -251,15 +259,27 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo, bool renderColor) const
         if ( orderLocation >= 0 )
             ext->glUniform1i( orderLocation, (GLint)0 );
 
-        // draw the surface w/o the skirt:
-        const osg::DrawElementsUShort* de = static_cast<osg::DrawElementsUShort*>(_geom->getPrimitiveSet(0));
-        osg::GLBufferObject* ebo = de->getOrCreateGLBufferObject(state.getContextID());
-        state.bindElementBufferObject(ebo);
-        glDrawElements(GL_TRIANGLES, de->size()-_skirtSize, GL_UNSIGNED_SHORT, (const GLvoid *)(ebo->getOffset(de->getBufferIndex())));
+        if ( renderColor )
+        {
+            for (int i=0; i < _geom->getNumPrimitiveSets(); i++)
+            {
+                _geom->getPrimitiveSet(i)->draw(state, true);
+            }
+        }
+        else
+        {
+            // draw the surface w/o the skirt:
+            const osg::DrawElementsUShort* de = static_cast<osg::DrawElementsUShort*>(_geom->getPrimitiveSet(0));
+            osg::GLBufferObject* ebo = de->getOrCreateGLBufferObject(state.getContextID());
+            state.bindElementBufferObject(ebo);
+            glDrawElements(GL_TRIANGLES, de->size()-_skirtSize, GL_UNSIGNED_SHORT, (const GLvoid *)(ebo->getOffset(de->getBufferIndex())));
         
-        // draw the remaining primsets normally
-        for (int i=1; i < _geom->getNumPrimitiveSets(); i++)
-            _geom->getPrimitiveSet(i)->draw(state, true);
+            // draw the remaining primsets normally
+            for (int i=1; i < _geom->getNumPrimitiveSets(); i++)
+            {
+                _geom->getPrimitiveSet(i)->draw(state, true);
+            }
+        }
     }
 
 }
@@ -298,12 +318,12 @@ TileDrawable::setElevationRaster(const osg::Image*   image,
             OE_WARN << LC << "Precision loss in tile " << _key.str() << "\n";
         }
     
-        for(int t=0; t<_tileSize-1; ++t)
+        for(int t=0; t<_tileSize; ++t)
         {
             float v = (float)t / (float)(_tileSize-1);
             v = v*scaleV + biasV;
 
-            for(int s=0; s<_tileSize-1; ++s)
+            for(int s=0; s<_tileSize; ++s)
             {
                 float u = (float)s / (float)(_tileSize-1);
                 u = u*scaleU + biasU;
@@ -331,9 +351,47 @@ TileDrawable::getElevationMatrix() const
 void
 TileDrawable::accept(osg::PrimitiveFunctor& f) const
 {
+#if 0
+    {
+        Threading::ScopedMutexLock lock(_profMutex);
+        s_functors++;
+    }
+#endif
+
     const osg::Vec3Array& verts   = *static_cast<osg::Vec3Array*>(_geom->getVertexArray());
     const osg::Vec3Array& normals = *static_cast<osg::Vec3Array*>(_geom->getNormalArray());
         
+#if 1 // triangles (OSG-stats-friendly)
+
+    f.begin(GL_TRIANGLES);
+    for(int t=0; t<_tileSize-1; ++t)
+    {
+        for(int s=0; s<_tileSize-1; ++s)
+        {
+            int i00 = t*_tileSize + s;
+            int i10 = i00 + 1;
+            int i01 = i00 + _tileSize;
+            int i11 = i01 + 1;
+            
+            osg::Vec3d v01 = verts[i01] + normals[i01] * _heightCache[i01];
+            osg::Vec3d v10 = verts[i10] + normals[i10] * _heightCache[i10];
+
+            f.vertex( verts[i00] + normals[i00] * _heightCache[i00] );
+            f.vertex( v01 );
+            f.vertex( v10 );
+            
+            f.vertex( v10 );
+            f.vertex( v01 );
+            f.vertex( verts[i11] + normals[i11] * _heightCache[i11] );
+        }
+    }
+    f.end();
+
+#else
+    // triangle-strips (faster? but not stats-friendly; will cause the OSG stats
+    // to report _tileSize-1 primitive sets per TileDrawable even though there
+    // is only one.
+
     for(int t=0; t<_tileSize-1; ++t)
     {
         f.begin( GL_TRIANGLE_STRIP );
@@ -349,6 +407,8 @@ TileDrawable::accept(osg::PrimitiveFunctor& f) const
 
         f.end();
     }
+
+#endif
 }
 
 void 
@@ -409,6 +469,23 @@ TileDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
     State& state = *renderInfo.getState();
     //bool checkForGLErrors = state.getCheckForGLErrors() == osg::State::ONCE_PER_ATTRIBUTE;
     //if ( checkForGLErrors ) state.checkGLErrors("start of TileDrawable::drawImplementation()");
+
+#if 0
+    const osg::FrameStamp* fs = state.getFrameStamp();
+    if ( fs )
+    {
+        Threading::ScopedMutexLock lock(_profMutex);
+        if ( s_frame != fs->getFrameNumber() )
+        {
+            OE_NOTICE << "Frame " << s_frame << " : draws = " << s_draws << ", functors = " << s_functors << std::endl;
+            s_draws = 0;
+            s_functors = 0;
+            s_frame = fs->getFrameNumber();
+        }
+        s_draws++;
+    }
+#endif
+
 
 #if OSG_MIN_VERSION_REQUIRED(3,3,1)
     _geom->drawVertexArraysImplementation( renderInfo );
