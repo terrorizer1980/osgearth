@@ -148,6 +148,10 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 					_SL->updateLocation();
 					_SL->updateLight();
 
+					//_SL->getAtmosphere()->UpdateSkyAndClouds();
+					//_SL->getAtmosphere()->CullObjects();
+
+
 					//update fog
 					if(_map)
 					{
@@ -168,18 +172,6 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 						fog->setColor( osg::Vec4(r,g,b,1.0)); 
 						fog->setDensity( hazeDensity);
 					}
-					
-					/*osg::Vec4 fogColor(cr.get(), cg.get(), cb.get(), 1.0f);
-					osg::Fog* fog = new osg::Fog;        
-					fog->setColor( fogColor ); //viewer.getCamera()->getClearColor() );                
-					fog->setDensity( maxDensity.get() );
-					fog->setMode(osg::Fog::EXP);*/
-				   
-					//skynode = osgEarth::findTopMostNodeOfType<osgEarth::Util::FogEffect>(_map);
-					
-
-					//_SL->getAtmosphere()->UpdateSkyAndClouds();
-					//_SL->getAtmosphere()->CullObjects();
 				}
 			}
         }
