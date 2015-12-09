@@ -45,7 +45,9 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 	SilverLiningContextNode *camera_sky_node = dynamic_cast<SilverLiningContextNode *>(camera->getUserData());
 	if ( camera && _contextNode == camera_sky_node)
     {
-		//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
+#ifdef SL_USE_MUTEX
+		OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
+#endif
         renderInfo.getState()->disableAllVertexArrays();
         _SL->initialize( renderInfo );
 
@@ -85,7 +87,9 @@ SkyDrawable::computeBoundingBox() const
 SkyDrawable::computeBound() const
 #endif
 {
-	//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
+#ifdef SL_USE_MUTEX
+	OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
+#endif
     osg::BoundingBox skyBoundBox;
     if ( !_SL->ready() )
         return skyBoundBox;

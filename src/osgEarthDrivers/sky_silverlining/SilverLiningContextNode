@@ -25,7 +25,6 @@
 #include <osg/Light>
 #include <osg/LightSource>
 #include <OpenThreads/Mutex>
-
 namespace osgEarth { namespace SilverLining
 {
 	class SilverLiningContext;
@@ -50,8 +49,9 @@ namespace osgEarth { namespace SilverLining
 		osg::ref_ptr<SilverLiningContext> getContext() const {return _SL;}
 		//osgEarth::Util::EnvironmentMapNode
 		int getEnvMapTextureID();
-
-		//mutable OpenThreads::Mutex _mutex;
+#ifdef SL_USE_MUTEX
+		mutable OpenThreads::Mutex _mutex;
+#endif
 	protected:
 		virtual ~SilverLiningContextNode();
 

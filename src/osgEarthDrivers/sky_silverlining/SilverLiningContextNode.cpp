@@ -41,7 +41,9 @@ _options     (options),
 _lastAltitude(DBL_MAX),
 _map(map)
 {
-	//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _mutex );
+#ifdef SL_USE_MUTEX
+	OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _mutex );
+#endif
     // The main silver lining data:
     _SL = new SilverLiningContext( options );
     _SL->setLight( light);
@@ -135,7 +137,9 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 				SilverLiningContextNode *sky_node = dynamic_cast<SilverLiningContextNode *>(camera->getUserData());
 				if(sky_node == this)
 				{
-					//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _mutex );
+#ifdef SL_USE_MUTEX
+					OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _mutex );
+#endif
 					_SL->setCamera(camera);
 					_SL->setCameraPosition( nv.getEyePoint() );
 					_SL->getAtmosphere()->SetCameraMatrix( cv->getModelViewMatrix()->ptr() );

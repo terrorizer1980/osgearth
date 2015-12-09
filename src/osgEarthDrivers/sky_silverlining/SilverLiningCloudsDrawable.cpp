@@ -47,7 +47,9 @@ void
 		osg::Camera* camera = renderInfo.getCurrentCamera();
 		if ( camera && _contextNode == dynamic_cast<SilverLiningContextNode *>(camera->getUserData()))
 		{
-			//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
+			#ifdef SL_USE_MUTEX
+			OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
+			#endif
 			osg::State* state = renderInfo.getState();
 
 			osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ]; // thread safe.
@@ -68,6 +70,7 @@ void
 			renderInfo.getState()->disableAllVertexArrays();
 			_SL->getAtmosphere()->DrawObjects( true, true, true );
 
+
 			_SL->updateEnvMap();
 
 			// Dirty the state and the program tracking to prevent GL state conflicts.
@@ -87,7 +90,9 @@ osg::BoundingBox
 	CloudsDrawable::computeBound() const
 #endif
 {
-	//OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
+#ifdef SL_USE_MUTEX
+	OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
+#endif
 	osg::BoundingBox cloudBoundBox;
 	if ( !_SL->ready() )
 		return cloudBoundBox;
