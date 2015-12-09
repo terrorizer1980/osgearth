@@ -247,10 +247,10 @@ LandCoverLayer::createPredicateShader(const Coverage* coverage) const
 		buf << "uniform sampler2D " << sampler << ";\n"
 			<< "uniform mat4 " << matrix << ";\n"
 			<< "int oe_landcover_getBiomeIndex(in vec4 coords) { \n";
-		if (::getenv("SPLAT_USE_UNNORMALIZED_COVERAGE") != 0L)
-			buf << "    float value = textureLod(" << sampler << ", (" << matrix << " * coords).st, 0).r;\n";
-		else
+		if (::getenv("SPLAT_USE_NORMALIZED_COVERAGE") != 0L)
 			buf << "    float value = texture(" << sampler << ", (" << matrix << " * coords).st).r*255.0;\n";
+		else
+			buf << "    float value = textureLod(" << sampler << ", (" << matrix << " * coords).st, 0).r;\n";
 			
 
 	    for(int biomeIndex=0; biomeIndex<getBiomes().size(); ++biomeIndex)

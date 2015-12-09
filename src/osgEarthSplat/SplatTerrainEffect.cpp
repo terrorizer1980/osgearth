@@ -166,7 +166,7 @@ SplatTerrainEffect::onInstall(TerrainEngineNode* engine)
 					stateset->addUniform(new osg::Uniform("oe_splat_color_start_dist", _colorMinRange));
 				}
 				//HACK to support new unnormalized coverage
-				splatting.define("SPLAT_USE_UNNORMALIZED_COVERAGE", (::getenv("SPLAT_USE_UNNORMALIZED_COVERAGE") != 0L));
+				splatting.define("SPLAT_USE_NORMALIZED_COVERAGE", (::getenv("SPLAT_USE_NORMALIZED_COVERAGE") != 0L));
 
                 splatting.define( "SPLAT_EDIT",        _editMode );
                 splatting.define( "SPLAT_GPU_NOISE",   _gpuNoise );

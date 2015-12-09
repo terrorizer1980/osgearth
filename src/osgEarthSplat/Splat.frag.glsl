@@ -14,16 +14,16 @@
 // define to activate color image layer mixing.
 #pragma vp_define SPLAT_USE_COLOR_IMAGE
 
-#pragma vp_define SPLAT_USE_UNNORMALIZED_COVERAGE
+#pragma vp_define SPLAT_USE_NORMALIZED_COVERAGE
 
 // include files
 #pragma include Splat.types.glsl
 #pragma include Splat.frag.common.glsl
 
-#ifdef SPLAT_USE_UNNORMALIZED_COVERAGE
-	#define UNPACK_COVERAGE 1.0
-#else
+#ifdef SPLAT_USE_NORMALIZED_COVERAGE
 	#define UNPACK_COVERAGE 255.0
+#else
+	#define UNPACK_COVERAGE 1.0
 #endif
 
 // ref: Splat.getRenderInfo.frag.glsl
