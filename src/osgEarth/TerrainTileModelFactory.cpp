@@ -330,6 +330,26 @@ TerrainTileModelFactory::getOrCreateHeightField(const MapFrame&                 
         true, // convertToHAE
         progress );
 
+#ifdef TREAT_ALL_ZEROS_AS_MISSING_TILE
+    // check for a real tile with all zeros and treat it the same as non-existant data.
+    if ( populated )
+    {
+        bool isEmpty = true;
+        for(osg::FloatArray::const_iterator f = out_hf->getFloatArray()->begin(); f != out_hf->getFloatArray()->end(); ++f)
+        {
+            if ( (*f) != 0.0f )
+            {
+                isEmpty = false;
+                break;
+            }
+        }
+        if ( isEmpty )
+        {
+            populated = false;
+        }
+    }
+#endif
+
     if ( populated )
     {
         // Treat Plate Carre specially by scaling the height values. (There is no need
@@ -370,11 +390,7 @@ TerrainTileModelFactory::createImageTexture(osg::Image*       image,
     if (!ImageUtils::isPowerOfTwo( image ) || (!image->isMipmap() && ImageUtils::isCompressed(image)))
     {
         tex->setFilter( osg::Texture::MIN_FILTER, osg::Texture::LINEAR );
-    }    
-
-    const optional<bool>& unRefPolicy = Registry::instance()->unRefImageDataAfterApply();
-    if ( unRefPolicy.isSet() )
-        tex->setUnRefImageDataAfterApply( unRefPolicy.get() );
+    }
 
     return tex;
 }
@@ -393,10 +409,6 @@ TerrainTileModelFactory::createCoverageTexture(osg::Image*       image,
     tex->setFilter( osg::Texture::MIN_FILTER, osg::Texture::NEAREST );
 
     tex->setMaxAnisotropy( 1.0f );
-
-    const optional<bool>& unRefPolicy = Registry::instance()->unRefImageDataAfterApply();
-    if ( unRefPolicy.isSet() )
-        tex->setUnRefImageDataAfterApply( unRefPolicy.get() );
 
     return tex;
 }

@@ -32,6 +32,8 @@
 #include <osgEarth/ImageUtils>
 
 #include <osg/Texture2D>
+#include <osg/BlendFunc>
+#include <osg/Multisample>
 #include <osgUtil/Optimizer>
 
 #include "SplatShaders"
@@ -41,7 +43,9 @@
 using namespace osgEarth;
 using namespace osgEarth::Splat;
 
-LandCoverTerrainEffect::LandCoverTerrainEffect()
+LandCoverTerrainEffect::LandCoverTerrainEffect() :
+_noiseTexUnit    ( -1 ),
+_landCoverTexUnit( -1 )
 {
     //nop
 }
@@ -94,12 +98,18 @@ LandCoverTerrainEffect::onInstall(TerrainEngineNode* engine)
                 }
             }
             
-            int landCoverTexUnit;
-            if ( !engine->getResources()->reserveTextureImageUnit(landCoverTexUnit, "LandCover") )
+            int _landCoverTexUnit;
+            if ( !engine->getResources()->reserveTextureImageUnit(_landCoverTexUnit, "LandCover") )
             {
                 OE_WARN << LC << "No texture image unit available for LandCover." << std::endl;
                 return;
             }
+
+            // The patch callback that will render the land cover:
+            _tilePatchCallback = new LandCoverTilePatchCallback();
+            _tilePatchCallback->_zones = _zones;
+
+            engine->addTilePatchCallback( _tilePatchCallback.get() );
 
             for(Zones::iterator z = _zones.begin(); z != _zones.end(); ++z)
             {
@@ -107,104 +117,75 @@ LandCoverTerrainEffect::onInstall(TerrainEngineNode* engine)
                 LandCover* landCover = zone->getLandCover();
                 if ( landCover )
                 {
-                    zone->setUID( engine->addLandCoverZone() );
-
-                    for(LandCoverLayers::const_iterator i = landCover->getLayers().begin();
+                    for(LandCoverLayers::iterator i = landCover->getLayers().begin();
                         i != landCover->getLayers().end();
                         ++i)
                     {
-                        const LandCoverLayer* layer = i->get();
+                        LandCoverLayer* layer = i->get();
                         if ( layer )
                         {
                             if ( !layer->getBiomes().empty() || layer->getTotalNumBillboards() > 0 )
                             {
-                                osg::StateSet* stateset = engine->addLandCoverLayer( zone->getUID(), layer->getLOD() );
-                                if ( stateset )
+                                osg::StateSet* stateset = layer->getOrCreateStateSet();
+
+                                bool useMask = (landCover->getMaskLayer() != 0L);
+
+                                // Install the land cover shaders on the state set
+                                VirtualProgram* vp = VirtualProgram::getOrCreate(stateset);
+                                vp->setName("Land Cover (" + layer->getName() + ")");
+                                LandCoverShaders shaders;
+                                if ( useMask )
                                 {
-                                    // Install the land cover shaders on the state set
-                                    VirtualProgram* vp = VirtualProgram::getOrCreate(stateset);
-                                    LandCoverShaders shaders;
-                                    shaders.loadAll( vp, _dbo.get() );
+                                    shaders.replace("MASK_SAMPLER", landCover->getMaskLayer()->shareTexUniformName().get());
+                                    shaders.replace("MASK_TEXTURE", landCover->getMaskLayer()->shareTexMatUniformName().get());
+                                }
+                                shaders.loadAll( vp, _dbo.get() );
 
-                                    // Generate the coverage acceptor shader
-                                    osg::Shader* covTest = layer->createPredicateShader( getCoverage() );
-                                    covTest->setType( osg::Shader::TESSCONTROL );
-                                    vp->setShader( covTest );
+                                // Generate the coverage acceptor shader
+                                osg::Shader* covTest = layer->createPredicateShader( getCoverage() );
+                                //covTest->setType( osg::Shader::TESSCONTROL );
+                                covTest->setType( osg::Shader::GEOMETRY );
+                                vp->setShader( covTest );
 
-                                    osg::ref_ptr<osg::Shader> layerShader = layer->createShader();
-                                    layerShader->setType( osg::Shader::GEOMETRY );
-                                    vp->setShader( layerShader );
+                                osg::ref_ptr<osg::Shader> layerShader = layer->createShader();
+                                layerShader->setType( osg::Shader::GEOMETRY );
+                                vp->setShader( layerShader );
 
-                                    OE_INFO << LC << "Adding land cover layer: " << layer->getName() << " to Zone " << zone->getName() << " at LOD " << layer->getLOD() << "\n";
+                                OE_INFO << LC << "Adding land cover layer: " << layer->getName() << " to Zone " << zone->getName() << " at LOD " << layer->getLOD() << "\n";
 
-                                    // Install the uniforms
-                                    stateset->addUniform( new osg::Uniform("oe_landcover_windFactor", layer->getWind()) );
-                                    stateset->addUniform( new osg::Uniform("oe_landcover_noise", 1.0f) );
-                                    stateset->addUniform( new osg::Uniform("oe_landcover_ao", 0.5f) );
-                                    stateset->addUniform( new osg::Uniform("oe_landcover_exposure", 1.0f) );
+                                // Install the uniforms
+                                stateset->addUniform( new osg::Uniform("oe_landcover_windFactor", layer->getWind()) );
+                                stateset->addUniform( new osg::Uniform("oe_landcover_noise", 1.0f) );
+                                stateset->addUniform( new osg::Uniform("oe_landcover_ao", 0.5f) );
+                                stateset->addUniform( new osg::Uniform("oe_landcover_exposure", 1.0f) );
                     
-                                    stateset->addUniform( new osg::Uniform("oe_landcover_density",     layer->getDensity()) );
-                                    stateset->addUniform( new osg::Uniform("oe_landcover_fill",        layer->getFill()) );
-                                    stateset->addUniform( new osg::Uniform("oe_landcover_maxDistance", layer->getMaxDistance()) );
+                                stateset->addUniform( new osg::Uniform("oe_landcover_density",     layer->getDensity()) );
+                                stateset->addUniform( new osg::Uniform("oe_landcover_fill",        layer->getFill()) );
+                                stateset->addUniform( new osg::Uniform("oe_landcover_maxDistance", layer->getMaxDistance()) );
 
-                                    stateset->addUniform( new osg::Uniform("oe_landcover_brightness",  layer->getBrightness()) );
-                                    stateset->addUniform( new osg::Uniform("oe_landcover_contrast",    layer->getContrast()) );
+                                stateset->addUniform( new osg::Uniform("oe_landcover_brightness",  layer->getBrightness()) );
+                                stateset->addUniform( new osg::Uniform("oe_landcover_contrast",    layer->getContrast()) );
 
-                                    stateset->addUniform( new osg::Uniform("oe_landcover_noise", 0.75f) );
+                                stateset->addUniform( new osg::Uniform("oe_landcover_useMask", useMask) );
 
-                                    // Build the texture array!
-                                    int s=-1, t=-1;
-                                    osg::Texture2DArray* tex = new osg::Texture2DArray();
-                            
-                                    int arrayIndex = 0;
-                                    for(int b=0; b<layer->getBiomes().size(); ++b)
-                                    {
-                                        const LandCoverBiome* biome = layer->getBiomes().at(b);
-                                
-                                        for(int i=0; i<biome->getBillboards().size(); ++i, ++arrayIndex)
-                                        {
-                                            const LandCoverBillboard& bb = biome->getBillboards().at(i);
+                                // enable alpha-to-coverage multisampling for vegetation.
+                                stateset->setMode(GL_SAMPLE_ALPHA_TO_COVERAGE_ARB, 1);
 
-                                            osg::ref_ptr<osg::Image> im;
+                                // uniform that communicates the availability of multisampling.
+                                stateset->addUniform( new osg::Uniform(
+                                    "oe_terrain_hasMultiSamples",
+                                    osg::DisplaySettings::instance()->getMultiSamples()) );
 
-                                            if ( s < 0 )
-                                            {
-                                                s  = bb._image->s();
-                                                t  = bb._image->t();
-                                                im = bb._image.get();
-                                                tex->setTextureSize(s, t, layer->getTotalNumBillboards());                              
-                                            }
-                                            else
-                                            {
-                                                if ( bb._image->s() != s || bb._image->t() != t )
-                                                {
-                                                    ImageUtils::resizeImage( bb._image.get(), s, t, im );
-                                                }
-                                                else
-                                                {
-                                                    im = bb._image.get();
-                                                }
-                                            }
+                                stateset->setAttributeAndModes(
+                                    new osg::BlendFunc(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO),
+                                    osg::StateAttribute::OVERRIDE );
 
-                                            tex->setImage( arrayIndex, im.get() );
-                                        }
-                                    }
-                                    
-                                    tex->setFilter(tex->MIN_FILTER, tex->NEAREST_MIPMAP_LINEAR);
-                                    tex->setFilter(tex->MAG_FILTER, tex->LINEAR);
-                                    tex->setWrap  (tex->WRAP_S, tex->CLAMP_TO_EDGE);
-                                    tex->setWrap  (tex->WRAP_T, tex->CLAMP_TO_EDGE);
-                                    tex->setUnRefImageDataAfterApply( true );
-                                    tex->setMaxAnisotropy( 4.0 );
-                                    tex->setResizeNonPowerOfTwoHint( false );
+                                stateset->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
 
-                                    stateset->setTextureAttribute(landCoverTexUnit, tex);
-                                    stateset->addUniform(new osg::Uniform("oe_landcover_texArray", landCoverTexUnit) );
-                                }
-                                else
-                                {
-                                    OE_WARN << LC << "Terrain engine failed to return a stateset for a land cover zone\n";
-                                }
+                                osg::Texture* tex = layer->createTexture();
+
+                                stateset->setTextureAttribute(_landCoverTexUnit, tex);
+                                stateset->addUniform(new osg::Uniform("oe_landcover_texArray", _landCoverTexUnit) );
                             }
                             else
                             {
@@ -238,6 +219,15 @@ LandCoverTerrainEffect::onUninstall(TerrainEngineNode* engine)
 {
     if ( engine )
     {
-        //TODO
+        if ( _tilePatchCallback.valid() )
+        {
+            engine->removeTilePatchCallback( _tilePatchCallback.get() );
+
+            if ( _landCoverTexUnit >= 0 )
+                engine->getResources()->releaseTextureImageUnit( _landCoverTexUnit );
+
+            if ( _noiseTexUnit >= 0 )
+                engine->getResources()->releaseTextureImageUnit( _noiseTexUnit );
+        }
     }
 }

@@ -1485,6 +1485,12 @@ FeatureModelGraph::checkForGlobalStyles( const Style& style )
                 (int)render->order()->eval(),
                 ss->getBinName().empty() ? "DepthSortedBin" : ss->getBinName() );
         }
+
+        if ( render && render->transparent() == true )
+        {
+            osg::StateSet* ss = getOrCreateStateSet();
+            ss->setRenderingHint( ss->TRANSPARENT_BIN );
+        }
     }
 }
 
@@ -1583,7 +1589,7 @@ FeatureModelGraph::changeOverlay()
         _overlayInstalled   = _clampable;
         _drapeable          = 0L;
         _overlayPlaceholder = 0L;
-        OE_INFO << LC << "Installed clampable decorator on layer " << getName() << std::endl;
+        OE_DEBUG << LC << "Installed clampable decorator on layer " << getName() << std::endl;
     }
 
     else if (
@@ -1596,7 +1602,7 @@ FeatureModelGraph::changeOverlay()
         _overlayInstalled   = _drapeable;
         _overlayPlaceholder = 0L;
         _clampable          = 0L;
-        OE_INFO << LC << "Installed drapeable decorator on layer " << getName() << std::endl;
+        OE_DEBUG << LC << "Installed drapeable decorator on layer " << getName() << std::endl;
     }
 
     else if (

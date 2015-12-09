@@ -391,7 +391,7 @@ MapNodeHelper::load(osg::ArgumentParser& args,
     osg::ref_ptr<MapNode> mapNode;
     if ( !node )
     {
-        if ( !args.find("--images") )
+        if ( args.find("--images") < 0 )
         {
             OE_WARN << LC << "No earth file." << std::endl;
             return 0L;
@@ -642,17 +642,22 @@ MapNodeHelper::parse(MapNode*             mapNode,
     // Shadowing.
     if ( useShadows )
     {
-        ShadowCaster* caster = new ShadowCaster();
-        caster->setLight( view->getLight() );
-        caster->getShadowCastingGroup()->addChild( mapNode->getModelLayerGroup() );
-        if ( mapNode->getNumParents() > 0 )
+        int unit;
+        if ( mapNode->getTerrainEngine()->getResources()->reserveTextureImageUnit(unit, "ShadowCaster") )
         {
-            insertGroup(caster, mapNode->getParent(0));
-        }
-        else
-        {
-            caster->addChild(mapNode);
-            root = caster;
+            ShadowCaster* caster = new ShadowCaster();
+            caster->setTextureImageUnit( unit );
+            caster->setLight( view->getLight() );
+            caster->getShadowCastingGroup()->addChild( mapNode ); //->getModelLayerGroup() );
+            if ( mapNode->getNumParents() > 0 )
+            {
+                insertGroup(caster, mapNode->getParent(0));
+            }
+            else
+            {
+                caster->addChild(mapNode);
+                root = caster;
+            }
         }
     }
 

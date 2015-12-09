@@ -186,6 +186,24 @@ SpatialReference::createFromWKT( const std::string& wkt, const std::string& name
 }
 
 SpatialReference*
+SpatialReference::createFromUserInput( const std::string& input, const std::string& name )
+{
+    osg::ref_ptr<SpatialReference> result;
+    GDAL_SCOPED_LOCK;
+    void* handle = OSRNewSpatialReference( NULL );
+    if ( OSRSetFromUserInput( handle, input.c_str() ) == OGRERR_NONE )
+    {
+        result = new SpatialReference( handle, "UserInput" );
+    }
+    else 
+    {
+        OE_WARN << LC << "Unable to create spatial reference from user input: " << input << std::endl;
+        OSRDestroySpatialReference( handle );
+    }
+    return result.release();
+}
+
+SpatialReference*
 SpatialReference::create( const std::string& horiz, const std::string& vert )
 {
     return create( Key(horiz, vert), true );
@@ -276,12 +294,19 @@ SpatialReference::create( const Key& key, bool useCache )
     else if (key.horizLower.find( "epsg:" )  == 0 ||
              key.horizLower.find( "osgeo:" ) == 0 )
     {
-        srs = createFromPROJ4( std::string("+init=") + key.horiz, key.horiz );
+        srs = createFromPROJ4( std::string("+init=") + key.horizLower, key.horiz );
     }
     else if (key.horizLower.find( "projcs" ) == 0 || 
              key.horizLower.find( "geogcs" ) == 0 )
     {
         srs = createFromWKT( key.horiz, key.horiz );
+    }
+    else
+    {
+        // Try to set it from the user input.  This will handle things like CRS:84
+        // createFromUserInput will actually handle all valid inputs from GDAL, so we might be able to
+        // simplify this function and just call createFromUserInput.
+        srs = createFromUserInput( key.horiz, key.horiz );
     }
 
     // bail out if no SRS exists by this point

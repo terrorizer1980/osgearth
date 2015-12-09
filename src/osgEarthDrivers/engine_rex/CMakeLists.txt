@@ -28,7 +28,6 @@ SET(TARGET_SRC
     RexTerrainEngineNode.cpp
     RexTerrainEngineDriver.cpp
     LoadTileData.cpp
-    ExpireTiles.cpp
     MaskGenerator.cpp
     MPTexture.cpp
 	SelectionInfo.cpp
@@ -38,6 +37,7 @@ SET(TARGET_SRC
     TileNode.cpp
     TileNodeRegistry.cpp
     Loader.cpp
+    Unloader.cpp
     ${SHADERS_CPP}
 )
 
@@ -48,7 +48,6 @@ SET(TARGET_H
     RexTerrainEngineNode
     RexTerrainEngineOptions
     LoadTileData
-    ExpireTiles
     MaskGenerator
     MPTexture
     QuickReleaseGLObjects
@@ -59,6 +58,7 @@ SET(TARGET_H
     TileNode
     TileNodeRegistry
     Loader
+    Unloader
 	SelectionInfo
 )
 

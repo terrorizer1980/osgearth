@@ -1059,7 +1059,10 @@ ClipToGeocentricHorizon::ClipToGeocentricHorizon(const osgEarth::SpatialReferenc
                                                  osg::ClipPlane*                   clipPlane)
 {
     if ( srs )
-        _horizon.setEllipsoid( *srs->getEllipsoid() );
+    {
+        _horizon = new Horizon();
+        _horizon->setEllipsoid( *srs->getEllipsoid() );
+    }
 
     _clipPlane = clipPlane;
 }
@@ -1070,13 +1073,79 @@ ClipToGeocentricHorizon::operator()(osg::Node* node, osg::NodeVisitor* nv)
     osg::ref_ptr<osg::ClipPlane> clipPlane;
     if ( _clipPlane.lock(clipPlane) )
     {
-        Horizon horizon(_horizon);
-        horizon.setEye( nv->getViewPoint() );
+        osg::ref_ptr<Horizon> horizon = Horizon::get(*nv);
+        if ( !horizon.valid() ) 
+        {
+            horizon = new Horizon(*_horizon.get());
+            horizon->setEye( nv->getViewPoint() );
+        }
 
         osg::Plane horizonPlane;
-        horizon.getPlane( horizonPlane );
+        horizon->getPlane( horizonPlane );
 
         _clipPlane->setClipPlane( horizonPlane );
     }
     traverse(node, nv);
+}
+
+//......................................................................
+
+namespace
+{
+    Config dumpStateGraph(osgUtil::StateGraph* sg)
+    {
+        Config conf("StateGraph");
+
+        Config leaves("Leaves");
+        for(osgUtil::StateGraph::LeafList::const_iterator i = sg->_leaves.begin(); i != sg->_leaves.end(); ++i)
+        {
+            Config leaf("Leaf");
+            leaf.add("Name", i->get()->getDrawable()->getName());
+            leaf.add("Depth", i->get()->_depth);
+            leaves.add( leaf );
+        }
+        if ( !leaves.empty() )
+            conf.add(leaves);
+
+        Config kids("Children");
+        for(osgUtil::StateGraph::ChildList::const_iterator i = sg->_children.begin(); i != sg->_children.end(); ++i)
+        {
+            kids.add( dumpStateGraph(i->second.get()) );
+        }
+        if ( !kids.children().empty() )
+            conf.add(kids);
+
+        return conf;
+    }
+}
+
+Config
+CullDebugger::dumpRenderBin(osgUtil::RenderBin* bin) const
+{
+    Config conf("RenderBin");
+    if ( !bin->getName().empty() )
+        conf.set("Name", bin->getName());
+    conf.set("BinNum", bin->getBinNum());
+    
+    Config sg("StateGraphList");
+    sg.add("NumChildren", bin->getStateGraphList().size());
+
+    for(osgUtil::RenderBin::StateGraphList::const_iterator i = bin->getStateGraphList().begin(); i != bin->getStateGraphList().end(); ++i)
+    {
+        sg.add( dumpStateGraph(*i) );
+    }
+
+    if ( !sg.children().empty() )
+        conf.add(sg);
+
+    Config rb("_children");
+    for(osgUtil::RenderBin::RenderBinList::const_iterator i = bin->getRenderBinList().begin(); i != bin->getRenderBinList().end(); ++i)
+    {
+        osgUtil::RenderBin* childBin = i->second.get();
+        rb.add( dumpRenderBin(childBin) );
+    }
+    if ( !rb.children().empty() )
+        conf.add(rb);
+
+    return conf;
 }

@@ -19,6 +19,7 @@
 #include "EngineContext"
 #include "TileNodeRegistry"
 #include <osgEarth/TraversalData>
+#include <osgEarth/CullingUtils>
 
 using namespace osgEarth::Drivers::RexTerrainEngine;
 using namespace osgEarth;
@@ -34,22 +35,24 @@ EngineContext::EngineContext(const Map*                     map,
                              TerrainEngineNode*             terrainEngine,
                              GeometryPool*                  geometryPool,
                              Loader*                        loader,
+                             Unloader*                      unloader,
                              TileNodeRegistry*              liveTiles,
                              TileNodeRegistry*              deadTiles,
-                             const LandCoverData*           landCoverData,
                              const RenderBindings&          renderBindings,
                              const RexTerrainEngineOptions& options,
-                             const SelectionInfo&           selectionInfo) :
+                             const SelectionInfo&           selectionInfo,
+                             TilePatchCallbacks&            tilePatchCallbacks) :
 _frame         ( map ),
 _terrainEngine ( terrainEngine ),
 _geometryPool  ( geometryPool ),
 _loader        ( loader ),
+_unloader      ( unloader ),
 _liveTiles     ( liveTiles ),
 _deadTiles     ( deadTiles ),
-_landCoverData ( landCoverData ),
 _renderBindings( renderBindings ),
 _options       ( options ),
-_selectionInfo ( selectionInfo )
+_selectionInfo ( selectionInfo ),
+_tilePatchCallbacks( tilePatchCallbacks )
 {
     //NOP
 }
@@ -72,6 +75,22 @@ EngineContext::getElapsedCullTime() const
     return osg::Timer::instance()->delta_s(_tick, now);
 }
 
+namespace {
+    struct UnloadDormantTiles : public TileNodeRegistry::Operation {
+        const osg::FrameStamp* _fs;
+        Unloader* _unloader;
+        UnloadDormantTiles(const osg::FrameStamp* fs, Unloader* unloader) : _fs(fs), _unloader(unloader) { }
+        void operator()(TileNodeRegistry::TileNodeMap& tiles) {
+            for(TileNodeRegistry::TileNodeMap::iterator i = tiles.begin(); i != tiles.end(); ++i) {
+                TileNode* tile = i->second.get();
+                if ( tile->areSubTilesDormant(_fs) ) {
+                    _unloader->unloadChildren(tile->getTileKey());
+                }
+            }
+        }
+    };
+}
+
 void
 EngineContext::endCull(osgUtil::CullVisitor* cv)
 {
@@ -89,7 +108,17 @@ EngineContext::endCull(osgUtil::CullVisitor* cv)
         { 
             OE_NOTICE << "    " << i->first << " = " << i->second << std::endl;
         }
-    }
+    }  
+
+#if 0 // render bin printout
+    Config c = CullDebugger().dumpRenderBin(cv->getCurrentRenderBin());
+    OE_NOTICE << c.toJSON(true) << std::endl << std::endl;
+#endif
+
+    //Forceably unload all dormat tiles -- this works, but it too slow to run
+    // every frame.
+    //UnloadDormantTiles op(cv->getFrameStamp(), _unloader);
+    //_liveTiles->run(op);
 }
 
 bool
@@ -114,4 +143,18 @@ EngineContext::getOrCreateMatrixUniform(const std::string& name, const osg::Matr
     _matrixUniforms[key] = u;
 
     return u;
+}
+
+void
+EngineContext::invokeTilePatchCallbacks(osgUtil::CullVisitor* cv,
+                                        const TileKey&        tileKey,
+                                        osg::StateSet*        tileStateSet,
+                                        osg::Node*            tilePatch)
+{
+    for(TilePatchCallbacks::iterator i = _tilePatchCallbacks.begin();
+        i != _tilePatchCallbacks.end();
+        ++i)
+    {
+        i->get()->cull(cv, tileKey, tileStateSet, tilePatch);
+    }
 }

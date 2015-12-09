@@ -11,9 +11,9 @@
                  merges_per_frame="50"
                  skirt_ratio="0.01"
                  normal_maps="true" />
-		<cache driver="filesystem">
-                <path>d:/osgearth_cache</path>
-        </cache>
+				<!--<cache driver="filesystem">
+                <path>c:/osgearth_cache</path>
+        </cache>-->
     
     </options>
     
@@ -31,16 +31,11 @@
         <tile_size>256</tile_size>
         <cache_policy usage="none"/>
         <images>
-            <!--<image name="ESA" driver="gdal" coverage="true">
-                <url>d:/dev_zone/osgearth/gtiff_tiled_lzw.tif</url>
+            <image name="ESA" driver="gdal" coverage="true">
+                <url>c:/temp/GLOBCOVER_L4_200901_200912_V2.3_tiled.tif</url>
                 <warp>0.01</warp>
-            </image>-->
-			<image name="ESA" driver="tms" coverage="true">
-				<url>D:\terrain\osgEarth\tms/coverage_merged/tms.xml</url>
-				<!--<url>C:\dev\OSGEarthDemo\merged_land_cover/tms.xml</url>-->
-				<cache_policy usage="no_cache"/>
-				<warp>0.01</warp>
-			</image>
+            </image>
+			
         </images>
         <shared_sampler> landUseTex       </shared_sampler>
         <shared_matrix>  landUseTexMatrix </shared_matrix>
@@ -68,7 +63,7 @@
             
                     <land_cover>
                         <layers>
-                            <layer name="trees" lod="13" max_distance="6400" density="3.4" fill="0.45" brightness="2.0" contrast="0.5">
+                            <layer name="trees" lod="13" max_distance="6400" density="3.4" fill="0.45" brightness="2.0" contrast="0.5" cast_shadows="true">
                                 <biomes>
                                     <biome classes="forest forest1 forest2 forest3 forest4">
                                         <billboard url="../data/splat/cypress.png" width="12.0" height="14.0"/>

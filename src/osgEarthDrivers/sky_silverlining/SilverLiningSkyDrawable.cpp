@@ -61,7 +61,7 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         _SL->setSkyBoxSize( zfar < 100000.0 ? zfar : 100000.0 );
 
 		_SL->getAtmosphere()->DrawSky(
-			true, 
+            true,
 			_SL->getSRS()->isGeographic(),
 			_SL->getSkyBoxSize(),
 			true,
@@ -74,7 +74,12 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         // Dirty the state and the program tracking to prevent GL state conflicts.
         renderInfo.getState()->dirtyAllVertexArrays();
         renderInfo.getState()->dirtyAllAttributes();
+
+#if OSG_VERSION_GREATER_OR_EQUAL(3,4,0)
+        osg::GLExtensions* api = renderInfo.getState()->get<osg::GLExtensions>();
+#else
         osg::GL2Extensions* api = osg::GL2Extensions::Get(renderInfo.getState()->getContextID(), true);
+#endif
         api->glUseProgram((GLuint)0);
         renderInfo.getState()->setLastAppliedProgramObject(0L);
     }

@@ -602,62 +602,54 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
 void TritonDrawable::setupHeightMap(osgEarth::MapNode* mapNode)
 {
-	if (!mapNode)
-		return;
 
-	int textureUnit = 0;
-	int textureSize = _TRITON->getHeightMapSize();
+    if ( !mapNode )
+        return;
 
-	// Create our height map texture
-	_heightMap = new osg::Texture2D;
-	_heightMap->setTextureSize(textureSize, textureSize);
-	_heightMap->setInternalFormat(GL_LUMINANCE32F_ARB);
-	_heightMap->setSourceFormat(GL_LUMINANCE);
-	_heightMap->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::LINEAR);
-	_heightMap->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::LINEAR);
+    int textureUnit = 0;
+    int textureSize = _TRITON->getHeightMapSize();
 
-	// Create its camera and render to it
-	_heightCamera = new osg::Camera;
-	_heightCamera->setReferenceFrame(osg::Transform::ABSOLUTE_RF_INHERIT_VIEWPOINT);
-	_heightCamera->setClearMask(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-	_heightCamera->setClearColor(osg::Vec4(-1000.0, -1000.0, -1000.0, 1.0f));
-	_heightCamera->setViewport(0, 0, textureSize, textureSize);
-	_heightCamera->setRenderOrder(osg::Camera::PRE_RENDER);
-	_heightCamera->setRenderTargetImplementation(osg::Camera::FRAME_BUFFER_OBJECT);
-	_heightCamera->attach(osg::Camera::COLOR_BUFFER, _heightMap);
-	_heightCamera->setCullMask(~TRITON_OCEAN_MASK);
-	_heightCamera->setAllowEventFocus(false);
-	_heightCamera->setFinalDrawCallback(new PassHeightMapToTritonCallback(_TRITON.get()));
+    // Create our height map texture
+    _heightMap = new osg::Texture2D;
+    _heightMap->setTextureSize(textureSize, textureSize);
+    _heightMap->setInternalFormat(GL_LUMINANCE32F_ARB);
+    _heightMap->setSourceFormat(GL_LUMINANCE);
+    _heightMap->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::LINEAR);
+    _heightMap->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::LINEAR);
 
-	// Install the shaders. We also bind osgEarth's elevation data attribute, which the
-	// terrain engine automatically generates at the specified location.
-	osg::StateSet* stateSet = _heightCamera->getOrCreateStateSet();
-	osgEarth::VirtualProgram* heightProgram = osgEarth::VirtualProgram::getOrCreate(stateSet);
-	heightProgram->setFunction("setupContour", vertexShader, osgEarth::ShaderComp::LOCATION_VERTEX_MODEL);
-	heightProgram->setFunction("colorContour", fragmentShader, osgEarth::ShaderComp::LOCATION_FRAGMENT_OUTPUT);
+    // Create its camera and render to it
+    _heightCamera = new osg::Camera;
+    _heightCamera->setReferenceFrame(osg::Transform::ABSOLUTE_RF_INHERIT_VIEWPOINT);
+    _heightCamera->setClearMask(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    _heightCamera->setClearColor(osg::Vec4(-1000.0, -1000.0, -1000.0, 1.0f));
+    _heightCamera->setViewport(0, 0, textureSize, textureSize);
+    _heightCamera->setRenderOrder(osg::Camera::PRE_RENDER);
+    _heightCamera->setRenderTargetImplementation( osg::Camera::FRAME_BUFFER_OBJECT );
+    _heightCamera->setImplicitBufferAttachmentMask(0, 0);
+    _heightCamera->attach(osg::Camera::COLOR_BUFFER, _heightMap);
+    _heightCamera->setCullMask( ~TRITON_OCEAN_MASK );
+    _heightCamera->setAllowEventFocus(false);
+    _heightCamera->setFinalDrawCallback(new PassHeightMapToTritonCallback(_TRITON.get()));
 
-	// Link with the terrain SDK
-	//mapNode->getTerrainEngine()->includeShaderLibrary( heightProgram );
+    // Install the shaders. We also bind osgEarth's elevation data attribute, which the
+    // terrain engine automatically generates at the specified location.
+    osg::StateSet* stateSet = _heightCamera->getOrCreateStateSet();
+    osgEarth::VirtualProgram* heightProgram = osgEarth::VirtualProgram::getOrCreate(stateSet);
+    heightProgram->setFunction( "setupContour", vertexShader,   osgEarth::ShaderComp::LOCATION_VERTEX_MODEL);
+    heightProgram->setFunction( "colorContour", fragmentShader, osgEarth::ShaderComp::LOCATION_FRAGMENT_OUTPUT);
+    
+    _heightCamera->addChild( mapNode->getTerrainEngine() );
+    _terrainChangedCallback = new OceanTerrainChangedCallback(this);
+    mapNode->getTerrain()->addTerrainCallback( _terrainChangedCallback.get() );
 
-	//stateSet->setAttribute(heightProgram, osg::StateAttribute::ON);
-	//stateSet->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-
-	if (mapNode && _heightCamera)
-	{
-		_heightCamera->addChild(mapNode->getTerrainEngine());
-		_heightCamera->addChild(mapNode->getTerrainEngine());
-		_terrainChangedCallback = new OceanTerrainChangedCallback(this); //_TRITON.get(), mapNode, _heightCamera.get(), _heightMap.get());
-		mapNode->getTerrain()->addTerrainCallback(_terrainChangedCallback.get());
-		mapNode->getTerrain()->addTerrainCallback(_terrainChangedCallback.get());
-
-		osg::Group* root = osgEarth::findTopMostNodeOfType<osg::Group>(mapNode);
-		root->addChild(_heightCamera.get());
+    osg::Group* root = osgEarth::findTopMostNodeOfType<osg::Group>(mapNode);
+    root->addChild(_heightCamera.get());
 
 #ifdef DEBUG_HEIGHTMAP
 		mapNode->getParent(0)->addChild(CreateTextureQuadOverlay(_heightMap, 0.65, 0.05, 0.3, 0.3));
 		mapNode->getParent(0)->insertChild(0, makeFrustumFromCamera(_heightCamera));
 #endif /* DEBUG_HEIGHTMAP */
-	}
+
 }
 
 	osg::TextureCubeMap* TritonDrawable::readCubeMap()

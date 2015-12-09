@@ -24,13 +24,16 @@
 #include <osgEarth/VirtualProgram>
 #include <osgEarth/Registry>
 #include <osgEarth/Capabilities>
+#include <osgEarth/Shadowing>
 #include <osg/Texture2D>
 #include <osg/CullFace>
+#include <osg/ValueObject>
 #include <osgShadow/ConvexPolyhedron>
 
 #define LC "[ShadowCaster] "
 
 using namespace osgEarth::Util;
+
 
 
 ShadowCaster::ShadowCaster() :
@@ -45,10 +48,8 @@ _traversalMask( ~0 )
     _supported = Registry::capabilities().supportsGLSL();
     if ( _supported )
     {
-        // defaults to 4 slices.
+        // default slices:
         _ranges.push_back(0.0f);
-        _ranges.push_back(100.0f);
-        _ranges.push_back(500.0f);
         _ranges.push_back(1750.0f);
         _ranges.push_back(5000.0f);
 
@@ -127,6 +128,7 @@ ShadowCaster::reinitialize()
     for(int i=0; i<numSlices; ++i)
     {
         osg::Camera* rtt = new osg::Camera();
+        Shadowing::setIsShadowCamera(rtt);
         rtt->setReferenceFrame( osg::Camera::ABSOLUTE_RF_INHERIT_VIEWPOINT );
         rtt->setClearDepth( 1.0 );
         rtt->setClearMask( GL_DEPTH_BUFFER_BIT );
@@ -146,6 +148,9 @@ ShadowCaster::reinitialize()
     _rttStateSet->setAttributeAndModes( 
         new osg::CullFace(osg::CullFace::FRONT),
         osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+
+    _rttStateSet->addUniform(new osg::Uniform("oe_isShadowCamera", true), osg::StateAttribute::OVERRIDE);
+
 
     _renderStateSet = new osg::StateSet();
     
@@ -326,7 +331,6 @@ ShadowCaster::traverse(osg::NodeVisitor& nv)
                 // take the camera's projection matrix and clamp it's near and far planes
                 // to our shadow map slice range.
                 osg::Matrix proj = _prevProjMatrix;
-                //cv->clampProjectionMatrix(proj, n, f);
                 double fovy,ar,zn,zf;
                 proj.getPerspective(fovy,ar,zn,zf);
                 proj.makePerspective(fovy,ar,std::max(n,zn),std::min(f,zf));
@@ -350,6 +354,7 @@ ShadowCaster::traverse(osg::NodeVisitor& nv)
                 osg::Matrix lightProjMat;
                 n = -std::max(bbox.zMin(), bbox.zMax());
                 f = -std::min(bbox.zMin(), bbox.zMax());
+                // TODO: consider extending "n" so that objects outside the main view can still cast shadows
                 lightProjMat.makeOrtho(bbox.xMin(), bbox.xMax(), bbox.yMin(), bbox.yMax(), n, f);
 
                 // configure the RTT camera for this slice:

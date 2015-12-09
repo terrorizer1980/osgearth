@@ -80,7 +80,7 @@ SimpleLoader::load(Loader::Request* request, float priority, osg::NodeVisitor& n
         request->invoke();
         
         //OE_INFO << LC << "Request apply : UID = " << request->getUID() << "\n";
-        request->apply();
+        request->apply( nv.getFrameStamp() );
     }
     return request != 0L;
 }
@@ -147,7 +147,8 @@ namespace
 {
     struct RequestResultNode : public osg::Node
     {
-        RequestResultNode(Loader::Request* request) : _request(request)
+        RequestResultNode(Loader::Request* request)
+            : _request(request)
         {
             // Do this so the pager/ICO can find and pre-compile GL objects that are
             // attached to the stateset.
@@ -181,7 +182,7 @@ void
 PagerLoader::setMergesPerFrame(int value)
 {
     _mergesPerFrame = std::max(value, 0);
-    this->setNumChildrenRequiringUpdateTraversal( _mergesPerFrame > 0 ? 1 : 0 );
+    this->setNumChildrenRequiringUpdateTraversal( 1 );
 }
 
 bool
@@ -245,7 +246,6 @@ PagerLoader::load(Loader::Request* request, float priority, osg::NodeVisitor& nv
         {
             Threading::ScopedMutexLock lock( _requestsMutex );
             _requests[request->getUID()] = request;
-            OE_DEBUG << LC << "PagerLoader: requests = " << _requests.size() << "\n";
         }
 
         return true;
@@ -266,6 +266,11 @@ PagerLoader::traverse(osg::NodeVisitor& nv)
     // only called when _mergesPerFrame > 0
     if ( nv.getVisitorType() == nv.UPDATE_VISITOR )
     {
+        if ( nv.getFrameStamp() )
+        {
+            setFrameStamp(nv.getFrameStamp());
+        }
+
         int count;
         for(count=0; count < _mergesPerFrame && !_mergeQueue.empty(); ++count)
         {
@@ -273,7 +278,7 @@ PagerLoader::traverse(osg::NodeVisitor& nv)
             if ( req && req->_lastTick >= _checkpoint )
             {
                 OE_START_TIMER(req_apply);
-                req->apply();
+                req->apply( getFrameStamp() );
                 double s = OE_STOP_TIMER(req_apply);
 
                 req->setState(Request::FINISHED);
@@ -319,7 +324,7 @@ PagerLoader::traverse(osg::NodeVisitor& nv)
                 }
             }
 
-            OE_DEBUG << LC << "PagerLoader: requests = " << _requests.size() << "\n";
+            //OE_NOTICE << LC << "PagerLoader: requests=" << _requests.size() << "; mergeQueue=" << _mergeQueue.size() << std::endl;
         }
     }
 
@@ -345,7 +350,7 @@ PagerLoader::addChild(osg::Node* node)
                 }
                 else
                 {
-                    req->apply();
+                    req->apply( getFrameStamp() );
                     req->setState( Request::FINISHED );
                     if ( REPORT_ACTIVITY )
                         Registry::instance()->endActivity( req->getName() );
@@ -411,6 +416,8 @@ PagerLoader::invokeAndRelease(UID requestUID)
 
     return request.release();
 }
+
+
 
 namespace osgEarth { namespace Drivers { namespace RexTerrainEngine
 {

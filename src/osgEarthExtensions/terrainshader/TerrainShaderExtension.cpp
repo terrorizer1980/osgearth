@@ -55,18 +55,7 @@ namespace
         {
             if ( !engine ) return;
 
-            osg::StateSet* stateSet = 0L;
-
-            if ( _options.landCoverGroup().isSet() )
-            {                
-                UID zoneid = engine->addLandCoverZone();
-                engine->addLandCoverLayer(zoneid, _options.landCoverLOD().get());
-            }
-
-            else
-            {
-                stateSet = engine->getSurfaceStateSet();
-            }
+            osg::StateSet* stateSet = engine->getSurfaceStateSet();
             
             VirtualProgram* vp = VirtualProgram::getOrCreate(stateSet);
             _package.loadAll( vp, _dbOptions.get() );

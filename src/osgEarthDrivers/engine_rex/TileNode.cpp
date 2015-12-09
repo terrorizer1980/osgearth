@@ -22,16 +22,18 @@
 #include "EngineContext"
 #include "Loader"
 #include "LoadTileData"
-#include "ExpireTiles"
 #include "SelectionInfo"
 #include "ElevationTextureUtils"
 
 #include <osgEarth/CullingUtils>
 #include <osgEarth/ImageUtils>
 #include <osgEarth/TraversalData>
+#include <osgEarth/Shadowing>
+#include <osgEarth/Utils>
 
 #include <osg/Uniform>
 #include <osg/ComputeBoundsVisitor>
+#include <osg/ValueObject>
 
 using namespace osgEarth::Drivers::RexTerrainEngine;
 using namespace osgEarth;
@@ -98,15 +100,8 @@ TileNode::create(const TileKey& key, EngineContext* context)
         context->getRenderBindings(),
         surfaceDrawable );
 
-    //_surface->setNodeMask( OSGEARTH_MASK_TERRAIN_SURFACE );
-    
-    // Slot it into the proper render bin:
-    osg::StateSet* surfaceSS = _surface->getOrCreateStateSet();
-    surfaceSS->setRenderBinDetails(0, "oe.SurfaceBin");
-    surfaceSS->setNestRenderBins(false);
-
-    // Create a drawable for land cover geometry.
-    // Land cover will be rendered as patch data instead of triangles.
+    // Create a drawable for "patch" geometry, which is rendered as GL patches, not triangles.
+    // Patch geometry can be used to place land cover or render other tile-specific data.
     TileDrawable* patchDrawable = new TileDrawable(
         key, 
         context->getRenderBindings(),
@@ -117,13 +112,11 @@ TileNode::create(const TileKey& key, EngineContext* context)
     patchDrawable->setDrawAsPatches(true);
 
     // And a node to house that as well:
-    _landCover = new SurfaceNode(
+    _patch = new SurfaceNode(
         key,
         context->getMapFrame().getMapInfo(),
         context->getRenderBindings(),
         patchDrawable );
-
-	//_landCover->setNodeMask( OSGEARTH_MASK_TERRAIN_LAND_COVER );
 
     // PPP: Better way to do this rather than here?
     // Can't do it at RexTerrainEngineNode level, because the SurfaceNode is not valid yet
@@ -139,7 +132,7 @@ TileNode::create(const TileKey& key, EngineContext* context)
             unsigned uiMaxLod   = std::min( context->_options.maxLOD().get(), 20u ); // beyond LOD 19 or 20, morphing starts to lose precision.
             unsigned uiTileSize = *(context->_options.tileSize());
 
-            selectionInfo.initialize(uiFirstLOD, uiMaxLod, uiTileSize, getVisibilityRangeHint(uiFirstLOD));
+            selectionInfo.initialize(uiFirstLOD, uiMaxLod, uiTileSize, getVisibilityRangeHint(context));
         }
     }
 
@@ -168,11 +161,9 @@ TileNode::computeBound() const
 }
 
 bool
-TileNode::isDormant(osg::NodeVisitor& nv) const
+TileNode::isDormant(const osg::FrameStamp* fs) const
 {
-    return
-        nv.getFrameStamp() &&
-        nv.getFrameStamp()->getFrameNumber() - _lastTraversalFrame > 2u;
+    return fs && fs->getFrameNumber() - _lastTraversalFrame > 2u;
 }
 
 void
@@ -181,8 +172,8 @@ TileNode::setElevationRaster(const osg::Image* image, const osg::Matrixf& matrix
     if ( _surface.valid() )
         _surface->setElevationRaster( image, matrix );
 
-    if ( _landCover.valid() )
-        _landCover->setElevationRaster( image, matrix );
+    if ( _patch.valid() )
+        _patch->setElevationRaster( image, matrix );
 }
 
 const osg::Image*
@@ -266,15 +257,20 @@ TileNode::releaseGLObjects(osg::State* state) const
         _payloadStateSet->releaseGLObjects(state);
     if ( _surface.valid() )
         _surface->releaseGLObjects(state);
-    if ( _landCover.valid() )
-        _landCover->releaseGLObjects(state);
+    if ( _patch.valid() )
+        _patch->releaseGLObjects(state);
+    //if ( _mptex.valid() )
+    //    _mptex->releaseGLObjects(state);
 
     osg::Group::releaseGLObjects(state);
 }
 
 float
-TileNode::getVisibilityRangeHint(unsigned firstLOD) const
+TileNode::getVisibilityRangeHint(EngineContext* context) const
 {    
+    unsigned firstLOD = context->_options.firstLOD().get();
+    float mtrf = context->_options.minTileRangeFactor().get();
+
     if (getTileKey().getLOD()!=firstLOD)
     {
         OE_INFO << LC <<"Error: Visibility Range hint can be computed only using the first LOD"<<std::endl;
@@ -282,7 +278,7 @@ TileNode::getVisibilityRangeHint(unsigned firstLOD) const
     }
     // The motivation here is to use the extents of the tile at lowest resolution
     // along with a factor as an estimate of the visibility range
-    const float factor = 6.0f * 2.5f;
+    const float factor = mtrf * 2.5f;
     const osg::BoundingBox& box = _surface->getAlignedBoundingBox();
     return factor * 0.5*std::max( box.xMax()-box.xMin(), box.yMax()-box.yMin() );
 }
@@ -314,26 +310,51 @@ TileNode::isVisible(osg::CullStack* stack) const
 #endif
 }
 
+void
+TileNode::cull_stealth(osg::NodeVisitor& nv)
+{
+    if ( !isDormant(nv.getFrameStamp()) )
+    {
+        osgUtil::CullVisitor* cv = static_cast<osgUtil::CullVisitor*>( &nv );
+        EngineContext* context = static_cast<EngineContext*>( nv.getUserData() );
+       
+        if ( getNumChildren() == 4 )
+        {
+            unsigned before = RenderBinUtils::getTotalNumRenderLeaves( cv->getRenderStage() );
+            for(int i=0; i<4; ++i)
+            {
+                _children[i]->accept( nv );
+            }
+            unsigned after = RenderBinUtils::getTotalNumRenderLeaves( cv->getRenderStage() );
+            if ( after == before )
+            {
+                acceptSurface( cv, context );
+            }
+        }
+
+        else if ( _surface.valid() )
+        {
+            acceptSurface( cv, context );
+        }
+    }
+}
+
+
 void TileNode::cull(osg::NodeVisitor& nv)
 {
-    if ( nv.getFrameStamp() )
-    {
-        _lastTraversalFrame.exchange( nv.getFrameStamp()->getFrameNumber() );
-    }
-
-    unsigned currLOD = getTileKey().getLOD();
-
     osgUtil::CullVisitor* cv = static_cast<osgUtil::CullVisitor*>( &nv );
 
     EngineContext* context = static_cast<EngineContext*>( nv.getUserData() );
     const SelectionInfo& selectionInfo = context->getSelectionInfo();
 
+    // record the number of drawables before culling this node:
+    unsigned before = RenderBinUtils::getTotalNumRenderLeaves( cv->getRenderStage() );
+
     if ( context->progress() )
         context->progress()->stats()["TileNode::cull"]++;
 
     // determine whether we can and should subdivide to a higher resolution:
-    bool subdivide =
-        shouldSubDivide(nv, selectionInfo, cv->getLODScale());
+    bool subdivide = shouldSubDivide(nv, selectionInfo, cv->getLODScale());
 
     // whether it is OK to create child TileNodes is necessary.
     bool canCreateChildren = subdivide;
@@ -348,22 +369,17 @@ void TileNode::cull(osg::NodeVisitor& nv)
         canCreateChildren = false;
     }
     
-    else
+    // If this is an inherit-viewpoint camera, we don't need it to invoke subdivision
+    // because we want only the tiles loaded by the true viewpoint.
+    const osg::Camera* cam = cv->getCurrentCamera();
+    if ( cam && cam->getReferenceFrame() == osg::Camera::ABSOLUTE_RF_INHERIT_VIEWPOINT )
     {
-        // If this is an inherit-viewpoint camera, we don't need it to invoke subdivision
-        // because we want only the tiles loaded by the true viewpoint.
-        const osg::Camera* cam = cv->getCurrentCamera();
-        if ( cam && cam->getReferenceFrame() == osg::Camera::ABSOLUTE_RF_INHERIT_VIEWPOINT )
-        {
-            canCreateChildren = false;
-            canLoadData = false;
-        }
+        canCreateChildren = false;
+        canLoadData = false;
     }
 
-    optional<bool> surfaceVisible;
+    optional<bool> surfaceVisible( false );
 
-
-    // If *any* of the children are visible, subdivide.
     if (subdivide)
     {
         // We are in range of the child nodes. Either draw them or load them.
@@ -383,7 +399,18 @@ void TileNode::cull(osg::NodeVisitor& nv)
         {
             for(int i=0; i<4; ++i)
             {
-                _children[i]->accept( nv );
+                // pre-check each child for simple bounding sphere culling, and if the check 
+                // fails, unload it's children if them exist. This lets us unload dormant
+                // tiles from memory as we go. If those children are visible from another
+                // camera, no worries, the unload attempt will fail gracefully.
+                if (!cv->isCulled(*_children[i].get()))
+                {
+                    _children[i]->accept( nv );
+                }
+                else
+                {
+                    context->getUnloader()->unloadChildren(getSubTile(i)->getTileKey());
+                }
             }
         }
 
@@ -399,50 +426,28 @@ void TileNode::cull(osg::NodeVisitor& nv)
     {
         surfaceVisible = acceptSurface( cv, context );
 
-        if ( getNumChildren() >= 4 && context->maxLiveTilesExceeded() )
+        // if children exists, and are not in the process of loading, unload them now.
+        if ( !_dirty && _children.size() > 0 )
         {
-            if (getSubTile(0)->isDormant( nv ) &&
-                getSubTile(1)->isDormant( nv ) &&
-                getSubTile(2)->isDormant( nv ) &&
-                getSubTile(3)->isDormant( nv ))
-            {
-                expireChildren( nv );
-            }
+            context->getUnloader()->unloadChildren( this->getTileKey() );
         }
     }
 
-    // Traverse land cover data at this LOD.
-    int zoneIndex = context->_landCoverData->_currentZoneIndex;
-    if ( zoneIndex < (int)context->_landCoverData->_zones.size() )
+    // See whether we actually added any drawables.
+    unsigned after = RenderBinUtils::getTotalNumRenderLeaves( cv->getRenderStage() );
+    bool addedDrawables = (after > before);
+    
+    // Only continue if we accepted at least one surface drawable.
+    if ( addedDrawables )
     {
-        const LandCoverZone& zone = context->_landCoverData->_zones.at(zoneIndex);
-        for(int i=0; i<zone._bins.size(); ++i)
-        {
-            bool pushedPayloadSS = false;
-
-            const LandCoverBin& bin = zone._bins.at(i);
-            if ( bin._lod == _key.getLOD() )
-            {
-                if ( !pushedPayloadSS )
-                {
-                    cv->pushStateSet( _payloadStateSet.get() );
-                    pushedPayloadSS = true;
-                }
-
-                cv->pushStateSet( bin._stateSet.get() ); // hopefully groups together for rendering.
-                _landCover->accept( nv );
-                cv->popStateSet();
-            }
-
-            if ( pushedPayloadSS )
-            {
-                cv->popStateSet();
-            }
-        }
+        // update the timestamp so this tile doesn't become dormant.
+        _lastTraversalFrame.exchange( nv.getFrameStamp()->getFrameNumber() );
     }
+
+    context->invokeTilePatchCallbacks( cv, getTileKey(), _payloadStateSet.get(), _patch.get() );
 
     // If this tile is marked dirty, try loading data.
-    if ( _dirty && canLoadData )
+    if ( addedDrawables && _dirty && canLoadData )
     {
         // Only load data if the surface would be visible to the camera
         if ( !surfaceVisible.isSet() )
@@ -464,20 +469,21 @@ void TileNode::cull(osg::NodeVisitor& nv)
 bool
 TileNode::acceptSurface(osgUtil::CullVisitor* cv, EngineContext* context)
 {
-    if ( _surface->isVisible(cv))
+    bool visible = _surface->isVisible(cv);
+    if ( visible )
     {
         if ( context->progress() )
             context->progress()->stats()["TileNode::acceptSurface"]++;
 
+        cv->pushStateSet(context->_surfaceSS.get());
+
         cv->pushStateSet( _payloadStateSet.get() );
         _surface->accept( *cv );
         cv->popStateSet();
-        return true;
+
+        cv->popStateSet();
     }
-    else
-    {
-        return false;
-    }
+    return visible;
 }
 
 void
@@ -486,7 +492,14 @@ TileNode::traverse(osg::NodeVisitor& nv)
     // Cull only:
     if ( nv.getVisitorType() == nv.CULL_VISITOR )
     {
-        cull(nv);
+        if (VisitorData::isSet(nv, "osgEarth.Stealth"))
+        {
+            cull_stealth( nv );
+        }
+        else
+        {
+            cull(nv);
+        }
     }
 
     // Everything else: update, GL compile, intersection, compute bound, etc.
@@ -529,7 +542,7 @@ TileNode::createChildren(EngineContext* context)
         node->inheritState( context );
     }
     
-    OE_DEBUG << LC << "Creating children of: " << getTileKey().str() << "; count = " << (++_count) << "\n";
+    //OE_NOTICE << LC << "Creating children of: " << getTileKey().str() << "; count = " << (++_count) << "\n";
 }
 
 bool
@@ -693,24 +706,19 @@ TileNode::load(osg::NodeVisitor& nv)
     context->getLoader()->load( _loadRequest.get(), priority, nv );
 }
 
-void
-TileNode::expireChildren(osg::NodeVisitor& nv)
+bool
+TileNode::areSubTilesDormant(const osg::FrameStamp* fs) const
 {
-    OE_DEBUG << LC << "Expiring children of " << getTileKey().str() << "\n";
+    return
+        getNumChildren() >= 4           &&
+        getSubTile(0)->isDormant( fs )  &&
+        getSubTile(1)->isDormant( fs )  &&
+        getSubTile(2)->isDormant( fs )  &&
+        getSubTile(3)->isDormant( fs );
+}
 
-    EngineContext* context = static_cast<EngineContext*>( nv.getUserData() );
-    if ( !_expireRequest.valid() )
-    {
-        Threading::ScopedMutexLock lock(_mutex);
-        if ( !_expireRequest.valid() )
-        {
-            _expireRequest = new ExpireTiles(this, context);
-            _expireRequest->setName( getTileKey().str() + " expire" );
-            _expireRequest->setTileKey( _key );
-        }
-    }
-       
-    // Low priority for expiry requests.
-    const float lowPriority = -100.0f;
-    context->getLoader()->load( _expireRequest.get(), lowPriority, nv );
+void
+TileNode::removeSubTiles()
+{
+    this->removeChildren(0, this->getNumChildren());
 }
