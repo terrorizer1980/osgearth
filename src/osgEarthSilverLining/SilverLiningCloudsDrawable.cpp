@@ -52,6 +52,7 @@ void
 			#endif
 			osg::State* state = renderInfo.getState();
 
+			// adapt the SL shaders so they can accept OSG uniforms:
 			osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ]; // thread safe.
 			if ( adapters.empty() )
 			{
@@ -64,15 +65,20 @@ void
 				for(int i=0; i<handles.size(); ++i)          
 					adapters.push_back( new osgEarth::NativeProgramAdapter(state, handles[i]) );
 			}
-
 			adapters.apply( state );
 
+			// invoke the user callback if it exists
+			if (_SL->getCallback())
+				_SL->getCallback()->onDrawClouds(_SL->getAtmosphereWrapper());
+
 			renderInfo.getState()->disableAllVertexArrays();
-			
 			_SL->getAtmosphere()->DrawObjects( true, true, true );
-
-
 			_SL->updateEnvMap();
+
+			// Restore the GL state to where it was before.
+			state->dirtyAllVertexArrays();
+			state->dirtyAllAttributes();
+			state->apply();
 
 
 			// Dirty the state and the program tracking to prevent GL state conflicts.
@@ -85,12 +91,12 @@ void
 			state->setLastAppliedProgramObject(0L);    */
 
 			// Restore the GL state to where it was before.
-			state->dirtyAllVertexArrays();
-			state->dirtyAllAttributes();
+			//state->dirtyAllVertexArrays();
+			//state->dirtyAllAttributes();
 			//osg::GL2Extensions* api = osg::GL2Extensions::Get(state->getContextID(), true);
 			//api->glUseProgram((GLuint)0);
 			//state->setLastAppliedProgramObject(0L);
-			state->apply();
+			//state->apply();
 
 		}
     }

@@ -49,6 +49,7 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 		OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
 #endif
         renderInfo.getState()->disableAllVertexArrays();
+
         _SL->initialize( renderInfo );
 
 		const osg::State* state = renderInfo.getState();
@@ -59,6 +60,10 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
         camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
         _SL->setSkyBoxSize( zfar < 100000.0 ? zfar : 100000.0 );
+
+		// invoke the user callback if it exists
+		if (_SL->getCallback())
+			_SL->getCallback()->onDrawSky(_SL->getAtmosphereWrapper());
 
 		_SL->getAtmosphere()->DrawSky(
             true,

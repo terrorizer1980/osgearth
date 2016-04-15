@@ -19,6 +19,7 @@
 
 #include "Common"
 #include "SilverLiningOptions"
+#include "SilverLiningCallback"
 #include "SilverLiningAPIWrapper"
 #include <osgEarthUtil/Sky>
 #include <osgEarth/Map>
@@ -28,16 +29,7 @@
 
 namespace osgEarth { namespace SilverLining
 {
-	class SilverLiningContextNode;
-    
-    /**
-     * A callback that lets you execute code at initialization
-     */
-    class InitializationCallback : public osg::Referenced
-    {
-    public:
-        virtual void operator()(Atmosphere& atmosphere) = 0;
-    };
+    class SilverLiningContext;
 
     /**
      * Node that roots the silverlining adapter.
@@ -48,13 +40,8 @@ namespace osgEarth { namespace SilverLining
         SilverLiningNode(
             const osgEarth::MapNode*   map,
             const SilverLiningOptions& options,
-			InitializationCallback*                  callback =0L);
-
+			Callback*                  callback =0L);
     public: // SkyNode
-
-        //Atmosphere& getAtmosphere() const;
-
-        //SilverLiningContext* getContext() { return _SL.get(); }
 
         osg::Light* getSunLight() { return _light.get(); }
 
@@ -64,12 +51,13 @@ namespace osgEarth { namespace SilverLining
         void onSetDateTime();
         void onSetMinimumAmbient();
 
-	    InitializationCallback* getCallback() const { return _callback.get(); }
+	    Callback* getCallback() const { return _callback.get(); }
     public: // osg::Node
         void traverse(osg::NodeVisitor&);
 
     protected:
         virtual ~SilverLiningNode();
+
 	    osg::ref_ptr<osg::LightSource> _lightSource;
         osg::ref_ptr<osg::Light> _light;
 		const SilverLiningOptions _options;
@@ -77,7 +65,7 @@ namespace osgEarth { namespace SilverLining
 		int _envID;
 		bool _updateEnvMap;
 		const osgEarth::MapNode* _map;
-		osg::ref_ptr<InitializationCallback> _callback;
+		osg::ref_ptr<Callback> _callback;
     };
 
 } } // namespace osgEarth::SilverLining

@@ -663,7 +663,15 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
     // Now light and draw the ocean:
     if ( environment )
-    {
+    {        
+        // User pre-draw callback:
+        if (_TRITON->getCallback())
+        {
+            _TRITON->getCallback()->onDrawOcean(
+                _TRITON->getEnvironmentWrapper(),
+                _TRITON->getOceanWrapper());
+        }
+
         // The sun position is roughly where it is in our skybox texture:
 
         // Since this is a simple example we will just assume that Sun is the light from View light source
@@ -791,12 +799,12 @@ namespace
             { GL_RGBA32F_ARB,           GL_RGBA,      "GL_RGBA32F_ARB" }
         };           
 
-
 #if OSG_VERSION_GREATER_OR_EQUAL(3,4,0)
-		osg::GLExtensions* ext = osg::GLExtensions::Get(state.getContextID(), true);
+        osg::GLExtensions* ext = osg::GLExtensions::Get(state.getContextID(), true);
 #else
-		osg::FBOExtensions* ext = osg::FBOExtensions::instance(state.getContextID(), true);
-#endif 
+        osg::FBOExtensions* ext = osg::FBOExtensions::instance(state.getContextID(), true);
+#endif        
+
 		osg::State::CheckForGLErrors check = state.getCheckForGLErrors();
 		state.setCheckForGLErrors(state.NEVER_CHECK_GL_ERRORS);
 

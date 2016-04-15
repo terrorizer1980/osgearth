@@ -29,7 +29,8 @@
 using namespace osgEarth::Triton;
 
 TritonNode::TritonNode(osgEarth::MapNode*   mapNode,
-                       const TritonOptions& options) :
+                       const TritonOptions& options,
+                       Callback*            callback) :
 OceanNode( options ),
 _options ( options )
 {
@@ -54,6 +55,14 @@ _options ( options )
 
     TritonDrawable* tritonDrawable = new TritonDrawable(mapNode,_TRITON,skynode);
     _drawable = tritonDrawable;
+
+	if ( callback )
+        _TRITON->setCallback( callback );
+
+    
+    _alphaUniform = getOrCreateStateSet()->getOrCreateUniform("oe_ocean_alpha", osg::Uniform::FLOAT);
+    _alphaUniform->set(getAlpha());
+
     osg::Geode* geode = new osg::Geode();
     geode->addDrawable( _drawable );
     geode->setNodeMask( TRITON_OCEAN_MASK );
@@ -61,8 +70,6 @@ _options ( options )
     this->addChild( geode );
 
     this->setNumChildrenRequiringUpdateTraversal(1);
-
-	
 }
 
 TritonNode::~TritonNode()
@@ -81,6 +88,12 @@ TritonNode::onSetSeaLevel()
 		 
     }
     dirtyBound();
+}
+
+void
+TritonNode::onSetAlpha()
+{
+    _alphaUniform->set(getAlpha());
 }
 
 osg::BoundingSphere

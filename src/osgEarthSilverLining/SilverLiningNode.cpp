@@ -35,9 +35,10 @@
 using namespace osgEarth::SilverLining;
 
 
+
 SilverLiningNode::SilverLiningNode(const osgEarth::MapNode*       map,
 	const SilverLiningOptions& options,
-	InitializationCallback* callback) : SkyNode(options),
+	Callback* callback) : SkyNode(options),
 	_options     (options),
 	_map(map),
 	_callback(callback),
@@ -60,9 +61,7 @@ SilverLiningNode::SilverLiningNode(const osgEarth::MapNode*       map,
 	_lighting = new PhongLightingEffect();
 	_lighting->setCreateLightingUniform( false );
 	_lighting->attach( stateset );
-	
 }
-
 
 SilverLiningNode::~SilverLiningNode()
 {
@@ -70,11 +69,6 @@ SilverLiningNode::~SilverLiningNode()
 		_lighting->detach();
 }
 
-/*Atmosphere&
-SilverLiningNode::getAtmosphere() const
-{
-    return _SL->getAtmosphereWrapper();
-}*/
 
 void
 	SilverLiningNode::attach(osg::View* view, int lightNum)

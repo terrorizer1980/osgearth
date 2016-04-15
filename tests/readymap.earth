@@ -16,7 +16,7 @@ http://readymap.org
     <options>
         <terrain first_lod="1"/>
 		<cache type="filesystem">
-           <path>c:/OSGEarthCache/sweden_test3</path>
+           <path>c:/OSGEarthCache/readymap</path>
         </cache>
 		<!--<cache_policy usage="no_cache"/>-->
 		<!--<cache_policy usage="cache_only"/>-->

@@ -25,7 +25,7 @@
 #include <osgEarth/MapNode>
 #include <osgEarth/Registry>
 #include <osgEarth/ShaderGenerator>
-#include <osgEarth/Decluttering>
+#include <osgEarth/ScreenSpaceLayout>
 #include <osg/Depth>
 #include <osgText/Text>
 
@@ -67,6 +67,9 @@ _style      ( style )
 void
 TrackNode::init( const TrackNodeFieldSchema& schema )
 {
+    // tracknodes draw in screen space at their geoposition.
+    ScreenSpaceLayout::activate( this->getOrCreateStateSet() );
+
     osgEarth::clearChildren( getPositionAttitudeTransform() );
 
     _geode = new osg::Geode();
@@ -88,8 +91,8 @@ TrackNode::init( const TrackNodeFieldSchema& schema )
         {
             _geode->addDrawable( imageGeom );
 
-            LayoutData* layout = new LayoutData();
-            layout->_priority = getPriority();
+            ScreenSpaceLayoutData* layout = new ScreenSpaceLayoutData();
+            layout->setPriority(getPriority());
             imageGeom->setUserData(layout);
         }
     }
@@ -103,10 +106,15 @@ TrackNode::init( const TrackNodeFieldSchema& schema )
             const TrackNodeField& field = i->second;
             if ( field._symbol.valid() )
             {
+                osg::Vec3 offset(
+                    field._symbol->pixelOffset()->x(),
+                    field._symbol->pixelOffset()->y(),
+                    0.0);
+
                 osg::Drawable* drawable = AnnotationUtils::createTextDrawable( 
                     field._symbol->content()->expr(),   // text
                     field._symbol.get(),                // symbol
-                    osg::Vec3(0,0,0) );                 // offset
+                    offset );                           // offset
 
                 if ( drawable )
                 {
@@ -150,8 +158,8 @@ TrackNode::setPriority(float value)
 void
 TrackNode::updateLayoutData()
 {
-    osg::ref_ptr<LayoutData> data = new LayoutData();
-    data->_priority = getPriority();
+    osg::ref_ptr<ScreenSpaceLayoutData> data = new ScreenSpaceLayoutData();
+    data->setPriority(getPriority());
 
     // re-apply annotation drawable-level stuff as neccesary.
     for (unsigned i = 0; i<_geode->getNumDrawables(); ++i)
