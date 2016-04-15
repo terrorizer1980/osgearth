@@ -47,7 +47,7 @@ _seed  ( (unsigned)::time(0L) )
 
 Random::Random( unsigned seed, Random::Method method ) :
 _method( method ),
-_seed  ( seed == 0 ? (unsigned)::time(0L) : seed ) // seed=0 => time-based
+_seed  ( seed )
 {
     _next = _seed;
 }
@@ -58,6 +58,13 @@ _seed  ( rhs._seed ),
 _next  ( rhs._next )
 {
     //nop
+}
+
+void
+Random::seed(unsigned value)
+{
+    _seed = value;
+    reset();
 }
 
 void

@@ -117,6 +117,36 @@ namespace
         osg::observer_ptr<osg::Node> _node;
     };
 
+    /**
+     * Toggles the main control canvas on and off.
+     */
+    struct ToggleCanvasEventHandler : public osgGA::GUIEventHandler
+    {
+        ToggleCanvasEventHandler(osg::Node* canvas):
+            _canvas(canvas)
+        {
+        }
+
+        bool handle( const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa )
+        {
+            if (ea.getEventType() == osgGA::GUIEventAdapter::KEYDOWN)
+            {
+                if (ea.getKey() == 'y')
+                {
+                    osg::ref_ptr< osg::Node > safeNode = _canvas.get();
+                    if (safeNode.valid())
+                    {
+                        safeNode->setNodeMask( safeNode->getNodeMask() ? 0 : ~0 );
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        osg::observer_ptr<osg::Node> _canvas;
+    };
+
     // sets a user-specified uniform.
     struct ApplyValueUniform : public ControlEventHandler
     {
@@ -539,13 +569,17 @@ MapNodeHelper::parse(MapNode*             mapNode,
     }
     canvas->addControl( mainContainer );
 
+    // Add an event handler to toggle the canvas with a key press;
+    view->addEventHandler(new ToggleCanvasEventHandler(canvas) );
+
+
+
 
     // look for external data in the map node:
     const Config& externals = mapNode->externalConfig();
 
     const Config& skyConf         = externals.child("sky");
     const Config& oceanConf       = externals.child("ocean");
-    const Config& annoConf        = externals.child("annotations");
     const Config& declutterConf   = externals.child("decluttering");
 
     // some terrain effects.
@@ -672,6 +706,10 @@ MapNodeHelper::parse(MapNode*             mapNode,
         defaultIcon->url()->setLiteral(KML_PUSHPIN_URL);
         kml_options.defaultIconSymbol() = defaultIcon;
 
+        TextSymbol* defaultText = new TextSymbol();
+        defaultText->halo() = Stroke(0.3,0.3,0.3,1.0);
+        kml_options.defaultTextSymbol() = defaultText;
+
         osg::Node* kml = KML::load( URI(kmlFile), mapNode, kml_options );
         if ( kml )
         {
@@ -689,18 +727,6 @@ MapNodeHelper::parse(MapNode*             mapNode,
         else
         {
             OE_NOTICE << "Failed to load " << kmlFile << std::endl;
-        }
-    }
-
-    // Annotations in the map node externals:
-    if ( !annoConf.empty() )
-    {
-        osg::Group* annotations = 0L;
-        AnnotationRegistry::instance()->create( mapNode, annoConf, dbOptions.get(), annotations );
-        if ( annotations )
-        {
-            mapNode->addChild( annotations );
-            //root->addChild( annotations );
         }
     }
 

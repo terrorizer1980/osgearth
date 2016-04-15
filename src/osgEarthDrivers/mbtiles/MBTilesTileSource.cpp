@@ -224,7 +224,8 @@ MBTilesTileSource::initialize(const osgDB::Options* dbOptions)
                     return Status::Error( Stringify() << "Profile not recognized: " << profileStr );
                 }
             }
-            else
+            
+            if (!profile)
             {
                 // Spherical mercator is the MBTiles default.
                 profile = osgEarth::Registry::instance()->getSphericalMercatorProfile();
@@ -337,7 +338,7 @@ MBTilesTileSource::createImage(const TileKey&    key,
         if ( valid )
         {
             std::istringstream inputStream(dataBuffer);
-            osgDB::ReaderWriter::ReadResult rr = _rw->readImage( inputStream );
+            osgDB::ReaderWriter::ReadResult rr = _rw->readImage( inputStream, _dbOptions.get() );
             if (rr.validImage())
             {
                 result = rr.takeImage();                
@@ -370,11 +371,11 @@ MBTilesTileSource::storeImage(const TileKey&    key,
     if ( _forceRGB && ImageUtils::hasAlphaChannel(image) )
     {
         osg::ref_ptr<osg::Image> rgb = ImageUtils::convertToRGB8(image);
-        wr = _rw->writeImage(*(rgb.get()), buf);
+        wr = _rw->writeImage(*(rgb.get()), buf, _dbOptions.get());
     }
     else
     {
-        wr = _rw->writeImage(*image, buf);
+        wr = _rw->writeImage(*image, buf, _dbOptions.get());
     }
 
     if ( wr.error() )
@@ -413,7 +414,7 @@ MBTilesTileSource::storeImage(const TileKey&    key,
     if ( rc != SQLITE_OK )
     {
         OE_WARN << LC << "Failed to prepare SQL: " << query << "; " << sqlite3_errmsg(_database) << std::endl;
-        return NULL;
+        return false;
     }
 
     // bind parameters:

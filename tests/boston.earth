@@ -8,7 +8,7 @@ to extruded buildings.
 <map name="Boston Demo" type="geocentric" version="2">
     
     <options>
-        <terrain driver="rex"/>
+        <terrain driver="mp"/>
     </options>
     
     <image name="readymap_imagery" driver="tms">
@@ -125,7 +125,7 @@ to extruded buildings.
                     altitude-clamping: terrain;
                 }
             </style>
-            <script language="javascript">
+            <script language="javascript" profile="full">
 				<url>../data/scripts/createLineOffsetPoints.js</url>
 			</script>
         </styles>   

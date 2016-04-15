@@ -9,19 +9,19 @@ Since osgEarth relies on shaders, you as a developer may wish to customize
 the rendering or add your own effects and features in GLSL. Anyone who has
 worked with shaders has run into the same challenges:
 
-* Shader programs as monolithic. Adding new shader code requires you to
+* Shader programs are monolithic. Adding new shader code requires you to
   copy, modify, and replace the existing code so you don't lose its
   functionality.
 * Keeping your changes in sync with changes to the original code's 
   shaders is a maintenance nightmare.
 * Maintaining multiple versions of shader main()s is cumbersome and
   difficult.
-* Maintaining the dreaded "uber shader" becomes unmanagable as the 
+* Maintaining the dreaded "uber shader" becomes unmanageable as the 
   GLSL code base grows in complexity and you add more features.
   
 *Shader Composition* solves these problems by *modularizing* the shader
 pipeline. You can add and remove *functions* at any point in the program
-without and copying, pasting, or hacking other people's GLSL code.
+without copying, pasting, or hacking other people's GLSL code.
 
 Next we will discuss the structure of osgEarth's shader composition framework.
 
@@ -120,7 +120,7 @@ For example, let's use user functions to create a simple "haze" effect::
 
     // haze_vertex:
     varying vec3 v_pos;
-    void setup_have(inout vec4 vertexView)
+    void setup_haze(inout vec4 vertexView)
     {
         v_pos = vertexView.xyz;
     }
@@ -190,9 +190,9 @@ The FRAGMENT locations are as follows.
 Shader Packages
 ---------------
 
-Earlier we shows you how to inject functions using ``VirtualProgram``. 
+Earlier we showed you how to inject functions using ``VirtualProgram``. 
 The Shader Composition Framework also provides the concept of a ``ShaderPackage`` that supports
-more advances methods of shader management. We will talk about some of those now.
+more advanced methods of shader management. We will talk about some of those now.
 
 
 VirtualProgram Metadata
@@ -216,7 +216,7 @@ Here is an example::
     
     #pragma vp_entryPoint  color_it_red
     #pragma vp_location    fragment_coloring
-    #pragam vp_order       1.0
+    #pragma vp_order       1.0
     
     void color_it_red(inout vec4 color)
     {

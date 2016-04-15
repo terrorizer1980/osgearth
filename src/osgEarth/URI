@@ -260,6 +260,7 @@ namespace osgEarth
             Config conf("uri", base());
             conf.addIfSet("option_string", _optionString);
             conf.setReferrer( context().referrer() );
+            conf.setIsLocation( true );
             return conf;
         }
 
@@ -316,7 +317,7 @@ namespace osgEarth
          * Loads an alias map from an Options.
          */
         static URIAliasMap* from( const osgDB::Options* options ) {
-            return options ? static_cast<URIAliasMap*>(const_cast<osgDB::Options*>(options)->getPluginData("osgEarth::URIAliasMap")) : 0L;
+            return options ? const_cast<URIAliasMap*>(static_cast<const URIAliasMap*>(options->getPluginData("osgEarth::URIAliasMap"))) : 0L;
         }
 
         /**
@@ -370,7 +371,7 @@ namespace osgEarth
             : LRUCache<URI,ReadResult>( threadsafe ) { }
 
         static URIResultCache* from(const osgDB::Options* options) {
-            return options ? static_cast<URIResultCache*>(const_cast<osgDB::Options*>(options)->getPluginData("osgEarth::URIResultCache")) : 0L;
+            return options ? const_cast<URIResultCache*>(static_cast<const URIResultCache*>(options->getPluginData("osgEarth::URIResultCache"))) : 0L;
         }
 
         void apply( osgDB::Options* options ) {
@@ -399,7 +400,7 @@ namespace osgEarth
         }
 
         static URIPostReadCallback* from(const osgDB::Options* options) {
-            return options ? static_cast<URIPostReadCallback*>(const_cast<osgDB::Options*>(options)->getPluginData("osgEarth::URIPostReadCallback")) : 0L;
+            return options ? const_cast<URIPostReadCallback*>(static_cast<const URIPostReadCallback*>(options->getPluginData("osgEarth::URIPostReadCallback"))) : 0L;
         }
     };
 
@@ -413,8 +414,6 @@ namespace osgEarth
         if ( opt.isSet() ) {
             Config c = opt->getConfig();
             c.key() = key;
-            // setting the referrer is a hint that this may be a relative path requiring resolution
-            //c.setReferrer( opt->context().referrer() );
             add( c );
         }
     }
@@ -422,7 +421,8 @@ namespace osgEarth
     template<> inline
     void Config::updateIfSet<URI>( const std::string& key, const optional<URI>& opt ) {
         if ( opt.isSet() ) {
-            update(key, opt->getConfig());
+            remove(key);
+            add( key, opt->getConfig() );
         }
     }
 

@@ -9,8 +9,8 @@
                  tile_size="17"
                  high_resolution_first="false" 
                  merges_per_frame="50"
-                 skirt_ratio="0.01"
-                 normal_maps="true" />
+                 skirt_ratio="0.01">
+        </terrain>
 				<!--<cache driver="filesystem">
                 <path>c:/osgearth_cache</path>
         </cache>-->
@@ -37,8 +37,6 @@
             </image>
 			
         </images>
-        <shared_sampler> landUseTex       </shared_sampler>
-        <shared_matrix>  landUseTexMatrix </shared_matrix>
     </image>
     <extensions>   
 

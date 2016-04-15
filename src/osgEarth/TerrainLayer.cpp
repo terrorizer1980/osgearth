@@ -95,7 +95,6 @@ TerrainLayerOptions::getConfig( bool isolate ) const
     conf.updateIfSet( "vdatum", _vertDatum );
 
     conf.updateIfSet   ( "cacheid",      _cacheId );
-    conf.updateIfSet   ( "cache_format", _cacheFormat );
     conf.updateObjIfSet( "proxy",        _proxySettings );
 
     if ( _cachePolicy.isSet() && !_cachePolicy->empty() )
@@ -127,7 +126,6 @@ TerrainLayerOptions::fromConfig( const Config& conf )
     conf.getIfSet( "vsrs", _vertDatum );    // back compat
 
     conf.getIfSet   ( "cacheid",      _cacheId );
-    conf.getIfSet   ( "cache_format", _cacheFormat );
     conf.getObjIfSet( "cache_policy", _cachePolicy );
     conf.getObjIfSet( "proxy",        _proxySettings );
 
@@ -206,6 +204,13 @@ TerrainLayer::init()
         OE_INFO << LC << "L2 cache size set from environment = " << l2CacheSize << "\n";
     }
 
+    // Env cache-only mode also disables the L2 cache.
+    char const* noCacheEnv = ::getenv( "OSGEARTH_MEMORY_PROFILE" );
+    if ( noCacheEnv )
+    {
+        l2CacheSize = 0;
+    }
+
     // Initialize the l2 cache if it's size is > 0
     if ( l2CacheSize > 0 )
     {
@@ -269,7 +274,7 @@ TerrainLayer::setCache( Cache* cache )
 void
 TerrainLayer::setCachePolicy( const CachePolicy& cp )
 {
-    _runtimeOptions->cachePolicy() = cp;
+    _runtimeOptions->cachePolicy() = optional<CachePolicy>(cp);
     _runtimeOptions->cachePolicy()->apply( _dbOptions.get() );
 
     // if an effective policy was previously set, clear it out

@@ -18,7 +18,6 @@ SET(LIB_PUBLIC_HEADERS
     BufferFilter
     BuildGeometryFilter  
     BuildTextFilter
-    BuildTextOperator
     CentroidFilter
     Common
     ConvertTypeFilter
@@ -40,7 +39,6 @@ SET(LIB_PUBLIC_HEADERS
     GeometryCompiler
     GeometryUtils
     LabelSource
-    MeshClamper
     OgrUtils
     OptimizerHints
     PolygonizeLines
@@ -64,7 +62,6 @@ ADD_LIBRARY(${LIB_NAME} ${OSGEARTH_USER_DEFINED_DYNAMIC_OR_STATIC}
 	BuildBillboardFilter.cpp
     BuildGeometryFilter.cpp 
     BuildTextFilter.cpp
-    BuildTextOperator.cpp
     CentroidFilter.cpp
     ConvertTypeFilter.cpp
     CropFilter.cpp
@@ -84,7 +81,6 @@ ADD_LIBRARY(${LIB_NAME} ${OSGEARTH_USER_DEFINED_DYNAMIC_OR_STATIC}
     GeometryCompiler.cpp
 	GeometryUtils.cpp
     LabelSource.cpp
-    MeshClamper.cpp
     OgrUtils.cpp
     OptimizerHints.cpp
     PolygonizeLines.cpp

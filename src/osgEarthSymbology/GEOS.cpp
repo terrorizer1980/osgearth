@@ -42,6 +42,7 @@ using namespace osgEarth::Symbology;
 using namespace geos;
 using namespace geos::operation;
 
+#define LC "[GEOS] "
 
 namespace
 {
@@ -160,7 +161,7 @@ namespace
                 //if ( seq )
                 //    delete seq;
 
-                OE_NOTICE << "GEOS::import: Removed degenerate geometry" << std::endl;
+                OE_DEBUG << "GEOS::import: Removed degenerate geometry" << std::endl;
             }
         }
 
@@ -248,7 +249,7 @@ GEOSContext::exportGeometry(const geom::Geometry* input)
 
     if ( dynamic_cast<const geom::Point*>( input ) )
     {
-        OE_NOTICE << "GEOS 'Point' NYI" << std::endl;        
+        OE_NOTICE << LC << "GEOS 'Point' NYI" << std::endl;        
     }
     else if ( dynamic_cast<const geom::MultiPoint*>( input ) )
     {

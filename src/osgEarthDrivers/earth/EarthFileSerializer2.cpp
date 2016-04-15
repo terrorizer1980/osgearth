@@ -33,8 +33,53 @@ using namespace osgEarth;
 #undef  LC
 #define LC "[EarthSerializer2] "
 
+static const char * const PATH_SEPARATORS = "/\\";
+static unsigned int PATH_SEPARATORS_LEN = 2;
+
 namespace
 {
+
+	class PathIterator {
+		public:
+			PathIterator(const std::string & v);
+			bool valid() const { return start!=end; }
+			PathIterator & operator++();
+			std::string operator*();
+
+		protected:
+			std::string::const_iterator end;     ///< End of path string
+			std::string::const_iterator start;   ///< Points to the first char of an element, or ==end() if no more
+			std::string::const_iterator stop;    ///< Points to the separator after 'start', or ==end()
+
+			/// Iterate until 'it' points to something different from a separator
+			std::string::const_iterator skipSeparators(std::string::const_iterator it);
+			std::string::const_iterator next(std::string::const_iterator it);
+		};
+		PathIterator::PathIterator(const std::string & v) : end(v.end()), start(v.begin()), stop(v.begin()) { operator++(); }
+		PathIterator & PathIterator::operator++()
+		{
+			if (!valid()) return *this;
+				start = skipSeparators(stop);
+			if (start != end) stop = next(start);
+			return *this;
+		}
+		std::string PathIterator::operator*()
+		{
+			if (!valid()) return std::string();
+			return std::string(start, stop);
+		}
+
+		std::string::const_iterator PathIterator::skipSeparators(std::string::const_iterator it)
+		{
+			for (; it!=end && std::find_first_of(it, it+1, PATH_SEPARATORS, PATH_SEPARATORS+PATH_SEPARATORS_LEN) != it+1; ++it) {}
+			return it;
+		}
+
+		std::string::const_iterator PathIterator::next(std::string::const_iterator it)
+		{
+			return std::find_first_of(it, end, PATH_SEPARATORS, PATH_SEPARATORS+PATH_SEPARATORS_LEN);
+		}
+
     /**
      * Looks at each key in a Config and tries to match that key to a shared library name;
      * loads the shared library associated with the name. This will "pre-load" all the DLLs
@@ -122,17 +167,31 @@ namespace
             _rewriteAbsolutePaths = value;
         }
 
+        bool isLocation(const Config& input) const
+        {
+            if ( input.value().empty() )
+                return false;
+
+            if ( input.referrer().empty() )
+                return false;
+
+            return 
+                input.key() == "url"      ||
+                input.key() == "uri"      ||
+                input.key() == "href"     ||
+                input.key() == "filename" ||
+                input.key() == "file"     ||
+                input.key() == "pathname" ||
+                input.key() == "path";
+        }
+
         void apply(Config& input)
         {
-            // only consider "simple" values (no children) with a set referrer:
-            if ( !input.referrer().empty() ) //&& input.isSimple() )
+            if ( isLocation(input) )
             {
-                // If the input has a referrer set, it might be a path. Rewrite the path
-                // to be relative to the new referrer that was passed into this visitor.
-
                 // resolve the absolute path of the input:
                 URI inputURI( input.value(), URIContext(input.referrer()) );
-                
+
                 std::string newValue = resolve(inputURI);
                 if ( newValue != input.value() )
                 {
@@ -162,12 +221,18 @@ namespace
         {
             std::string inputAbsPath = osgDB::convertFileNameToUnixStyle( inputURI.full() );
 
+            // if the abs paths have different roots, no resolution; use the input.
+            if (osgDB::getPathRoot(inputAbsPath) != osgDB::getPathRoot(_newReferrerFolder))
+            {
+                return inputURI.full();
+            }
+
             // see whether the file exists (this is how we verify that it's actually a path)
-            if ( osgDB::fileExists(inputAbsPath) )
+            //if ( osgDB::fileExists(inputAbsPath) )
             {
                 if ( !osgDB::isAbsolutePath(inputURI.base()) || _rewriteAbsolutePaths )
                 {
-                    std::string inputNewRelPath = osgDB::getPathRelative( _newReferrerFolder, inputAbsPath );
+                    std::string inputNewRelPath = getPathRelative( _newReferrerFolder, inputAbsPath );
                     
                     //OE_DEBUG << LC << "\n"
                     //    "   Rewriting \"" << input.value() << "\" as \"" << inputNewRelPath << "\"\n"
@@ -180,6 +245,49 @@ namespace
 
             return inputURI.base();
         }
+
+		std::string getPathRelative(const std::string& from, const std::string& to)
+		{
+			// This implementation is not 100% robust, and should be replaced with C++0x "std::path" as soon as possible.
+
+			// Definition: an "element" is a part between slashes. Ex: "/a/b" has two elements ("a" and "b").
+			// Algorithm:
+			// 1. If paths are neither both absolute nor both relative, then we cannot do anything (we need to make them absolute, but need additionnal info on how to make it). Return.
+			// 2. If both paths are absolute and root isn't the same (for Windows only, as roots are of the type "C:", "D:"), then the operation is impossible. Return.
+			// 3. Iterate over two paths elements until elements are equal
+			// 4. For each remaining element in "from", add ".." to result
+			// 5. For each remaining element in "to", add this element to result
+
+			// 1 & 2
+			const std::string root = osgDB::getPathRoot(from);
+			if (root != osgDB::getPathRoot(to)) {
+				OSG_INFO << "Cannot relativise paths. From=" << from << ", To=" << to << ". Returning 'to' unchanged." << std::endl;
+				//return to;
+				return osgDB::getSimpleFileName(to);
+			}
+
+			// 3
+			PathIterator itFrom(from), itTo(to);
+			// Iterators may point to Windows roots. As we tested they are equal, there is no need to ++itFrom and ++itTo.
+			// However, if we got an Unix root, we must add it to the result.
+			// std::string res(root == "/" ? "/" : "");
+			// Since result is a relative path, even in unix, no need to add / to the result first.
+			std::string res = "";
+			for(; itFrom.valid() && itTo.valid() && *itFrom==*itTo; ++itFrom, ++itTo) {}
+
+			// 4
+			for(; itFrom.valid(); ++itFrom) res += "../";
+
+			// 5
+			for(; itTo.valid(); ++itTo) res += *itTo + "/";
+
+			// Remove trailing slash before returning
+			if (!res.empty() && std::find_first_of(res.rbegin(), res.rbegin()+1, PATH_SEPARATORS, PATH_SEPARATORS+PATH_SEPARATORS_LEN) != res.rbegin()+1)
+			{
+				return res.substr(0, res.length()-1);
+			}
+			return res;
+			}
     };
 }
 
@@ -307,7 +415,7 @@ EarthFileSerializer2::deserialize( const Config& conf, const std::string& referr
             }
             else
             {
-                OE_INFO << LC << "Failed to load an extension for \"" << i->key() << "\"\n";
+                OE_DEBUG << LC << "Failed to load an extension for \"" << i->key() << "\"\n";
             }
         }
     }
@@ -323,7 +431,7 @@ EarthFileSerializer2::serialize(const MapNode* input, const std::string& referre
     mapConf.set("version", "2");
 
     if ( !input || !input->getMap() )
-        return mapConf;
+        return mapConf; 
 
     const Map* map = input->getMap();
     MapFrame mapf( map, Map::ENTIRE_MODEL );
@@ -370,7 +478,7 @@ EarthFileSerializer2::serialize(const MapNode* input, const std::string& referre
         mapConf.add( ext );
     }
 
-#if 0 // removed until it can be debugged.
+#if 1 // removed until it can be debugged.
     // Re-write pathnames in the Config so they are relative to the new referrer.
     if ( _rewritePaths && !referrer.empty() )
     {

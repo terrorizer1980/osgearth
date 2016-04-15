@@ -119,13 +119,16 @@ namespace
 
             if ( engine.valid() )
             {
-                PagerLoader* loader = static_cast<PagerLoader*>( engine->getLoader() );
-                TileKey key = loader->getTileKeyForRequest(requestUID);
-
-                MapFrame frame(engine->getMap());
-                if ( frame.isCached(key) )
+                PagerLoader* loader = dynamic_cast<PagerLoader*>( engine->getLoader() );
+                if ( loader )
                 {
-                    result = LOCAL_FILE;
+                    TileKey key = loader->getTileKeyForRequest(requestUID);
+
+                    MapFrame frame(engine->getMap());
+                    if ( frame.isCached(key) )
+                    {
+                        result = LOCAL_FILE;
+                    }
                 }
 
                 //OE_NOTICE << "key=" << key.str() << " : " << (result==LOCAL_FILE?"local":"remote") << "\n";
@@ -231,7 +234,7 @@ PagerLoader::load(Loader::Request* request, float priority, osg::NodeVisitor& nv
 
         // scale from LOD to 0..1 range, more or less
         // TODO: need to balance this with normal PagedLOD priority setup
-        float scaledPriority = priority / 20.0f;
+        //float scaledPriority = priority / 20.0f;
 
         nv.getDatabaseRequestHandler()->requestNodeFile(
             filename,

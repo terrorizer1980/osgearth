@@ -233,6 +233,13 @@ _mode   ( 0 )
         l2CacheSize = as<int>( std::string(l2env), 0 );
     }
 
+    // Env cache-only mode also disables the L2 cache.
+    char const* noCacheEnv = ::getenv( "OSGEARTH_MEMORY_PROFILE" );
+    if ( noCacheEnv )
+    {
+        l2CacheSize = 0;
+    }
+
     // Initialize the l2 cache if it's size is > 0
     if ( l2CacheSize > 0 )
     {
@@ -360,7 +367,7 @@ TileSource::createImage(const TileKey&        key,
     // Try to get it from the memcache fist
     if (_memCache.valid())
     {
-        ReadResult r = _memCache->getOrCreateDefaultBin()->readImage( key.str() );
+        ReadResult r = _memCache->getOrCreateDefaultBin()->readImage(key.str(), 0L);
         if ( r.succeeded() )
             return r.releaseImage();
     }
@@ -373,7 +380,7 @@ TileSource::createImage(const TileKey&        key,
     if ( newImage.valid() && _memCache.valid() )
     {
         // cache it to the memory cache.
-        _memCache->getOrCreateDefaultBin()->write( key.str(), newImage.get() );
+        _memCache->getOrCreateDefaultBin()->write(key.str(), newImage.get(), 0L);
     }
 
     return newImage.release();
@@ -390,7 +397,7 @@ TileSource::createHeightField(const TileKey&        key,
     // Try to get it from the memcache first:
     if (_memCache.valid())
     {
-        ReadResult r = _memCache->getOrCreateDefaultBin()->readObject( key.str() );
+        ReadResult r = _memCache->getOrCreateDefaultBin()->readObject(key.str(), 0L);
         if ( r.succeeded() )
             return r.release<osg::HeightField>();
     }
@@ -402,7 +409,7 @@ TileSource::createHeightField(const TileKey&        key,
 
     if ( newHF.valid() && _memCache.valid() )
     {
-        _memCache->getOrCreateDefaultBin()->write( key.str(), newHF.get() );
+        _memCache->getOrCreateDefaultBin()->write(key.str(), newHF.get(), 0L);
     }
 
     //TODO: why not just newHF.release()? -gw

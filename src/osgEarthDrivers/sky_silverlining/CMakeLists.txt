@@ -2,30 +2,17 @@ IF(SILVERLINING_FOUND)
 
 SET(TARGET_SRC 
     SilverLiningDriver.cpp
-    SilverLiningNode.cpp
-	SilverLiningContextNode.cpp
-    SilverLiningContext.cpp
-    SilverLiningSkyDrawable.cpp
-    SilverLiningCloudsDrawable.cpp
-	SilverLiningContextNode.cpp
 )
+ 
 SET(TARGET_H
-    SilverLiningOptions
-    SilverLiningNode
-	SilverLiningContextNode
-    SilverLiningContext
-    SilverLiningSkyDrawable
-    SilverLiningCloudsDrawable
-	SilverLiningContextNode
 )
 
 INCLUDE_DIRECTORIES( 
-    ${SILVERLINING_INCLUDE_DIR}
 )
 
 SET(TARGET_COMMON_LIBRARIES ${TARGET_COMMON_LIBRARIES}
-	${SILVERLINING_LIBRARY}
     osgEarthUtil
+    osgEarthSilverLining
 )
 
 SETUP_PLUGIN(osgearth_sky_silverlining)
@@ -33,7 +20,6 @@ SETUP_PLUGIN(osgearth_sky_silverlining)
 
 # to install public driver includes:
 SET(LIB_NAME sky_silverlining)
-SET(LIB_PUBLIC_HEADERS SilverLiningOptions)
 
 INCLUDE(ModuleInstallOsgEarthDriverIncludes OPTIONAL)
 

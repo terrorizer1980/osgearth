@@ -157,6 +157,17 @@ StyleSheet::getResourceLibrary( const std::string& name ) const
         return 0L;
 }
 
+ResourceLibrary*
+StyleSheet::getDefaultResourceLibrary() const
+{
+    Threading::ScopedReadLock shared( const_cast<StyleSheet*>(this)->_resLibsMutex );
+    if ( _resLibs.size() > 0 )
+        return _resLibs.begin()->second.get();
+    else
+        return 0L;
+}
+
+
 void StyleSheet::setScript( ScriptDef* script )
 {
   _script = script;
@@ -201,6 +212,8 @@ StyleSheet::getConfig() const
             scriptConf.set( "language", _script->language );
         if ( _script->uri.isSet() )
             scriptConf.set( "url", _script->uri->base() );
+        if ( !_script->profile.empty() )
+            scriptConf.set( "profile", _script->profile );
         else if ( !_script->code.empty() )
             scriptConf.value() = _script->code;
 
@@ -246,6 +259,9 @@ StyleSheet::mergeConfig( const Config& conf )
 
         std::string lang = i->value("language");
         _script->language = lang.empty() ? "javascript" : lang;
+
+        std::string profile = i->value("profile");
+        _script->profile = profile;
     }
 
     // read any style class definitions. either "class" or "selector" is allowed

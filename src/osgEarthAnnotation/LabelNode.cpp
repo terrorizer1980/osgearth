@@ -26,6 +26,7 @@
 #include <osgEarthSymbology/Color>
 #include <osgEarth/Registry>
 #include <osgEarth/ShaderGenerator>
+#include <osgEarth/Decluttering>
 #include <osgText/Text>
 #include <osg/Depth>
 #include <osgUtil/IntersectionVisitor>
@@ -45,7 +46,7 @@ LabelNode::LabelNode(MapNode*            mapNode,
                      const std::string&  text,
                      const Style&        style ) :
 
-OrthoNode( mapNode, position ),
+GeoPositionNode( mapNode, position ),
 _text    ( text )
 {
     init( style );
@@ -56,7 +57,7 @@ LabelNode::LabelNode(MapNode*            mapNode,
                      const std::string&  text,
                      const TextSymbol*   symbol ) :
 
-OrthoNode( mapNode, position ),
+GeoPositionNode( mapNode, position ),
 _text    ( text )
 {
     Style style;
@@ -66,7 +67,7 @@ _text    ( text )
 
 LabelNode::LabelNode(const std::string&  text,
                      const Style&        style ) :
-OrthoNode(),
+GeoPositionNode(),
 _text    ( text )
 {
     init( style );
@@ -75,14 +76,14 @@ _text    ( text )
 LabelNode::LabelNode(MapNode*            mapNode,
                      const GeoPoint&     position,
                      const Style&        style ) :
-OrthoNode( mapNode, position )
+GeoPositionNode( mapNode, position )
 {
     init( style );
 }
 
 LabelNode::LabelNode(MapNode*            mapNode,
                      const Style&        style ) :
-OrthoNode( mapNode, GeoPoint::INVALID )
+GeoPositionNode( mapNode, GeoPoint::INVALID )
 {
     init( style );
 }
@@ -90,16 +91,18 @@ OrthoNode( mapNode, GeoPoint::INVALID )
 void
 LabelNode::init( const Style& style )
 {
+    Decluttering::setEnabled( this->getOrCreateStateSet(), true );
+
     _geode = new osg::Geode();
 
     // ensure that (0,0,0) is the bounding sphere control/center point.
     // useful for things like horizon culling.
     _geode->setComputeBoundingSphereCallback(new ControlPointCallback());
 
-    getAttachPoint()->addChild( _geode.get() );
+    getPositionAttitudeTransform()->addChild( _geode.get() );
 
     osg::StateSet* stateSet = _geode->getOrCreateStateSet();
-    stateSet->setAttributeAndModes( new osg::Depth(osg::Depth::ALWAYS, 0, 1, false), 1 );
+    stateSet->setAttributeAndModes( new osg::Depth(osg::Depth::ALWAYS, 0, 1, false), 1 );    
 
     setStyle( style );
 }
@@ -130,8 +133,6 @@ LabelNode::setStyle( const Style& style )
         OE_WARN << LC << "Illegal state: cannot change a LabelNode that is not dynamic" << std::endl;
         return;
     }
-    
-    this->clearDecoration();
 
     _geode->removeDrawables( 0, _geode->getNumDrawables() );
 
@@ -145,7 +146,7 @@ LabelNode::setStyle( const Style& style )
     osg::Drawable* t = AnnotationUtils::createTextDrawable( _text, symbol, osg::Vec3(0,0,0) );
     _geode->addDrawable(t);
     _geode->setCullingActive(false);
-
+    
     applyStyle( _style );
 
     setLightingIfNotSet( false );
@@ -154,24 +155,36 @@ LabelNode::setStyle( const Style& style )
         this,
         "osgEarth.LabelNode",
         Registry::stateSetCache() );
+
+    updateLayoutData();
 }
 
 void
-LabelNode::setAnnotationData( AnnotationData* data )
+LabelNode::setPriority(float value)
 {
-    OrthoNode::setAnnotationData( data );
+    GeoPositionNode::setPriority(value);
+    updateLayoutData();
+}
 
-    // override this method so we can attach the anno data to the drawables.
-    for(unsigned i=0; i<_geode->getNumDrawables(); ++i)
+void
+LabelNode::updateLayoutData()
+{
+    osg::ref_ptr<LayoutData> data = new LayoutData();
+    data->_priority = getPriority();
+    const TextSymbol* ts = getStyle().get<TextSymbol>();
+    if (ts) data->_pixelOffset = ts->pixelOffset().get();
+
+    // re-apply annotation drawable-level stuff as neccesary.
+    for (unsigned i = 0; i<_geode->getNumDrawables(); ++i)
     {
-        _geode->getDrawable(i)->setUserData( data );
+        _geode->getDrawable(i)->setUserData(data.get());
     }
 }
 
 void
 LabelNode::setDynamic( bool dynamic )
 {
-    OrthoNode::setDynamic( dynamic );
+    GeoPositionNode::setDynamic( dynamic );
 
     osgText::Text* d = dynamic_cast<osgText::Text*>(_geode->getDrawable(0));
     if ( d )
@@ -187,10 +200,10 @@ LabelNode::setDynamic( bool dynamic )
 OSGEARTH_REGISTER_ANNOTATION( label, osgEarth::Annotation::LabelNode );
 
 
-LabelNode::LabelNode(MapNode*               mapNode,
+LabelNode::LabelNode(MapNode*              mapNode,
                      const Config&         conf,
                      const osgDB::Options* dbOptions ) :
-OrthoNode( mapNode, GeoPoint::INVALID )
+GeoPositionNode( mapNode, conf )
 {
     optional<Style> style;
 
@@ -198,9 +211,6 @@ OrthoNode( mapNode, GeoPoint::INVALID )
     conf.getIfSet   ( "text",  _text );
 
     init( *style );
-
-    if ( conf.hasChild("position") )
-        setPosition( GeoPoint(conf.child("position")) );
 }
 
 Config
@@ -209,7 +219,6 @@ LabelNode::getConfig() const
     Config conf( "label" );
     conf.add   ( "text",   _text );
     conf.addObj( "style",  _style );
-    conf.addObj( "position", getPosition() );
 
     return conf;
 }

@@ -394,17 +394,19 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
         std::stringstream buf;
 
         buf << "#version " TCS_GLSL_VERSION "\n"
-            << "#pragma vp_name VP Tessellation Control Shader (TCS) Main\n";
+            << "#pragma vp_name VP Tessellation Control Shader (TCS) Main\n"
+            // For gl_MaxPatchVertices
+            << "#extension GL_NV_gpu_shader5 : enable\n";
 
         if ( hasVS )
         {
               buf << "\n// TCS stage inputs:\n"
-                 << "in " << vertdata << " vp_in []; \n";
+                 << "in " << vertdata << " vp_in [gl_MaxPatchVertices]; \n";
         }
 
         // The TES is mandatory.
         buf << "\n// TCS stage outputs to TES: \n"
-            << "out " << vertdata << " vp_out []; \n";
+            << "out " << vertdata << " vp_out [gl_MaxPatchVertices]; \n";
 
         // Stage globals.
         buf << "\n// TCS stage globals \n";
