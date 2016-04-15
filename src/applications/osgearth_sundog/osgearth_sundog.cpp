@@ -133,8 +133,7 @@ main(int argc, char** argv)
 
         // TODO: uncommenting the callback on the following line results in a crash when SeedClouds is called.
         osg::ref_ptr<osgEarth::SilverLining::SilverLiningNode> sky = new osgEarth::SilverLining::SilverLiningNode(mapNode, slOptions, new SetupSL() );
-		//osg::ref_ptr<osgEarth::SilverLining::SilverLiningNode> sky = new osgEarth::SilverLining::SilverLiningNode(mapNode, slOptions, new SetupSL() );
-
+	
         node->addChild(sky);
 
 
