@@ -64,6 +64,9 @@ namespace osgEarth { namespace SilverLining
 
 		optional<bool>& updateEnvMap() { return _updateEnvMap; }
         const optional<bool>& updateEnvMap() const { return _updateEnvMap; }
+
+		optional<osg::Vec3f>& cloudLocation() { return _cloudLocation; }
+        const optional<osg::Vec3f>& cloudLocation() const { return _cloudLocation; }
 		
 
     public:
@@ -75,7 +78,8 @@ namespace osgEarth { namespace SilverLining
             conf.addIfSet("clouds", _drawClouds);
 			conf.addIfSet("clouds_max_altitude", _cloudsMaxAltitude);
 			conf.addIfSet("update_env_map", _updateEnvMap);
-            return conf;
+			conf.addIfSet("cloud_location_lat", _cloudLocation);
+		    return conf;
         }
 
     protected:
@@ -92,6 +96,7 @@ namespace osgEarth { namespace SilverLining
             conf.getIfSet("clouds", _drawClouds);
 			conf.getIfSet("clouds_max_altitude", _cloudsMaxAltitude);
 			conf.getIfSet("update_env_map", _updateEnvMap);
+			conf.getIfSet("fixed_cloud_location", _cloudLocation);
         }
 
         osgEarth::optional<std::string> _user;
@@ -99,8 +104,10 @@ namespace osgEarth { namespace SilverLining
         osgEarth::optional<std::string> _resourcePath;
         osgEarth::optional<bool>        _drawClouds;
 		osgEarth::optional<double>      _cloudsMaxAltitude;
+		
 		int                             _lastCullFrameNumber;
 		osgEarth::optional<bool>        _updateEnvMap;
+		osgEarth::optional<osg::Vec3f>   _cloudLocation;
     };
 
 } } // namespace osgEarth::SilverLiningPlugin

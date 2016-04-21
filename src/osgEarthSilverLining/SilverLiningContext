@@ -88,13 +88,15 @@ namespace osgEarth { namespace SilverLining
 		void setUpdateEnvMap(bool value) {_updateEnvMap = value;}
 		bool getUpdateEnvMap() const {return _updateEnvMap;}
 		void updateEnvMap();
+		void setupClouds();
+		bool _setupClouds;
     protected:
 
         virtual ~SilverLiningContext();
 
     private:
 
-        void setupClouds();
+        
 
     private:
         ::SilverLining::Atmosphere* _atmosphere;
@@ -124,6 +126,10 @@ namespace osgEarth { namespace SilverLining
         osg::ref_ptr<Callback> _callback;
 
         Atmosphere* _atmosphereWrapper;
+		bool _useFixedRotation;
+		osg::Vec3d _fixedLocation;
+		//temp
+		int _cumulusCongestusLayer;
 
     };
 

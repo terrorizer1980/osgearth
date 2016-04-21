@@ -36,7 +36,11 @@ _atmosphere           ( 0L ),
 _clouds               ( 0L ),
 _minAmbient           ( 0,0,0,0 ),
 _envMapID			  ( 0 ),
-_updateEnvMap		  ( false )
+_updateEnvMap		  ( false ),
+_useFixedRotation     (false),
+_fixedLocation     (0,0,0),
+_cumulusCongestusLayer (-1),
+_setupClouds(false)
 {
     // Create a SL atmosphere (the main SL object).
     // TODO: plug in the username + license key.
@@ -49,6 +53,11 @@ _updateEnvMap		  ( false )
         options.licenseCode()->c_str() );
 
     _atmosphereWrapper = new Atmosphere((uintptr_t)_atmosphere);
+	optional<osg::Vec3f> cl = options.cloudLocation();
+	_fixedLocation.set(cl.get().y(),cl.get().x(),cl.get().z());
+
+	if(_fixedLocation.x() != 0)
+		_useFixedRotation = true;
 }
 
 SilverLiningContext::~SilverLiningContext()
@@ -100,6 +109,11 @@ SilverLiningContext::setMinimumAmbient(const osg::Vec4f& value)
 void
 SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 {
+	if(_setupClouds)
+	{
+		setupClouds();
+		_setupClouds = false;
+	}
     if ( !_initAttempted && !_initFailed )
     {
         // lock/double-check:
@@ -110,7 +124,7 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 
             // constant random seed ensures consistent clouds across windows
             // TODO: replace this with something else since this is global! -gw
-            srand(0);
+            //srand(0);
 		
             int result = _atmosphere->Initialize(
                 ::SilverLining::Atmosphere::OPENGL,
@@ -127,10 +141,34 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
             {
                 OE_INFO << LC << "SilverLining initialized OK!" << std::endl;
 
-                // Defaults for a projected terrain. ECEF terrain vectors are set
-                // in updateLocation().
-                _atmosphere->SetUpVector( 0.0, 0.0, 1.0 );
-                _atmosphere->SetRightVector( 1.0, 0.0, 0.0 );
+				if(_useFixedRotation)
+				{
+					//osg::Vec3d latLonAlt(-122.169,46.510,10000);
+					osg::Vec3d worldpos;
+					_srs->transformToWorld(_fixedLocation, worldpos);
+					osg::Vec3d up = worldpos;
+					up.normalize();
+					osg::Vec3d north = osg::Vec3d(0, 1, 0);
+					osg::Vec3d east = north ^ up;
+
+					// Check for edge case of north or south pole
+					if (east.length2() == 0)
+					{
+						east = osg::Vec3d(1, 0, 0);
+					}
+					east.normalize();
+
+					_atmosphere->SetUpVector(up.x(), up.y(), up.z());
+					_atmosphere->SetRightVector(east.x(), east.y(), east.z());
+				}
+				else
+				{
+					// Defaults for a projected terrain. ECEF terrain vectors are set
+					// in updateLocation().
+					_atmosphere->SetUpVector( 0.0, 0.0, 1.0 );
+					_atmosphere->SetRightVector( 1.0, 0.0, 0.0 );
+				}
+
 				
 #if 0 // todo: review this
                 _maxAmbientLightingAlt = 
@@ -155,7 +193,10 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 void
 SilverLiningContext::setupClouds()
 {
-    /*::SilverLining::CloudLayer* clouds = ::SilverLining::CloudLayerFactory::Create( ::CUMULUS_CONGESTUS );
+	if(_cumulusCongestusLayer > -1)
+		_atmosphere->GetConditions()->RemoveCloudLayer(_cumulusCongestusLayer);
+
+    ::SilverLining::CloudLayer* clouds = ::SilverLining::CloudLayerFactory::Create( ::CUMULUS_CONGESTUS );
     clouds->SetIsInfinite( true );
     clouds->SetFadeTowardEdges(true);
     clouds->SetBaseAltitude( 2000 );
@@ -166,28 +207,11 @@ SilverLiningContext::setupClouds()
     clouds->SetAlpha( 0.8 );
     clouds->GenerateShadowMaps( false );
     clouds->SetLayerPosition(0, 0);
+	//clouds->SetWind(0,0);
 	srand(1234);
 	clouds->SeedClouds( *_atmosphere );
-
-    _atmosphere->GetConditions()->AddCloudLayer( clouds );*/
-
-	::SilverLining::CloudLayer *cumulusCongestusLayer;
-	cumulusCongestusLayer = ::SilverLining::CloudLayerFactory::Create(::CUMULUS_CONGESTUS);
-	cumulusCongestusLayer->SetIsInfinite(true);
-	cumulusCongestusLayer->SetBaseAltitude(2000);
-	cumulusCongestusLayer->SetThickness(500);
-	cumulusCongestusLayer->SetBaseLength(40000);
-	cumulusCongestusLayer->SetBaseWidth(40000);
-	cumulusCongestusLayer->SetDensity(0.3);
-
-	// Note, we pass in X and -Y since this accepts "east" and "south" coordinates.
-	cumulusCongestusLayer->SetLayerPosition(0, 0);
-	cumulusCongestusLayer->SeedClouds(*_atmosphere);
-	cumulusCongestusLayer->GenerateShadowMaps(false);
-	cumulusCongestusLayer->SetWind(0,0);
-
-	_atmosphere->GetConditions()->AddCloudLayer(cumulusCongestusLayer);
-
+    _cumulusCongestusLayer = _atmosphere->GetConditions()->AddCloudLayer( clouds );
+	_clouds = clouds;
 }
 
 void
@@ -254,34 +278,47 @@ SilverLiningContext::updateLocation()
 
     if ( _srs->isGeographic() )
     {
-        // Get new local orientation
-        osg::Vec3d up = _cameraPos;
-        up.normalize();
-        osg::Vec3d north = osg::Vec3d(0, 1, 0);
-        osg::Vec3d east = north ^ up;
+        
+		if(!_useFixedRotation)
+		{
+			// Get new local orientation
+			osg::Vec3d up = _cameraPos;
 
-        // Check for edge case of north or south pole
-        if (east.length2() == 0)
-        {
-            east = osg::Vec3d(1, 0, 0);
-        }
+			up.normalize();
+			osg::Vec3d north = osg::Vec3d(0, 1, 0);
+			osg::Vec3d east = north ^ up;
 
-        east.normalize();
+			// Check for edge case of north or south pole
+			if (east.length2() == 0)
+			{
+				east = osg::Vec3d(1, 0, 0);
+			}
 
-        _atmosphere->SetUpVector(up.x(), up.y(), up.z());
-        _atmosphere->SetRightVector(east.x(), east.y(), east.z());
+			east.normalize();
+
+			_atmosphere->SetUpVector(up.x(), up.y(), up.z());
+			_atmosphere->SetRightVector(east.x(), east.y(), east.z());
+		}
 
         // Get new lat / lon / altitude
         osg::Vec3d latLonAlt;
         _srs->transformFromWorld(_cameraPos, latLonAlt);
 
         ::SilverLining::Location loc;
-        loc.SetAltitude (osg::clampBelow(latLonAlt.z(), 5000.0 )); //hack to avoid cloud flickering at high altitude
+       //loc.SetAltitude (osg::clampBelow(latLonAlt.z(), 5000.0 )); //hack to avoid cloud flickering at high altitude
+		loc.SetAltitude ( latLonAlt.z() ); //hack to avoid cloud flickering at high altitude
         loc.SetLongitude( latLonAlt.x() );
         loc.SetLatitude ( latLonAlt.y() );
-
+		
+		//loc.SetAltitude ( 10000); 
+		//loc.SetLongitude( -122.1696677949447 );
+		//loc.SetLatitude ( 46.5107100574977 );
 
         _atmosphere->GetConditions()->SetLocation( loc );
+		//if(_clouds)
+			//_clouds->SetLayerPosition(0,0);
+			//_clouds->SetLayerPosition(latLonAlt.y() , latLonAlt.x());
+			//_clouds->MoveClouds(0,0,0);
 
 
 #if 0 //TODO: figure out why we need to call this a couple times before

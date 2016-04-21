@@ -114,10 +114,12 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
             if( _cloudsDrawable )
             {
 				_cloudsDrawable->dirtyBound();
-			    /*if ( _lastAltitude <= *_options.cloudsMaxAltitude() )
+			   /*if ( _lastAltitude <= *_options.cloudsMaxAltitude() )
                 {
                     if ( _cloudsDrawable->getNumParents() == 0 )
 					{
+						//recreate clouds
+						//_SL->_setupClouds = true;
                         _geode->addDrawable( _cloudsDrawable.get() );
 					}
 					_cloudsDrawable->dirtyBound();
