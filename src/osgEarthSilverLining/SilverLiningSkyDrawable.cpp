@@ -53,6 +53,21 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         _SL->initialize( renderInfo );
 
 		const osg::State* state = renderInfo.getState();
+
+		osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ]; // thread safe.
+		if ( adapters.empty() )
+		{
+			adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetSkyShader()) );
+			adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetBillboardShader()) );
+			adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetStarShader()) );
+			adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetPrecipitationShader()) );
+
+			SL_VECTOR(unsigned) handles = _SL->getAtmosphere()->GetActivePlanarCloudShaders();
+			for(int i=0; i<handles.size(); ++i)          
+				adapters.push_back( new osgEarth::NativeProgramAdapter(state, handles[i]) );
+		}
+		adapters.apply( state );
+
 		
         double fovy, ar, znear, zfar;
        _SL->setCamera(camera);
