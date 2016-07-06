@@ -28,6 +28,7 @@
 namespace osgEarth { namespace SilverLining
 {
 	class SilverLiningContext;
+	class SilverLiningNode;
 
 	/**
 	Node that hold the silverlining context,
@@ -36,16 +37,20 @@ namespace osgEarth { namespace SilverLining
 	instantiate this node when new cameras are detected in
 	it's traverse method
 	*/
-	class SilverLiningContextNode : public osg::Geode, public osgEarth::Util::EnvironmentMapNode
+	class SilverLiningContextNode : public osg::Group, public osgEarth::Util::EnvironmentMapNode
 	{
 	public:
-		SilverLiningContextNode(osg::Light* light,
-		const osgEarth::MapNode*       map,
-		const SilverLiningOptions& options );
+		SilverLiningContextNode(SilverLiningNode* node,
+								osg::Light* light,
+								const osgEarth::MapNode*       map,
+								const SilverLiningOptions& options );
 		bool hasClouds() const { if( _cloudsDrawable) return true; else return false;}
 		osg::ref_ptr<osg::Geode> _geode;
 	public: // osg::Node
 		void traverse(osg::NodeVisitor&);
+		  // callbacks from SilverLiningNode.
+        void onSetDateTime();
+        void onSetMinimumAmbient();
 		osg::ref_ptr<SilverLiningContext> getContext() const {return _SL;}
 		//osgEarth::Util::EnvironmentMapNode
 		int getEnvMapTextureID();
@@ -63,6 +68,7 @@ namespace osgEarth { namespace SilverLining
 		int _envID;
 		bool _updateEnvMap;
 		const osgEarth::MapNode * _map;
+		SilverLiningNode* _silverLiningNode;
 	};
 
 } } // namespace osgEarth::SilverLining

@@ -81,19 +81,33 @@ void
 void
 	SilverLiningNode::onSetDateTime()
 {
-	
+	for (osg::NodeList::iterator itr = _children.begin();
+		itr != _children.end();
+		++itr)
+	{
+		SilverLiningContextNode* node = dynamic_cast<SilverLiningContextNode* > ((*itr).get());
+		if(node)
+			node->onSetDateTime(); 
+	}
 }
 
 void
 	SilverLiningNode::onSetMinimumAmbient()
 {
-	
+	for (osg::NodeList::iterator itr = _children.begin();
+		itr != _children.end();
+		++itr)
+	{
+		SilverLiningContextNode* node = dynamic_cast<SilverLiningContextNode* > ((*itr).get());
+		if(node)
+			node->onSetMinimumAmbient(); 
+	}
 }
 
 void
 	SilverLiningNode::traverse(osg::NodeVisitor& nv)
 {
-	if ( nv.getVisitorType() == nv.UPDATE_VISITOR )
+	/*if ( nv.getVisitorType() == nv.UPDATE_VISITOR )
 	{
 		for (osg::NodeList::iterator itr = _children.begin();
 		itr != _children.end();
@@ -103,8 +117,8 @@ void
 			if(sky_node)
 				sky_node->traverse(nv);
 		}
-	}
-	else if ( nv.getVisitorType() == nv.CULL_VISITOR )
+	}*/
+	if ( nv.getVisitorType() == nv.CULL_VISITOR )
 	{
 		osgUtil::CullVisitor* cv = Culling::asCullVisitor(nv);
 		osg::Camera* camera  = cv->getCurrentCamera();
@@ -113,27 +127,25 @@ void
 			SilverLiningContextNode *sky_node = dynamic_cast<SilverLiningContextNode *>(camera->getUserData());
 			if (!sky_node) 
 			{
-				static bool first_camera = true;
-				if (first_camera)
-				{
-					sky_node = new SilverLiningContextNode(_light.get(), _map, _options);
-					first_camera = false;
-				}
-				else
-					sky_node = new SilverLiningContextNode(NULL,_map,_options);
-
-				static int nodeMask = 0x1;
+				sky_node = new SilverLiningContextNode(this, _light.get(), _map, _options);
+				
+				/*static int nodeMask = 0x1;
 				sky_node->_geode->setNodeMask(nodeMask);
-				camera->setNodeMask(nodeMask);
+				
+				camera->setCullMask(nodeMask);
 				nodeMask = nodeMask << 1;
+				te
+				int inheritanceMask =(osg::CullSettings::VariablesMask::ALL_VARIABLES &	~osg::CullSettings::VariablesMask::CULL_MASK);
+				camera->setInheritanceMask(inheritanceMask);*/
+
 				camera->setUserData(sky_node);
 				addChild(sky_node);
 			}
 
-			::SilverLining::LocalTime utcTime;
-			utcTime.SetFromEpochSeconds(getDateTime().asTimeStamp());
-			sky_node->getContext()->getAtmosphere()->GetConditions()->SetTime(utcTime);
-			sky_node->getContext()->setMinimumAmbient(getMinimumAmbient());
+			//::SilverLining::LocalTime utcTime;
+			//utcTime.SetFromEpochSeconds(getDateTime().asTimeStamp());
+			//sky_node->getContext()->getAtmosphere()->GetConditions()->SetTime(utcTime);
+			//sky_node->getContext()->setMinimumAmbient(getMinimumAmbient());
 		}
 	}
 	osgEarth::Util::SkyNode::traverse( nv );

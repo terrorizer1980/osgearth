@@ -51,6 +51,7 @@ void
 			OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
 			#endif
 			osg::State* state = renderInfo.getState();
+			state->disableAllVertexArrays();
 
 			// adapt the SL shaders so they can accept OSG uniforms:
 			osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ]; // thread safe.

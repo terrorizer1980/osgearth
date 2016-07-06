@@ -19,6 +19,7 @@
 #include <SilverLining.h>
 
 #include "SilverLiningContextNode"
+#include "SilverLiningNode"
 #include "SilverLiningContext"
 #include "SilverLiningSkyDrawable"
 #include "SilverLiningCloudsDrawable"
@@ -35,8 +36,11 @@
 
 using namespace osgEarth::SilverLining;
 
-SilverLiningContextNode::SilverLiningContextNode(osg::Light* light, const osgEarth::MapNode*       map,
-                                   const SilverLiningOptions& options):
+SilverLiningContextNode::SilverLiningContextNode(SilverLiningNode* node,
+												osg::Light* light, 
+												const osgEarth::MapNode*       map,
+												const SilverLiningOptions& options):
+_silverLiningNode(node),
 _options     (options),
 _lastAltitude(DBL_MAX),
 _map(map)
@@ -48,7 +52,7 @@ _map(map)
     _SL = new SilverLiningContext( options );
     _SL->setLight( light);
     _SL->setSRS  ( map->getMap()->getSRS() );
-
+	
     // Geode to hold each of the SL drawables:
     _geode = new osg::Geode();
     _geode->setCullingActive( false );
@@ -62,7 +66,7 @@ _map(map)
 	if(options.drawClouds().get())
 	{
 		_cloudsDrawable = new CloudsDrawable( this,_SL.get() );
-		char* render_bin = ::getenv("SKY_RB");
+		char* render_bin = ::getenv("OSGEARTH_SL_CLOUDS_RB");
 		if(render_bin)
 		{
 			int render_bin_num = atoi(render_bin);
@@ -82,12 +86,31 @@ _map(map)
     
     // SL requires an update pass.
     ADJUST_UPDATE_TRAV_COUNT(this, +1);
+
+	// initialize date/time
+	onSetDateTime();
 }
 
 SilverLiningContextNode::~SilverLiningContextNode()
 {
 
 }
+
+void
+	SilverLiningContextNode::onSetDateTime()
+{
+	// set the SL local time to UTC/epoch.
+	::SilverLining::LocalTime utcTime;
+	utcTime.SetFromEpochSeconds( _silverLiningNode->getDateTime().asTimeStamp() );
+	_SL->getAtmosphere()->GetConditions()->SetTime( utcTime );
+}
+
+void
+	SilverLiningContextNode::onSetMinimumAmbient()
+{
+	_SL->setMinimumAmbient( _silverLiningNode->getMinimumAmbient() );
+}
+
 
 int SilverLiningContextNode::getEnvMapTextureID() 
 { 
