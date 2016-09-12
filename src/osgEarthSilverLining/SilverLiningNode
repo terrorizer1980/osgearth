@@ -23,6 +23,7 @@
 #include "SilverLiningAPIWrapper"
 #include <osgEarthUtil/Sky>
 #include <osgEarth/Map>
+#include <osgEarth/Containers>
 #include <osgEarth/PhongLightingEffect>
 #include <osg/Light>
 #include <osg/LightSource>
@@ -30,6 +31,7 @@
 namespace osgEarth { namespace SilverLining
 {
     class SilverLiningContext;
+	class SilverLiningContextNode;
 
     /**
      * Node that roots the silverlining adapter.
@@ -43,10 +45,22 @@ namespace osgEarth { namespace SilverLining
 			Callback*                  callback =0L);
     public: // SkyNode
 
+        /** The (sun) light that this node controls */
         osg::Light* getSunLight() { return _light.get(); }
 
+        /** Attach to a view so that this node controls its light. */
         void attach(osg::View* view, int lightNum);
 
+        /** Number of contexts (each context is tied to a camera/viewport) */
+        unsigned getNumContexts() const;
+
+        /** Access the clouds stateset for context "index" so you can modify its render bin details, etc. */
+        osg::StateSet* getCloudsStateSet(unsigned contextIndex) const;
+
+        /** Access the sky stateset for context "index" */
+        osg::StateSet* getSkyStateSet(unsigned contextIndex) const;
+
+    public:
         // callbacks from base class.
         void onSetDateTime();
         void onSetMinimumAmbient();
@@ -62,10 +76,19 @@ namespace osgEarth { namespace SilverLining
         osg::ref_ptr<osg::Light> _light;
 		const SilverLiningOptions _options;
         osg::ref_ptr<osgEarth::PhongLightingEffect> _lighting;
-		int _envID;
-		bool _updateEnvMap;
-		const osgEarth::MapNode* _map;
-		osg::ref_ptr<Callback> _callback;
+        const osgEarth::SpatialReference* _mapSRS;
+        osg::ref_ptr<Callback> _callback;
+
+        typedef std::map<osg::Camera*, osg::ref_ptr<osg::Node> > CameraContextMap;
+        CameraContextMap _contexts;
+        osg::NodeList _contextList;
+
+        typedef std::set<osg::ref_ptr<osg::Camera> > CameraSet;
+        CameraSet _camerasToAdd;
+
+        int _envID;
+        bool _updateEnvMap;
+        const osgEarth::MapNode* _map;
     };
 
 } } // namespace osgEarth::SilverLining

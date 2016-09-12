@@ -1,74 +1,85 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
-* Copyright 2015 Pelican Mapping
-* http://osgearth.org
-*
-* osgEarth is free software; you can redistribute it and/or modify
-* it under the terms of the GNU Lesser General Public License as published by
-* the Free Software Foundation; either version 2 of the License, or
-* (at your option) any later version.
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU Lesser General Public License for more details.
-*
-* You should have received a copy of the GNU Lesser General Public License
-* along with this program.  If not, see <http://www.gnu.org/licenses/>
-*/
+ * Copyright 2015 Pelican Mapping
+ * http://osgearth.org
+ *
+ * osgEarth is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ */
 
+#include "Common"
 #include "SilverLiningOptions"
+#include "SilverLiningCallback"
+#include "SilverLiningAPIWrapper"
 #include <osgEarthUtil/Sky>
 #include <osgEarth/Map>
-#include <osgEarth/MapNode>
 #include <osgEarth/PhongLightingEffect>
 #include <osg/Light>
 #include <osg/LightSource>
-#include <OpenThreads/Mutex>
+
 namespace osgEarth { namespace SilverLining
 {
-	class SilverLiningContext;
-	class SilverLiningNode;
+    class SilverLiningContext;
+    class SilverLiningNode;
 
-	/**
-	Node that hold the silverlining context,
-	one for each camera in the scene. 
-	The parent node, SilverLiningNode, is responsible for 
-	instantiate this node when new cameras are detected in
-	it's traverse method
-	*/
-	class SilverLiningContextNode : public osg::Group, public osgEarth::Util::EnvironmentMapNode
-	{
-	public:
-		SilverLiningContextNode(SilverLiningNode* node,
-								osg::Light* light,
-								const osgEarth::MapNode*       map,
-								const SilverLiningOptions& options );
-		bool hasClouds() const { if( _cloudsDrawable) return true; else return false;}
-		osg::ref_ptr<osg::Geode> _geode;
-	public: // osg::Node
-		void traverse(osg::NodeVisitor&);
-		  // callbacks from SilverLiningNode.
+    /**
+     * Node that roots the silverlining adapter.
+     */
+    class SilverLiningContextNode : public osg::Group
+    {
+    public:
+        SilverLiningContextNode(
+            SilverLiningNode*          node,
+            osg::Camera*               camera,
+            osg::Light*                light,
+            const osgEarth::MapNode*       map,
+            const SilverLiningOptions& options,
+            Callback*                  callback =0L);
+
+    public: 
+        void attach(osg::View* view, int lightNum);
+
+        // callbacks from SilverLiningNode.
         void onSetDateTime();
         void onSetMinimumAmbient();
-		osg::ref_ptr<SilverLiningContext> getContext() const {return _SL;}
-		//osgEarth::Util::EnvironmentMapNode
-		int getEnvMapTextureID();
-#ifdef SL_USE_MUTEX
-		mutable OpenThreads::Mutex _mutex;
-#endif
-	protected:
-		virtual ~SilverLiningContextNode();
+        //get target camera
+        osg::Camera* getTargetCamera() const {return _camera;}
+        osg::ref_ptr<osg::Geode> getSLGeode() {return _geode;}
+        SilverLiningContext* getSLContext() {return _SL.get();}
 
-		osg::ref_ptr<SilverLiningContext> _SL;
-		osg::Drawable* _skyDrawable;
-		osg::ref_ptr<osg::Drawable> _cloudsDrawable;
-		double _lastAltitude;
-		const SilverLiningOptions _options;
-		int _envID;
+        osg::StateSet* getCloudsStateSet() const { return _cloudsDrawable.valid() ? _cloudsDrawable->getStateSet() : 0L; }
+        osg::StateSet* getSkyStateSet() const { return _skyDrawable.valid() ? _skyDrawable->getStateSet() : 0L; }
+
+		int getEnvMapTextureID();
+
+    public: // osg::Node
+
+        void traverse(osg::NodeVisitor&);
+
+    protected:
+        virtual ~SilverLiningContextNode();
+
+        osg::ref_ptr<SilverLiningContext> _SL;
+        osg::ref_ptr<osg::Geode> _geode;
+        osg::ref_ptr<osg::Drawable> _skyDrawable;
+        osg::ref_ptr<osg::Drawable> _cloudsDrawable;
+        SilverLiningNode* _silverLiningNode;
+        double _lastAltitude;
+        const SilverLiningOptions _options;
+        osg::Camera* _camera;
+
 		bool _updateEnvMap;
 		const osgEarth::MapNode * _map;
-		SilverLiningNode* _silverLiningNode;
-	};
+    };
 
 } } // namespace osgEarth::SilverLining

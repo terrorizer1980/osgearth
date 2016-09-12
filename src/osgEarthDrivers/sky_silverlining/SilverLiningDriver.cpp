@@ -18,66 +18,108 @@
  */
 #include <osgEarthSilverLining/SilverLiningOptions>
 #include <osgEarthSilverLining/SilverLiningNode>
-#include <osgEarth/MapNode>
-#include <osgEarthUtil/Sky>
 #include <osgDB/FileNameUtils>
+#include <osgEarth/Map>
+#include <osgEarth/MapNode>
+#include <osgEarthUtil/Controls>
+#include <osgEarthUtil/ExampleResources>
 
-#define LC "[SilverLiningDriver] "
+#define LC "[SilverLiningExtension] "
 
-namespace osgEarth { namespace Drivers { namespace SilverLining
+using namespace osgEarth::Util;
+namespace ui = osgEarth::Util::Controls;
+
+namespace osgEarth { namespace SilverLining
 {
-    class SilverLiningDriver : public osgEarth::Util::SkyDriver
+    class SilverLiningExtension : public Extension,
+                                  public ExtensionInterface<MapNode>,
+                                  public ExtensionInterface<osg::View>,
+                                  public ExtensionInterface<ui::Control>,
+                                  public SilverLiningOptions,
+                                  public SkyNodeFactory
     {
     public:
-        SilverLiningDriver()
+        META_Object(osgearth_sky_silverlining, SilverLiningExtension);
+
+        // CTORs
+        SilverLiningExtension() { }
+
+        SilverLiningExtension(const ConfigOptions& options) :
+            SilverLiningOptions(options) { }
+
+    public: // Extension
+
+        const ConfigOptions& getConfigOptions() const { return *this; }
+
+
+    public: // ExtensionInterface<MapNode>
+
+        bool connect(MapNode* mapNode)
         {
-            supportsExtension(
-                "osgearth_sky_silverlining",
-                "osgEarth SilverLining Plugin" );
+            _skynode = new SilverLiningNode(mapNode, *this);;
+			 
+            osgEarth::insertParent(_skynode.get(), mapNode);
+            return true;
         }
 
-        const char* className()
+        bool disconnect(MapNode* mapNode)
         {
-            return "osgEarth SilverLining Plugin";
+            //todo
+            return true;
         }
 
-        ReadResult readNode(const std::string& file_name, const osgDB::Options* options) const
+    public: // ExtensionInterface<osg::View>
+
+        bool connect(osg::View* view)
         {
-            if ( !acceptsExtension(osgDB::getLowerCaseFileExtension( file_name )))
-                return ReadResult::FILE_NOT_HANDLED;
+            if (view && _skynode.valid())
+            {
+                _skynode->attach(view, 0);
+            }
+            return true;
+        }
 
-             osgEarth::SilverLining::SilverLiningOptions slOptions = getSkyOptions(options);
+        bool disconnect(osg::View* view)
+        {
 
+            return true;
+        }
             // if the Resource Path isn't set, attempt to set it from 
             // the SL environment variable.
-            if ( !slOptions.resourcePath().isSet() )
+    public: // ExtensionInterface<Control>
+
+        bool connect(ui::Control* control)
             {
-                const char* ev = ::getenv("SILVERLINING_PATH");
-                if ( ev )
-                {
-                    slOptions.resourcePath() = osgDB::concatPaths(
-                        std::string(ev),
-                        "Resources" );
+            ui::Container* container = dynamic_cast<ui::Container*>(control);
+            if (container)
+                container->addControl(SkyControlFactory::create(_skynode.get()));
+            return true;
                 }
-                else
+
+        bool disconnect(ui::Control* control)
                 {
-                    OE_WARN << LC
-                        << "No resource path! SilverLining might not initialize properly. "
-                        << "Consider setting the SILVERLINING_PATH environment variable."
-                        << std::endl;
+            //todo
+            return false;
                 }
-            }
 
-            osgEarth::MapNode* mapnode = getMapNode(options);
-			
-            //const Map* map = mapnode ? mapnode->getMap() : 0L;
-            return new osgEarth::SilverLining::SilverLiningNode( mapnode, slOptions );
-        }
+    public: // SkyNodeFactory
 
+		virtual SkyNode* createSkyNode(const Profile* profile)
+		{
+			return _skynode;
+		};
+        
     protected:
-        virtual ~SilverLiningDriver() { }
+
+        SilverLiningExtension(const SilverLiningExtension& rhs, const osg::CopyOp& op) { }
+
+        // DTOR
+        virtual ~SilverLiningExtension() { }
+
+
+    private:
+        osg::ref_ptr<SkyNode> _skynode;
     };
 
-    REGISTER_OSGPLUGIN(osgearth_sky_silverlining, SilverLiningDriver)
-
-} } } // namespace osgEarth::Drivers::SilverLining
+    REGISTER_OSGEARTH_EXTENSION(osgearth_sky_silverlining, SilverLiningExtension)
+} }

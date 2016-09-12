@@ -18,36 +18,39 @@
  */
 #include <SilverLining.h>
 #include "SilverLiningSkyDrawable"
-#include "SilverLiningContextNode"
 #include "SilverLiningContext"
+#include "SilverLiningContextNode"
 #include <osgEarth/SpatialReference>
-#include <osg/GL2Extensions>
 
 #define LC "[SilverLining:SkyDrawable] "
 
 using namespace osgEarth::SilverLining;
 
 
-SkyDrawable::SkyDrawable(SilverLiningContextNode *sky_node, SilverLiningContext* SL) :
-_SL( SL ),
-	_contextNode(sky_node)
+SkyDrawable::SkyDrawable(SilverLiningContextNode* contexNode) :
+_SL(contexNode->getSLContext()),
+_contextNode(contexNode)
+
 {
     // call this to ensure draw() gets called every frame.
     setSupportsDisplayList( false );
     // not MT-safe (camera updates, etc)
     this->setDataVariance( osg::Object::DYNAMIC );
+
+    setName("SilverLining::SkyDrawable");;
 }
 
 void
 SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 {
     osg::Camera* camera = renderInfo.getCurrentCamera();
-	SilverLiningContextNode *camera_sky_node = dynamic_cast<SilverLiningContextNode *>(camera->getUserData());
-	if ( camera && _contextNode == camera_sky_node)
+#ifndef SL_USE_CULL_MASK
+	//Check if this is the target camera
+	if (_contextNode->getTargetCamera() == camera) 
+#endif 
+	{
+	if ( camera)
     {
-#ifdef SL_USE_MUTEX
-		OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
-#endif
         renderInfo.getState()->disableAllVertexArrays();
 
         _SL->initialize( renderInfo );
@@ -71,8 +74,6 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 		
         double fovy, ar, znear, zfar;
        _SL->setCamera(camera);
-        //renderInfo.getCurrentCamera()->setNearFarRatio(.00000001);
-
         camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
         _SL->setSkyBoxSize( zfar < 100000.0 ? zfar : 100000.0 );
 
@@ -80,6 +81,7 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 		if (_SL->getCallback())
 			_SL->getCallback()->onDrawSky(_SL->getAtmosphereWrapper());
 
+        // draw the sky.
 		_SL->getAtmosphere()->DrawSky(
             true,
 			_SL->getSRS()->isGeographic(),
@@ -87,12 +89,12 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 			true,
 			false );
 
-	
-		if(!camera_sky_node->hasClouds())
-			_SL->updateEnvMap();
+		//JH:TOFIX
+		//if (!camera_sky_node->hasClouds())
+		//	_SL->updateEnvMap();
 
         // Dirty the state and the program tracking to prevent GL state conflicts.
-        renderInfo.getState()->dirtyAllVertexArrays();
+		renderInfo.getState()->dirtyAllVertexArrays();
         renderInfo.getState()->dirtyAllAttributes();
 
 #if 0
@@ -108,6 +110,7 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         renderInfo.getState()->apply();
     }
 }
+}
 
 osg::BoundingBox
 #if OSG_VERSION_GREATER_THAN(3,3,1)
@@ -116,9 +119,6 @@ SkyDrawable::computeBoundingBox() const
 SkyDrawable::computeBound() const
 #endif
 {
-#ifdef SL_USE_MUTEX
-	OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _contextNode->_mutex );
-#endif
     osg::BoundingBox skyBoundBox;
     if ( !_SL->ready() )
         return skyBoundBox;

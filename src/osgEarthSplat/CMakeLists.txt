@@ -17,7 +17,6 @@ set(TARGET_GLSL
     Splat.vert.view.glsl
     Splat.frag.glsl
     Splat.frag.common.glsl
-    Splat.frag.getRenderInfo.glsl
     Splat.util.glsl
     LandCover.TCS.glsl
     LandCover.TES.glsl
@@ -41,7 +40,6 @@ set(TARGET_SRC
     LandCoverTilePatchCallback.cpp
     LandUseTileSource.cpp
     NoiseTextureFactory.cpp
-	SplatPlugin.cpp
 	SplatExtension.cpp
 	SplatCatalog.cpp
 	SplatTerrainEffect.cpp

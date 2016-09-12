@@ -33,6 +33,7 @@
 #include "GeometryPool"
 #include "Loader"
 #include "Unloader"
+#include "SelectionInfo"
 
 #include <osg/Geode>
 #include <osg/NodeCallback>
@@ -87,7 +88,6 @@ namespace osgEarth { namespace Drivers { namespace RexTerrainEngine
 
     public: // statics    
         static void registerEngine( RexTerrainEngineNode* engineNode );
-        static void unregisterEngine( UID uid );
         static void getEngineByUID( UID uid, osg::ref_ptr<RexTerrainEngineNode>& output );
 
         /** Access to the asychronous data loader */
@@ -174,8 +174,6 @@ namespace osgEarth { namespace Drivers { namespace RexTerrainEngine
         
         osg::ref_ptr<osg::Group> _terrain;
 
-        osg::Uniform* _verticalScaleUniform;
-
         Threading::Mutex _renderBinMutex;
         osg::ref_ptr<osgUtil::RenderBin> _surfaceRenderBinPrototype;
 
@@ -183,7 +181,7 @@ namespace osgEarth { namespace Drivers { namespace RexTerrainEngine
 
         RexTerrainEngineNode( const RexTerrainEngineNode& rhs, const osg::CopyOp& op =osg::CopyOp::DEEP_COPY_ALL ) { }
 
-        SelectionInfo* _selectionInfo;
+        SelectionInfo _selectionInfo;
         void buildSelectionInfo(void);
         void destroySelectionInfo(void);
 

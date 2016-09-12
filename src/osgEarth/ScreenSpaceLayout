@@ -52,8 +52,7 @@ namespace osgEarth
         /** Constructor */
         ScreenSpaceLayoutData() :
             _priority(0.0f),
-            _pixelOffset(0, 0),
-            _localRotationRad(0.0f) { }
+            _pixelOffset(0, 0) { }
 
         /** Decluttering priority - FLT_MAX means don't declutter */
         void setPriority(float value) { _priority = value; }
@@ -63,14 +62,18 @@ namespace osgEarth
         void setPixelOffset(const osg::Vec2s& value) { _pixelOffset = value; }
         const osg::Vec2s& getPixelOffset() const     { return _pixelOffset; }
 
-        /** Rotation from geoposition in radians */
-        void setRotationRad(float value) { _localRotationRad = value; }
-        float getRotationRad() const     { return _localRotationRad; }
+        /** World point for label rotation reference */
+        void setAnchorPoint(const osg::Vec3d& value) { _anchorPoint = value; }
+        const osg::Vec3d& getAnchorPoint() const { return _anchorPoint; }
+
+        /** Reference point for label rotation reference */
+        void setProjPoint(const osg::Vec3d& value) { _refPoint = value; }
+        const osg::Vec3d& getProjPoint() const { return _refPoint; }
 
     public:
         float      _priority;
         osg::Vec2s _pixelOffset;
-        float      _localRotationRad;
+        osg::Vec3d _anchorPoint, _refPoint;
 
     public:
         virtual ~ScreenSpaceLayoutData() { }
@@ -88,23 +91,14 @@ namespace osgEarth
     };
 
     /**
-     * A decluttering functor that sorts by the priority field in AnnotationNode.
-     * AnnotationNode should be attached to each Drawable's user data.
-     */
-    struct OSGEARTH_EXPORT DeclutterByPriority : public DeclutterSortFunctor
-    {
-        virtual bool operator()(const osgUtil::RenderLeaf* lhs, const osgUtil::RenderLeaf* rhs ) const;
-        virtual ~DeclutterByPriority() { }
-    };
-
-    /**
      * Options to control the annotation decluttering engine.
      */
-    class OSGEARTH_EXPORT ScreenSpaceLayoutOptions
+    class OSGEARTH_EXPORT ScreenSpaceLayoutOptions : public ConfigOptions
     {
     public:
-        ScreenSpaceLayoutOptions( const Config& conf =Config() )
-            : _minAnimAlpha         ( 0.35f ),
+        ScreenSpaceLayoutOptions( const ConfigOptions& co =ConfigOptions() )
+            : ConfigOptions         ( co ),
+              _minAnimAlpha         ( 0.35f ),
               _minAnimScale         ( 0.45f ),
               _inAnimTime           ( 0.40f ),
               _outAnimTime          ( 0.00f ),
@@ -112,7 +106,7 @@ namespace osgEarth
               _snapToPixel          ( true ),
               _maxObjects           ( INT_MAX )
         {
-            fromConfig(conf);
+            fromConfig(_conf);
         }
 
         virtual ~ScreenSpaceLayoutOptions() { }

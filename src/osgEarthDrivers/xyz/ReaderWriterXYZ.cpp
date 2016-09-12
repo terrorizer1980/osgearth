@@ -63,13 +63,13 @@ public:
         URI xyzURI = _options.url().value();
         if ( xyzURI.empty() )
         {
-            return Status::Error( "Fail: driver requires a valid \"url\" property" );
+            return Status::Error( Status::ConfigurationError, "Fail: driver requires a valid \"url\" property" );
         }
 
         // driver requires a profile.
         if ( !getProfile() )
         {
-            return Status::Error( "An explicit profile definition is required by the XYZ driver." );
+            return Status::Error( Status::ConfigurationError, "An explicit profile definition is required by the XYZ driver." );
         }
 
         _template = xyzURI.full();
@@ -162,7 +162,7 @@ public:
         supportsExtension( "osgearth_xyz", "XYZ Driver" );
     }
 
-    virtual const char* className()
+    virtual const char* className() const
     {
         return "XYZ Driver";
     }

@@ -28,6 +28,7 @@
 namespace SilverLining {
     class Atmosphere;
     class CloudLayer;
+    class MillisecondTimer;
 }
 namespace osgEarth {
     class SpatialReference;
@@ -127,10 +128,10 @@ namespace osgEarth { namespace SilverLining
 
         Atmosphere* _atmosphereWrapper;
 		bool _useFixedRotation;
-		osg::Vec3d _fixedLocation;
+        ::SilverLining::MillisecondTimer* _msTimer;
 		//temp
+		osg::Vec3d _fixedLocation;
 		int _cumulusCongestusLayer;
-
     };
 
 } } // namespace osgEarth::SilverLining

@@ -63,7 +63,7 @@ public:
         URI uri = _options.url().value();
         if ( uri.empty() )
         {
-            return Status::Error( "Fail: driver requires a valid \"url\" property" );
+            return Status::Error( Status::ConfigurationError, "Fail: driver requires a valid \"url\" property" );
         }
 
         // The quadkey driver always uses spherical mercator.
@@ -182,7 +182,7 @@ public:
         supportsExtension( "osgearth_quadkey", "QuadKey Driver" );
     }
 
-    virtual const char* className()
+    virtual const char* className() const
     {
         return "QuadKey Driver";
     }

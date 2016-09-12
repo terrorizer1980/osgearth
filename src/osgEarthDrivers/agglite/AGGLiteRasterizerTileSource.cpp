@@ -160,6 +160,8 @@ public:
         const GeoExtent&   imageExtent,
         osg::Image*        image )
     {
+        OE_DEBUG << LC << "Rendering " << features.size() << " features for " << imageExtent.toString() << "\n";
+
         // A processing context to use with the filters:
         FilterContext context( session );
         context.setProfile( getFeatureSource()->getFeatureProfile() );
@@ -482,7 +484,7 @@ class AGGLiteRasterizerTileSourceDriver : public TileSourceDriver
     public:
         AGGLiteRasterizerTileSourceDriver() {}
 
-        virtual const char* className()
+        virtual const char* className() const
         {
             return "AGG-Lite feature rasterizer";
         }

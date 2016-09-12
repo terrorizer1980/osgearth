@@ -32,10 +32,10 @@
 #include <osgEarthUtil/Shadowing>
 #include <osgEarthUtil/ActivityMonitorTool>
 #include <osgEarthUtil/LogarithmicDepthBuffer>
+#include <osgEarthUtil/ContourMap>
 
 #include <osgEarthUtil/LODBlending>
 #include <osgEarthUtil/VerticalScale>
-#include <osgEarthUtil/ContourMap>
 
 #include <osgEarthAnnotation/AnnotationData>
 #include <osgEarthAnnotation/AnnotationRegistry>
@@ -71,8 +71,10 @@ using namespace osgEarth::Symbology;
 using namespace osgEarth::Annotation;
 using namespace osgEarth::Drivers;
 
+namespace ui = osgEarth::Util::Controls;
 //------------------------------------------------------------------------
 
+/** Shared event handlers. */
 /** Shared event handlers. */
 namespace
 {
@@ -122,8 +124,8 @@ namespace
      */
     struct ToggleCanvasEventHandler : public osgGA::GUIEventHandler
     {
-        ToggleCanvasEventHandler(osg::Node* canvas):
-            _canvas(canvas)
+        ToggleCanvasEventHandler(osg::Node* canvas, char key) :
+            _canvas(canvas), _key(key)
         {
         }
 
@@ -131,7 +133,7 @@ namespace
         {
             if (ea.getEventType() == osgGA::GUIEventAdapter::KEYDOWN)
             {
-                if (ea.getKey() == 'y')
+                if (ea.getKey() == _key)
                 {
                     osg::ref_ptr< osg::Node > safeNode = _canvas.get();
                     if (safeNode.valid())
@@ -145,6 +147,7 @@ namespace
         }
 
         osg::observer_ptr<osg::Node> _canvas;
+        char _key;
     };
 
     // sets a user-specified uniform.
@@ -176,178 +179,6 @@ MouseCoordsControlFactory::create(MapNode*         mapNode,
     view->addEventHandler( mcTool );
 
     return readout;
-}
-
-//------------------------------------------------------------------------
-
-namespace
-{
-    struct SkyTimeSliderHandler : public ControlEventHandler
-    {
-        SkyTimeSliderHandler(SkyNode* sky) : _sky(sky)  { }
-
-        SkyNode* _sky;
-
-        virtual void onValueChanged( class Control* control, float value )
-        {
-            DateTime d = _sky->getDateTime();
-            _sky->setDateTime(DateTime(d.year(), d.month(), d.day(), value));
-        }
-    };
-
-//#undef USE_AMBIENT_SLIDER
-#define USE_AMBIENT_SLIDER 1
-
-#ifdef USE_AMBIENT_SLIDER
-    struct AmbientBrightnessHandler : public ControlEventHandler
-    {
-        AmbientBrightnessHandler(SkyNode* sky) : _sky(sky) { }
-
-        SkyNode* _sky;
-
-        virtual void onValueChanged( class Control* control, float value )
-        {
-            _sky->setMinimumAmbient(osg::Vec4(value,value,value,1));
-        }
-    };
-#endif
-
-    struct AnimateSkyUpdateCallback : public osg::NodeCallback
-    {    
-        /**
-        * Creates an AnimateSkyCallback.  
-        * @param rate    The time multipler from real time.  Default of 1440 means 1 minute real time will equal 1 day simulation time.
-        */
-        AnimateSkyUpdateCallback( double rate = 1440 ):
-            _rate( rate ),
-            _prevTime( -1 ),
-            _accumTime( 0.0 )
-        {
-        }
-
-        virtual void operator()(osg::Node* node, osg::NodeVisitor* nv)
-        {             
-            SkyNode* sky = dynamic_cast< SkyNode* >( node );
-            if (sky)
-            {            
-                double time = nv->getFrameStamp()->getSimulationTime();            
-                if (_prevTime > 0)
-                {                
-                    TimeStamp t = sky->getDateTime().asTimeStamp();                  
-                    double delta = ceil((time - _prevTime) * _rate);
-                    _accumTime += delta;
-                    // The time stamp only works in seconds so we wait until we've accumulated at least 1 second to change the date.
-                    if (_accumTime > 1.0)
-                    {
-                        double deltaS = floor(_accumTime );                    
-                        _accumTime -= deltaS;
-                        t += deltaS;
-                        sky->setDateTime( t );                        
-                    }                
-                }            
-                _prevTime = time;
-            }
-            traverse( node, nv );
-        }
-
-        double _accumTime;
-        double _prevTime;    
-        double _rate;
-    };
-
-}
-
-Control*
-SkyControlFactory::create(SkyNode*         sky,
-                          osgViewer::View* view) const
-{
-    Grid* grid = new Grid();
-    grid->setChildVertAlign( Control::ALIGN_CENTER );
-    grid->setChildSpacing( 10 );
-    grid->setHorizFill( true );
-
-    grid->setControl( 0, 0, new LabelControl("Time (Hours UTC): ", 16) );
-
-    DateTime dt = sky->getDateTime();
-
-    HSliderControl* skySlider = grid->setControl(1, 0, new HSliderControl( 0.0f, 24.0f, dt.hours() ));
-    skySlider->setHorizFill( true, 300 );
-    skySlider->addEventHandler( new SkyTimeSliderHandler(sky) );
-
-    grid->setControl(2, 0, new LabelControl(skySlider) );
-
-#ifdef USE_AMBIENT_SLIDER
-    grid->setControl(0, 1, new LabelControl("Min.Ambient: ", 16) );
-    HSliderControl* ambient = grid->setControl(1, 1, new HSliderControl(0.0f, 1.0f, sky->getSunLight()->getAmbient().r()));
-    ambient->addEventHandler( new AmbientBrightnessHandler(sky) );
-    grid->setControl(2, 1, new LabelControl(ambient) );
-#endif
-
-    return grid;
-}
-
-//------------------------------------------------------------------------
-
-namespace
-{
-    struct ChangeSeaLevel : public ControlEventHandler
-    {
-        ChangeSeaLevel( OceanNode* ocean ) : _ocean(ocean) { }
-
-        OceanNode* _ocean;
-
-        virtual void onValueChanged( class Control* control, float value )
-        {
-            _ocean->setSeaLevel( value );
-        }
-    };
-
-    struct ChangeSeaAlpha : public ControlEventHandler
-    {
-        ChangeSeaAlpha( OceanNode* ocean ) : _ocean(ocean) { }
-
-        OceanNode* _ocean;
-
-        virtual void onValueChanged( class Control* control, float value )
-        {
-            _ocean->setAlpha( value );
-        }
-    };
-}
-
-Control*
-OceanControlFactory::create(OceanNode* ocean) const
-{
-    VBox* main = new VBox();
-
-    HBox* sealLevelBox = main->addControl(new HBox());
-    sealLevelBox->setChildVertAlign( Control::ALIGN_CENTER );
-    sealLevelBox->setChildSpacing( 10 );
-    sealLevelBox->setHorizFill( true );
-
-    sealLevelBox->addControl( new LabelControl("Sea Level: ", 16) );
-
-    HSliderControl* mslSlider = sealLevelBox->addControl(new HSliderControl( -250.0f, 250.0f, 0.0f ));
-    mslSlider->setBackColor( Color::Gray );
-    mslSlider->setHeight( 12 );
-    mslSlider->setHorizFill( true, 200 );
-    mslSlider->addEventHandler( new ChangeSeaLevel(ocean) );
-
-    HBox* alphaBox = main->addControl(new HBox());
-    alphaBox->setChildVertAlign( Control::ALIGN_CENTER );
-    alphaBox->setChildSpacing( 10 );
-    alphaBox->setHorizFill( true );
-    
-    alphaBox->addControl( new LabelControl("Sea Alpha: ", 16) );
-
-    HSliderControl* alphaSlider = alphaBox->addControl(new HSliderControl( 0.0, 1.0, 1.0));
-    alphaSlider->setBackColor( Color::Gray );
-    alphaSlider->setHeight( 12 );
-    alphaSlider->setHorizFill( true, 200 );
-    alphaSlider->addEventHandler( new ChangeSeaAlpha(ocean) );
-
-
-    return main;
 }
 
 //------------------------------------------------------------------------
@@ -422,15 +253,15 @@ AnnotationGraphControlFactory::create(osg::Node*       graph,
 osg::Group*
 MapNodeHelper::load(osg::ArgumentParser& args,
                     osgViewer::View*     view,
-                    Container*           userContainer ) const
+                    Container*            userContainer,
+                    const osgDB::Options* readOptions) const
 {
     // do this first before scanning for an earth file
     std::string outEarth;
     args.read( "--out-earth", outEarth );
 
-    osg::ref_ptr<osgDB::Options> options = new osgDB::Options();
+    osg::ref_ptr<osgDB::Options> myReadOptions = Registry::cloneOrCreateOptions(readOptions);
     
-#if 1
     Config c;
     c.add("elevation_smoothing", false);
     TerrainOptions to(c);
@@ -438,11 +269,10 @@ MapNodeHelper::load(osg::ArgumentParser& args,
     MapNodeOptions defMNO;
     defMNO.setTerrainOptions( to );
 
-    options->setPluginStringData("osgEarth.defaultOptions", defMNO.getConfig().toJSON());
-#endif
+    myReadOptions->setPluginStringData("osgEarth.defaultOptions", defMNO.getConfig().toJSON());
 
     // read in the Earth file:
-    osg::Node* node = osgDB::readNodeFiles(args);
+    osg::Node* node = osgDB::readNodeFiles(args, myReadOptions.get());
 
     osg::ref_ptr<MapNode> mapNode;
     if ( !node )
@@ -536,22 +366,17 @@ MapNodeHelper::parse(MapNode*             mapNode,
     osg::ref_ptr<osgDB::Options> dbOptions = Registry::instance()->cloneOrCreateOptions();
 
     // parse out custom example arguments first:
-    bool useSky        = args.read("--sky");
-    bool useOcean      = args.read("--ocean");
     bool useMGRS       = args.read("--mgrs");
     bool useDMS        = args.read("--dms");
     bool useDD         = args.read("--dd");
     bool useCoords     = args.read("--coords") || useMGRS || useDMS || useDD;
-    bool useOrtho      = args.read("--ortho");
+
     bool useAutoClip   = args.read("--autoclip");
-    bool useShadows    = args.read("--shadows");
     bool animateSky    = args.read("--animate-sky");
     bool showActivity  = args.read("--activity");
     bool useLogDepth   = args.read("--logdepth");
     bool useLogDepth2  = args.read("--logdepth2");
     bool kmlUI         = args.read("--kmlui");
-    bool inspect       = args.read("--inspect");
-    bool useContourMap = args.read("--contourmap");
 
     if (args.read("--verbose"))
         osgEarth::setNotifyLevel(osg::INFO);
@@ -597,136 +422,20 @@ MapNodeHelper::parse(MapNode*             mapNode,
     canvas->addControl( mainContainer );
 
     // Add an event handler to toggle the canvas with a key press;
-    view->addEventHandler(new ToggleCanvasEventHandler(canvas) );
+    view->addEventHandler(new ToggleCanvasEventHandler(canvas, 'y'));
 
 
-
-
-    // look for external data in the map node:
     const Config& externals = mapNode->externalConfig();
 
-    const Config& skyConf         = externals.child("sky");
-    const Config& oceanConf       = externals.child("ocean");
-
-    const Config& screenSpaceLayoutConf = 
-        externals.hasChild("screen_space_layout") ? externals.child("screen_space_layout") :
-        externals.child("decluttering"); // backwards-compatibility
 
 
-    // some terrain effects.
-    // TODO: Most of these are likely to move into extensions.
-    const Config& lodBlendingConf = externals.child("lod_blending");
     const Config& vertScaleConf   = externals.child("vertical_scale");
-    const Config& contourMapConf  = externals.child("contour_map");
 
 	const Config& fogConf         = externals.child("fog");
-
-	if(!fogConf.empty())
-	{
-
-		osgEarth::optional<float> fogStartHeight(10000.0f);
-		osgEarth::optional<float> maxDensity(0.000225);
-		osgEarth::optional<float> cr(0.66f);
-		osgEarth::optional<float> cg(0.7f);
-		osgEarth::optional<float> cb(0.81f);
-
-		fogConf.getIfSet("max_density", maxDensity);
-		fogConf.getIfSet("fog_start_height", fogStartHeight);
-		fogConf.getIfSet("color_r", cr);
-		fogConf.getIfSet("color_g", cg);
-		fogConf.getIfSet("color_b", cb);
-
-		osgEarth::Util::FogEffect* fogEffect = new osgEarth::Util::FogEffect;
-		fogEffect->attach( mapNode->getOrCreateStateSet() );
-
-		// Setup a Fog state attribute
-		osg::Vec4 fogColor(cr.get(), cg.get(), cb.get(), 1.0f);
-		osg::Fog* fog = new osg::Fog;        
-		fog->setColor( fogColor ); //viewer.getCamera()->getClearColor() );                
-		fog->setDensity( maxDensity.get() );
-		fog->setMode(osg::Fog::EXP);
-		mapNode->getOrCreateStateSet()->setAttributeAndModes( fog, osg::StateAttribute::ON );       
-	}
-
-
-    // Adding a sky model:
-    if ( useSky || !skyConf.empty() )
-    {
-        SkyOptions options(skyConf);
-        if ( options.getDriver().empty() )
-        {
-            if ( mapNode->getMapSRS()->isGeographic() )
-                options.setDriver("simple");
-            else
-                options.setDriver("gl");
-        }
-
-        SkyNode* sky = SkyNode::create(options, mapNode);
-        if ( sky )
-        {
-            sky->attach( view, 0 );
-            if ( mapNode->getNumParents() > 0 )
-            {
-                osgEarth::insertGroup(sky, mapNode->getParent(0));
-            }
-            else
-            {
-                sky->addChild( mapNode );
-                root = sky;
-            }
-                
-            Control* c = SkyControlFactory().create(sky, view);
-            if ( c )
-                mainContainer->addControl( c );
-
-            if (animateSky)
-            {
-                sky->setUpdateCallback( new AnimateSkyUpdateCallback() );
-            }
-
-        }
-    }
-
-    // Adding an ocean model:
-    if ( useOcean || !oceanConf.empty() )
-    {
-        OceanNode* ocean = OceanNode::create(OceanOptions(oceanConf), mapNode);
-        if ( ocean )
-        {
-            // if there's a sky, we want to ocean under it
-            osg::Group* parent = osgEarth::findTopMostNodeOfType<SkyNode>(root);
-            if ( !parent ) parent = root;
-            parent->addChild( ocean );
-
-            Control* c = OceanControlFactory().create(ocean);
-            if ( c )
-                mainContainer->addControl(c);
-        }
-    }
-
-    // Shadowing.
-    if ( useShadows )
-    {
-        int unit;
-        if ( mapNode->getTerrainEngine()->getResources()->reserveTextureImageUnit(unit, "ShadowCaster") )
-        {
-            ShadowCaster* caster = new ShadowCaster();
-            caster->setTextureImageUnit( unit );
-            caster->setLight( view->getLight() );
-            caster->getShadowCastingGroup()->addChild( mapNode ); //->getModelLayerGroup() );
-            if ( mapNode->getNumParents() > 0 )
-            {
-                insertGroup(caster, mapNode->getParent(0));
-            }
-            else
-            {
-                caster->addChild(mapNode);
-                root = caster;
-            }
-        }
-    }
-
     // Loading KML from the command line:
+	
+
+
     if ( !kmlFile.empty() )
     {
         KMLOptions kml_options;
@@ -762,10 +471,10 @@ MapNodeHelper::parse(MapNode*             mapNode,
     }
 
     // Configure the de-cluttering engine for labels and annotations:
-    if ( !screenSpaceLayoutConf.empty() )
-    {
-        ScreenSpaceLayout::setOptions( ScreenSpaceLayoutOptions(screenSpaceLayoutConf) );
-    }
+
+    // Configure the mouse coordinate readout:
+    //    ScreenSpaceLayout::setOptions( ScreenSpaceLayoutOptions(screenSpaceLayoutConf) );
+    //}
 
     // Configure the mouse coordinate readout:
     if ( useCoords )
@@ -789,7 +498,7 @@ MapNodeHelper::parse(MapNode*             mapNode,
     }
 
     // Configure for an ortho camera:
-    if ( useOrtho )
+    if ( args.read("--ortho") )
     {
         view->getCamera()->setProjectionMatrixAsOrtho(-1, 1, -1, 1, 0, 1);
     }
@@ -855,29 +564,21 @@ MapNodeHelper::parse(MapNode*             mapNode,
     }
 
     // Install elevation morphing
-    if ( !lodBlendingConf.empty() )
-    {
-        mapNode->getTerrainEngine()->addEffect( new LODBlending(lodBlendingConf) );
-    }
-
-    // Install vertical scaler
     if ( !vertScaleConf.empty() )
     {
         mapNode->getTerrainEngine()->addEffect( new VerticalScale(vertScaleConf) );
     }
 
     // Install a contour map effect.
-    if ( !contourMapConf.empty() || useContourMap )
+    if (args.read("--contourmap"))
     {
-        mapNode->getTerrainEngine()->addEffect( new ContourMap(contourMapConf) );
+        mapNode->addExtension(Extension::create("contourmap", ConfigOptions()));
 
         // with the cmdline switch, hids all the image layer so we can see the contour map.
-        if (useContourMap) {
             for (unsigned i = 0; i < mapNode->getMap()->getNumImageLayers(); ++i) {
                 mapNode->getMap()->getImageLayerAt(i)->setVisible(false);
             }
         }
-    }
 
     // Generic named value uniform with min/max.
     VBox* uniformBox = 0L;
@@ -907,13 +608,41 @@ MapNodeHelper::parse(MapNode*             mapNode,
         }
     }
 
-    if ( inspect )
+    // Map inspector:
+    if (args.read("--inspect"))
     {
         mapNode->addExtension( Extension::create("mapinspector", ConfigOptions()) );
     }
     
 
+    if (args.read("--monitor"))
+    {
+        mapNode->addExtension(Extension::create("monitor", ConfigOptions()) );
+    }
     // Process extensions.
+    // Simple sky model:
+    if (args.read("--sky"))
+    {
+        mapNode->addExtension(Extension::create("sky_simple", ConfigOptions()) );
+    }
+
+    // Simple ocean model:
+    if (args.read("--ocean"))
+    {
+        mapNode->addExtension(Extension::create("ocean_simple", ConfigOptions()));
+    }
+
+    // Arbitrary extension:
+    std::string extname;
+    if (args.read("--extension", extname))
+    {
+        Extension* ext = Extension::create(extname, ConfigOptions());
+        if (ext)
+            mapNode->addExtension(ext);
+    }
+    
+
+    // Hook up the extensions!
     for(std::vector<osg::ref_ptr<Extension> >::const_iterator eiter = mapNode->getExtensions().begin();
         eiter != mapNode->getExtensions().end();
         ++eiter)
@@ -931,6 +660,64 @@ MapNodeHelper::parse(MapNode*             mapNode,
             controlIF->connect( mainContainer );
     }
 
+		if (!fogConf.empty())
+		{
+
+			osgEarth::optional<float> fogStartHeight(10000.0f);
+			osgEarth::optional<float> maxDensity(0.000225);
+			osgEarth::optional<float> cr(0.66f);
+			osgEarth::optional<float> cg(0.7f);
+			osgEarth::optional<float> cb(0.81f);
+
+			fogConf.getIfSet("max_density", maxDensity);
+			fogConf.getIfSet("fog_start_height", fogStartHeight);
+			fogConf.getIfSet("color_r", cr);
+			fogConf.getIfSet("color_g", cg);
+			fogConf.getIfSet("color_b", cb);
+
+			
+
+			// Setup a Fog state attribute
+			osg::Vec4 fogColor(cr.get(), cg.get(), cb.get(), 1.0f);
+			osg::Fog* fog = new osg::Fog;
+			fog->setColor(fogColor); //viewer.getCamera()->getClearColor() );                
+			fog->setDensity(maxDensity.get());
+			fog->setMode(osg::Fog::EXP);
+			// Attach the FogCallback to keep the Fog uniforms up to date.
+			fog->setUpdateCallback(new FogCallback());
+			mapNode->getOrCreateStateSet()->setAttributeAndModes(fog, osg::StateAttribute::ON);
+
+			osgEarth::Util::FogEffect* fogEffect = new osgEarth::Util::FogEffect;
+			fogEffect->attach(mapNode->getOrCreateStateSet());
+
+		}
+
+
+    // Shadowing. This is last because it needs access to a light which may be provided
+    // by one of the Sky extensions.
+    if (args.read("--shadows"))
+    {
+        int unit;
+        if ( mapNode->getTerrainEngine()->getResources()->reserveTextureImageUnit(unit, "ShadowCaster") )
+        {
+            ShadowCaster* caster = new ShadowCaster();
+            caster->setTextureImageUnit( unit );
+            caster->setLight( view->getLight() );
+            caster->getShadowCastingGroup()->addChild( mapNode->getModelLayerGroup() );
+            //insertParent(caster, mapNode);
+            //root = findTopOfGraph(caster)->asGroup();
+            if ( mapNode->getNumParents() > 0 )
+            {
+                insertGroup(caster, mapNode->getParent(0));
+            }
+            else
+            {
+                caster->addChild(mapNode);
+                root = caster;
+            }
+        }
+    }
+
     root->addChild( canvas );
 }
 
@@ -945,6 +732,7 @@ MapNodeHelper::configureView( osgViewer::View* view ) const
     view->addEventHandler(new osgViewer::LODScaleHandler());
     view->addEventHandler(new osgGA::StateSetManipulator(view->getCamera()->getOrCreateStateSet()));
     view->addEventHandler(new osgViewer::RecordCameraPathHandler());
+    view->addEventHandler(new osgViewer::ScreenCaptureHandler());
 }
 
 
@@ -967,4 +755,105 @@ MapNodeHelper::usage() const
         << "  --out-earth [file]            : write the loaded map to an earth file\n"
         << "  --uniform [name] [min] [max]  : create a uniform controller with min/max values\n"
         << "  --path [file]                 : load and playback an animation path\n";
+}
+
+
+//........................................................................
+
+
+namespace
+{
+    struct SkyHoursSlider : public ui::ControlEventHandler
+    {
+        SkyHoursSlider(SkyNode* sky) : _sky(sky)  { }
+        SkyNode* _sky;
+        void onValueChanged(ui::Control* control, float value )
+        {
+            DateTime d = _sky->getDateTime();
+            _sky->setDateTime(DateTime(d.year(), d.month(), d.day(), value));
+        }
+    };
+    
+    static std::string s_month[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+    struct SkyMonthSlider : public ui::ControlEventHandler
+    {
+        SkyMonthSlider(SkyNode* sky, ui::LabelControl* label) : _sky(sky), _label(label) { }
+        SkyNode* _sky;
+        ui::LabelControl* _label;
+        void onValueChanged(ui::Control* control, float value )
+        {
+            int m = std::min((int)value, 11);
+            DateTime d = _sky->getDateTime();            
+            _sky->setDateTime(DateTime(d.year(), m, d.day(), d.hours()));
+            _label->setText(s_month[m]);
+        }
+    };
+
+    struct SkyYearSlider : public ui::ControlEventHandler
+    {
+        SkyYearSlider(SkyNode* sky, ui::LabelControl* label) : _sky(sky), _label(label) { }
+        SkyNode* _sky;
+        ui::LabelControl* _label;
+        void onValueChanged(ui::Control* control, float value )
+        {
+            DateTime d = _sky->getDateTime();            
+            _sky->setDateTime(DateTime((int)value, d.month(), d.day(), d.hours()));
+            _label->setText(Stringify() << (int)value);
+        }
+    };
+
+    struct AmbientBrightnessHandler : public ui::ControlEventHandler
+    {
+        AmbientBrightnessHandler(SkyNode* sky) : _sky(sky) { }
+
+        SkyNode* _sky;
+
+        void onValueChanged(ui::Control* control, float value )
+        {
+            _sky->setMinimumAmbient(osg::Vec4(value,value,value,1));
+        }
+    };
+}
+
+ui::Control* SkyControlFactory::create(SkyNode* sky)
+{
+    ui::Grid* grid = new ui::Grid();
+    grid->setChildVertAlign( ui::Control::ALIGN_CENTER );
+    grid->setChildSpacing( 10 );
+    grid->setHorizFill( true );
+
+    if (sky)
+    {
+        DateTime dt = sky->getDateTime();
+
+        int r=0;
+        grid->setControl( 0, r, new ui::LabelControl("Hours UTC: ", 16) );
+        ui::HSliderControl* skyHoursSlider = grid->setControl(1, r, new ui::HSliderControl( 0.0f, 24.0f, dt.hours() ));
+        skyHoursSlider->setHorizFill( true, 250 );
+        skyHoursSlider->addEventHandler( new SkyHoursSlider(sky) );
+        grid->setControl(2, r, new ui::LabelControl(skyHoursSlider) );
+    
+        ++r;
+        grid->setControl( 0, r, new ui::LabelControl("Month: ", 16) );
+        ui::HSliderControl* skyMonthSlider = grid->setControl(1, r, new ui::HSliderControl( 0.0f, 12.0f, dt.month() ));
+        skyMonthSlider->setHorizFill( true, 250 );
+        ui::LabelControl* monthLabel = grid->setControl(2, r, new ui::LabelControl(s_month[dt.month()]));
+        skyMonthSlider->addEventHandler( new SkyMonthSlider(sky, monthLabel) );
+    
+        ++r;
+        grid->setControl( 0, r, new ui::LabelControl("Year: ", 16) );
+        ui::HSliderControl* skyYearSlider = grid->setControl(1, r, new ui::HSliderControl( 1970.0f, 2061.0f, dt.year() ));
+        skyYearSlider->setHorizFill( true, 250 );
+        ui::LabelControl* yearLabel = grid->setControl(2, r, new ui::LabelControl(Stringify()<<dt.year()));
+        skyYearSlider->addEventHandler( new SkyYearSlider(sky, yearLabel) );
+
+        ++r;
+        grid->setControl(0, r, new ui::LabelControl("Min.Ambient: ", 16) );
+        ui::HSliderControl* ambient = grid->setControl(1, r, new ui::HSliderControl(0.0f, 1.0f, sky->getSunLight()->getAmbient().r()));
+        ambient->addEventHandler( new AmbientBrightnessHandler(sky) );
+        grid->setControl(2, r, new ui::LabelControl(ambient) );
+    }
+
+    return grid;
 }

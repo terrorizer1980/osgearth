@@ -51,11 +51,11 @@
 // From easyrgb.com
 float Hue_2_RGB( float v1, float v2, float vH )
 {
-   if ( vH < 0 ) vH += 1;
-   if ( vH > 1 ) vH -= 1;
-   if ( ( 6 * vH ) < 1 ) return ( v1 + ( v2 - v1 ) * 6 * vH );
-   if ( ( 2 * vH ) < 1 ) return ( v2 );
-   if ( ( 3 * vH ) < 2 ) return ( v1 + ( v2 - v1 ) * ( ( 2 / 3 ) - vH ) * 6 );
+   if ( vH < 0.0f ) vH += 1.0f;
+   if ( vH > 1.0f ) vH -= 1.0f;
+   if ( ( 6.0f * vH ) < 1.0f ) return ( v1 + ( v2 - v1 ) * 6.0f * vH );
+   if ( ( 2.0f * vH ) < 1.0f ) return ( v2 );
+   if ( ( 3.0f * vH ) < 2.0f ) return ( v1 + ( v2 - v1 ) * ( ( 2.0f / 3.0f ) - vH ) * 6.0f );
    return ( v1 );
 }
 
@@ -676,27 +676,17 @@ public:
     {
         GDAL_SCOPED_LOCK;
 
-        Cache* cache = 0;
-
         _dbOptions = Registry::instance()->cloneOrCreateOptions( dbOptions );
-
-        if ( _dbOptions.valid() )
-        {
-            // Set up a Custom caching bin for this TileSource
-            cache = Cache::get( _dbOptions.get() );
-            if ( cache )
-            {
-                Config optionsConf = _options.getConfig();
-
-                std::string binId = Stringify() << std::hex << hashString(optionsConf.toJSON());
-                _cacheBin = cache->addBin( binId );
-
-                if ( _cacheBin.valid() )
-                {
-                    _cacheBin->put( _dbOptions.get() );
-                }
-            }
-        }
+        //if ( _dbOptions.valid() )
+        //{
+        //    // Set up a custom cache bin
+        //    CacheManager* cacheManager = CacheManager::get(dbOptions);
+        //    if (cacheManager && cacheManager->getCache())
+        //    {
+        //        std::string binId = Stringify() << std::hex << hashString(_options.getConfig().toJSON());
+        //        _cacheBin = cacheManager->getCache()->addBin(binId);
+        //    }
+        //}
 
         // Is a valid external GDAL dataset specified ?
         bool useExternalDataset = false;
@@ -713,7 +703,7 @@ public:
             (!_options.url().isSet() || _options.url()->empty()) &&
             (!_options.connection().isSet() || _options.connection()->empty()) )
         {
-            return Status::Error( "No URL, directory, or connection string specified" );
+            return Status::Error(Status::ConfigurationError, "No URL, directory, or connection string specified" );
         }
 
         // source connection:
@@ -752,7 +742,7 @@ public:
 
                 getFiles(source, exts, blackExts, files);
 
-                OE_INFO << LC << "Driver found " << files.size() << " files:" << std::endl;
+                OE_INFO << LC << "Identified " << files.size() << " files:" << std::endl;
                 for (unsigned int i = 0; i < files.size(); ++i)
                 {
                     OE_INFO << LC << INDENT << files[i] << std::endl;
@@ -766,7 +756,7 @@ public:
 
             if (files.empty())
             {
-                return Status::Error( "Could not find any valid input." );
+                return Status::Error( Status::ResourceUnavailable, "Could not find any valid input." );
             }
 
             //If we found more than one file, try to combine them into a single logical dataset
@@ -867,7 +857,7 @@ public:
 
                 if (!_srcDS)
                 {
-                    return Status::Error( Stringify() << "Failed to open dataset " << files[0] );
+                    return Status::Error( Status::ResourceUnavailable, Stringify() << "Failed to open " << files[0] );
                 }
             }
         }
@@ -937,7 +927,7 @@ public:
 
             if ( !src_srs.valid() )
             {
-                return Status::Error( Stringify()
+                return Status::Error( Status::ResourceUnavailable, Stringify()
                     << "Dataset has no spatial reference information (" << source << ")" );
             }
         }
@@ -981,7 +971,7 @@ public:
             profile = Profile::create(src_srs.get(), -180.0, -90.0, 180.0, 90.0, 2u, 1u);
             if ( !profile )
             {
-                return Status::Error( Stringify()
+                return Status::Error( Status::ResourceUnavailable, Stringify()
                     << "Cannot create geographic Profile from dataset's spatial reference information: " << src_srs->getName() );
             }
         }
@@ -1237,9 +1227,9 @@ public:
 
                     var_1 = 2 * L - var_2;
 
-                    R = Hue_2_RGB( var_1, var_2, H + ( 1 / 3 ) );
+                    R = Hue_2_RGB( var_1, var_2, H + ( 1.0f / 3.0f ) );
                     G = Hue_2_RGB( var_1, var_2, H );
-                    B = Hue_2_RGB( var_1, var_2, H - ( 1 / 3 ) );
+                    B = Hue_2_RGB( var_1, var_2, H - ( 1.0f / 3.0f ) );
                 }
                 color.r() = static_cast<unsigned char>(R*255.0f);
                 color.g() = static_cast<unsigned char>(G*255.0f);
@@ -1922,23 +1912,68 @@ public:
                 band = _warpedDS->GetRasterBand(1);
             }
 
-            double dx = (xmax - xmin) / (tileSize-1);
-            double dy = (ymax - ymin) / (tileSize-1);
+            if (_options.interpolation() == INTERP_NEAREST)
+            {
+                double colMin, colMax;
+                double rowMin, rowMax;
+                geoToPixel( xmin, ymin, colMin, rowMax );
+                geoToPixel( xmax, ymax, colMax, rowMin );
+                std::vector<float> buffer(tileSize * tileSize, NO_DATA_VALUE);
 
+                int iColMin = floor(colMin);
+                int iColMax = ceil(colMax);
+                int iRowMin = floor(rowMin);
+                int iRowMax = ceil(rowMax);
+                int iNumCols = iColMax - iColMin + 1;
+                int iNumRows = iRowMax - iRowMin + 1;
+
+                int iWinColMin = max(0, iColMin);
+                int iWinColMax = min(_warpedDS->GetRasterXSize()-1, iColMax);
+                int iWinRowMin = max(0, iRowMin);
+                int iWinRowMax = min(_warpedDS->GetRasterYSize()-1, iRowMax);
+                int iNumWinCols = iWinColMax - iWinColMin + 1;
+                int iNumWinRows = iWinRowMax - iWinRowMin + 1;
+
+                int iBufColMin = osg::round((iWinColMin - iColMin) / double(iNumCols - 1) * (tileSize - 1));
+                int iBufColMax = osg::round((iWinColMax - iColMin) / double(iNumCols - 1) * (tileSize - 1));
+                int iBufRowMin = osg::round((iWinRowMin - iRowMin) / double(iNumRows - 1) * (tileSize - 1));
+                int iBufRowMax = osg::round((iWinRowMax - iRowMin) / double(iNumRows - 1) * (tileSize - 1));
+                int iNumBufCols = iBufColMax - iBufColMin + 1;
+                int iNumBufRows = iBufRowMax - iBufRowMin + 1;
+
+                int startOffset = iBufRowMin * tileSize + iBufColMin;
+                int lineSpace = tileSize * sizeof(float);
+
+                band->RasterIO(GF_Read, iWinColMin, iWinRowMin, iNumWinCols, iNumWinRows, &buffer[startOffset], iNumBufCols, iNumBufRows, GDT_Float32, 0, lineSpace);
+
+                for (int r = 0, ir = tileSize - 1; r < tileSize; ++r, --ir)
+                {
+                    for (int c = 0; c < tileSize; ++c)
+                    {
+                        hf->setHeight(c, ir, buffer[r * tileSize + c]);
+                    }
+                }
+            }
+            else
+            {
+                double dx = (xmax - xmin) / (tileSize-1);
+                double dy = (ymax - ymin) / (tileSize-1);
                 for (int r = 0; r < tileSize; ++r)
                 {
                     double geoY = ymin + (dy * (double)r);
-                for (int c = 0; c < tileSize; ++c)
-                {
-                    double geoX = xmin + (dx * (double)c);
-                    float h = getInterpolatedValue(band, geoX, geoY);
-                    hf->setHeight(c, r, h);
+                    for (int c = 0; c < tileSize; ++c)
+                    {
+                        double geoX = xmin + (dx * (double)c);
+                        float h = getInterpolatedValue(band, geoX, geoY);
+                        hf->setHeight(c, r, h);
+                    }
                 }
             }
         }
         else
         {
-            for (unsigned int i = 0; i < hf->getHeightList().size(); ++i) hf->getHeightList()[i] = NO_DATA_VALUE;
+            std::vector<float>& heightList = hf->getHeightList();
+            std::fill(heightList.begin(), heightList.end(), NO_DATA_VALUE);
         }
         return hf.release();
     }
@@ -2266,7 +2301,7 @@ class ReaderWriterGDALTile : public TileSourceDriver
 public:
     ReaderWriterGDALTile() {}
 
-    virtual const char* className()
+    virtual const char* className() const
     {
         return "GDAL Tile Reader";
     }

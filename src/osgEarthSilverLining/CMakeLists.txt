@@ -17,11 +17,11 @@ SET(LIB_PUBLIC_HEADERS
     SilverLiningOptions
     SilverLiningNode
     SilverLiningContext
-	SilverLiningContextNode
     SilverLiningSkyDrawable
     SilverLiningCloudsDrawable
     SilverLiningAPIWrapper
     SilverLiningCallback
+	SilverLiningContextNode
 )
 
 ADD_LIBRARY(${LIB_NAME} ${OSGEARTH_USER_DEFINED_DYNAMIC_OR_STATIC}
@@ -29,11 +29,10 @@ ADD_LIBRARY(${LIB_NAME} ${OSGEARTH_USER_DEFINED_DYNAMIC_OR_STATIC}
 #  .cpp files go here
     SilverLiningNode.cpp
     SilverLiningContext.cpp
-	SilverLiningContextNode.cpp
     SilverLiningSkyDrawable.cpp
     SilverLiningCloudsDrawable.cpp
     SilverLiningAPIWrapper.cpp
-	
+	SilverLiningContextNode.cpp
 )
 
 INCLUDE_DIRECTORIES( 

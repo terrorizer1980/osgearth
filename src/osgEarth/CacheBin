@@ -34,7 +34,7 @@ namespace osgEarth
      * application modules to compartmentalize their data withing a single
      * cache location.
      */
-    class /*no export*/ CacheBin : public osg::Referenced
+    class OSGEARTH_EXPORT CacheBin : public osg::Referenced
     {
     public:
         /** returned by the getRecordStatus() function */
@@ -51,7 +51,7 @@ namespace osgEarth
          * @param driver ReaderWriter that serializes data for this caching bin.
          */
         CacheBin( const std::string& binID )
-            : _binID(binID), _hashKeys(false), _minTime(0) { }
+            : _binID(binID), _hashKeys(true), _minTime(0) { }
 
         /** dtor */
         virtual ~CacheBin() { }
@@ -102,6 +102,12 @@ namespace osgEarth
             const osg::Object*    object,
             const osgDB::Options* dbo) { return write(key, object, Config(), dbo); }
 
+        bool writeNode(
+            const std::string&    key,
+            osg::Node*            node,
+            const Config&         metadata,
+            const osgDB::Options* writeOptions);
+
         /**
          * Gets the status of a key, i.e. not found, valid or expired.
          * Pass in a minTime = 0 to simply check whether the record exists.
@@ -136,30 +142,28 @@ namespace osgEarth
         virtual bool clear() { return false; }
 
         /**
-         * Compacts the cache bin (where applicable)
+         * Compacts the cache bin (where applicable in the implementation,
+         * no-op otherwise)
          */
         virtual bool compact() { return false; }
 
         /**
          * Returns the approximate disk space being used by this cache,
-         * or 0 if unavailable.
+         * or 0 if the information is unavailable.
          */
         virtual unsigned getStorageSize() { return 0u; }
 
         /**
-         * Store this pointer in an options structure
+         * Metadata associated with a cache bin.
          */
-        void put( osgDB::Options* options ) const {
-            if ( options ) options->setPluginData( "osgEarth::CacheBin", (void*)this );
-        }
-
+        void setMetadata(osg::Referenced* data) { _metadata = data; }
+        osg::Referenced* getMetadata() { return _metadata.get(); }
+        
         /**
-         * Retrieve pointer from an options struture
+         * If key-hashing is enabled, this method returns the hashed key
+         * corresponding to a raw input key.
          */
-        static CacheBin* get( const osgDB::Options* options ) {
-            return options ? const_cast<CacheBin*>(static_cast<const CacheBin*>(options->getPluginData("osgEarth::CacheBin"))) : 0L;
-        }
-
+        virtual std::string getHashedKey(const std::string& key) const =0;
 
     public: //deprecated
 
@@ -171,6 +175,7 @@ namespace osgEarth
         std::string _binID;
         bool        _hashKeys;
         TimeStamp   _minTime;
+        osg::ref_ptr<osg::Referenced> _metadata;
     };
 }
 

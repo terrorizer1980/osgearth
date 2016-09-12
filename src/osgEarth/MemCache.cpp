@@ -109,6 +109,11 @@ namespace
             return true;
         }
 
+        std::string getHashedKey(const std::string& key) const
+        {
+            return key;
+        }
+
         MemCacheLRU _lru;
     };
     
@@ -119,7 +124,10 @@ namespace
 //------------------------------------------------------------------------
 
 MemCache::MemCache( unsigned maxBinSize ) :
-_maxBinSize( std::max(maxBinSize, 1u) )
+_maxBinSize( std::max(maxBinSize, 1u) ),
+_reads(0),
+_writes(0),
+_hits(0)
 {
     //nop
 }

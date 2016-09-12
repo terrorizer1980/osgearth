@@ -125,12 +125,6 @@ namespace osgEarth
         static MapNode* get( osg::Node* graph, unsigned travMask =~0 ) { return findMapNode(graph, travMask); }
 
         /**
-         * Accesses the MapNode that is active in a NodeVisitor, if available. It is usually only
-         * available during an update traversal.
-         */
-        //static MapNode* get(osg::NodeVisitor& nv);
-
-        /**
          * Returns true if the realized terrain model is geocentric, false if
          * it is flat/projected.
          */
@@ -213,6 +207,12 @@ namespace osgEarth
             return 0L;
         }
 
+        /**
+         * Opens all layers that are not already open.
+         */
+        void openMapLayers();
+
+
     public: // special purpose
 
         /**
@@ -253,6 +253,8 @@ namespace osgEarth
         osg::Group*              _terrainEngineContainer;
 
         std::vector< osg::ref_ptr<Extension> > _extensions;
+
+        Revisioned _mapRevisionMonitor;
 
     public: // MapCallback proxy
 

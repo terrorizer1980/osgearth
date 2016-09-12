@@ -58,7 +58,6 @@ namespace osgEarth { namespace Drivers { namespace MPTerrainEngine
             osg::ref_ptr<osg::Vec2Array>   _texCoords;
             osg::ref_ptr<osg::Texture>     _texParent;
             osg::Matrixf                   _texMatParent; // yes, must be a float matrix
-            float                          _alphaThreshold;
             bool                           _opaque;
 
             // for shared layers only:
@@ -138,7 +137,10 @@ namespace osgEarth { namespace Drivers { namespace MPTerrainEngine
         void drawImplementation(osg::RenderInfo& renderInfo) const;
         
         // override to correctly process GL_PATCHES if necessary
+        bool supports(const osg::PrimitiveFunctor&) const { return true; }
         void accept(osg::PrimitiveFunctor& functor) const;
+
+        bool supports(const osg::PrimitiveIndexFunctor&) const { return true; }
         void accept(osg::PrimitiveIndexFunctor& functor) const;
 
         // recalculate the bound for the tile key uniform.
@@ -150,8 +152,8 @@ namespace osgEarth { namespace Drivers { namespace MPTerrainEngine
 
     public:
         META_Object(osgEarth, MPGeometry);
-        MPGeometry() : osg::Geometry(), _frame(0L) { }
-        MPGeometry(const MPGeometry& rhs, const osg::CopyOp& cop) : osg::Geometry(rhs, cop), _frame(rhs._frame) { }
+        MPGeometry();
+        MPGeometry(const MPGeometry& rhs, const osg::CopyOp& cop);
         virtual ~MPGeometry() { }
     };
 

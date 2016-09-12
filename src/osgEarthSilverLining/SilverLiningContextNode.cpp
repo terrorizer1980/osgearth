@@ -23,26 +23,28 @@
 #include "SilverLiningContext"
 #include "SilverLiningSkyDrawable"
 #include "SilverLiningCloudsDrawable"
-
 #include <osgEarth/MapNode>
-
 #include <osg/Light>
 #include <osg/LightSource>
 #include <osgEarth/CullingUtils>
 #include <osg/Depth>
 #include <osg/Fog>
+
 #undef  LC
 #define LC "[SilverLiningContextNode] "
 
 using namespace osgEarth::SilverLining;
 
 SilverLiningContextNode::SilverLiningContextNode(SilverLiningNode* node,
+												osg::Camera* camera,
 												osg::Light* light, 
 												const osgEarth::MapNode*       map,
-												const SilverLiningOptions& options):
+												const SilverLiningOptions& options,
+												Callback*                  callback):
 _silverLiningNode(node),
 _options     (options),
 _lastAltitude(DBL_MAX),
+_camera(camera),
 _map(map)
 {
 #ifdef SL_USE_MUTEX
@@ -52,20 +54,23 @@ _map(map)
     _SL = new SilverLiningContext( options );
     _SL->setLight( light);
     _SL->setSRS  ( map->getMap()->getSRS() );
-	
+	_SL->setCallback(callback);
+	_SL->setMinimumAmbient(node->getMinimumAmbient());
+
+ 
     // Geode to hold each of the SL drawables:
     _geode = new osg::Geode();
     _geode->setCullingActive( false );
 
     // Draws the sky before everything else
-    _skyDrawable = new SkyDrawable( this,_SL.get() );
+    _skyDrawable = new SkyDrawable( this );
     _skyDrawable->getOrCreateStateSet()->setRenderBinDetails( -99, "RenderBin" );
     _geode->addDrawable( _skyDrawable );
 
     // Clouds draw after everything else
 	if(options.drawClouds().get())
 	{
-		_cloudsDrawable = new CloudsDrawable( this,_SL.get() );
+		_cloudsDrawable = new CloudsDrawable( this );
 		char* render_bin = ::getenv("OSGEARTH_SL_CLOUDS_RB");
 		if(render_bin)
 		{
@@ -97,13 +102,15 @@ SilverLiningContextNode::~SilverLiningContextNode()
 }
 
 void
-	SilverLiningContextNode::onSetDateTime()
+
+SilverLiningContextNode::onSetDateTime()
 {
 	// set the SL local time to UTC/epoch.
 	::SilverLining::LocalTime utcTime;
-	utcTime.SetFromEpochSeconds( _silverLiningNode->getDateTime().asTimeStamp() );
-	_SL->getAtmosphere()->GetConditions()->SetTime( utcTime );
+	utcTime.SetFromEpochSeconds(_silverLiningNode->getDateTime().asTimeStamp());
+	_SL->getAtmosphere()->GetConditions()->SetTime(utcTime);
 }
+
 
 void
 	SilverLiningContextNode::onSetMinimumAmbient()
@@ -112,10 +119,10 @@ void
 }
 
 
-int SilverLiningContextNode::getEnvMapTextureID() 
-{ 
+int SilverLiningContextNode::getEnvMapTextureID()
+{
 	int id = 0;
-	if(_updateEnvMap)
+	if (_updateEnvMap)
 	{
 		id = _SL->getEnvMapID();
 		//force new update
@@ -123,6 +130,7 @@ int SilverLiningContextNode::getEnvMapTextureID()
 	}
 	return id;
 }
+
 
 void
 SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
@@ -161,14 +169,20 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 			osg::Camera* camera  = cv->getCurrentCamera();
 			if ( camera )
 			{
-				SilverLiningContextNode *sky_node = dynamic_cast<SilverLiningContextNode *>(camera->getUserData());
-				if(sky_node == this)
+#ifndef SL_USE_CULL_MASK
+				//Check if this is the target camera for this context
+				if (getTargetCamera() == camera)
+#endif
 				{
 #ifdef SL_USE_MUTEX
 					OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _mutex );
 #endif
 					_SL->setCamera(camera);
 					_SL->setCameraPosition( nv.getEyePoint() );
+
+					// TODO: make this multi-camera safe
+					_SL->setCameraPosition( nv.getEyePoint() );
+					
 					_SL->getAtmosphere()->SetCameraMatrix( cv->getModelViewMatrix()->ptr() );
 					_SL->getAtmosphere()->SetProjectionMatrix( cv->getProjectionMatrix()->ptr() );
 
@@ -181,7 +195,6 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 
 					//_SL->getAtmosphere()->UpdateSkyAndClouds();
 					//_SL->getAtmosphere()->CullObjects();
-
 
 					//update fog
 					
@@ -214,7 +227,6 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 			}
         }
     }
-   
     if ( _geode.valid() )
     {
         _geode->accept(nv);

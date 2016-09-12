@@ -121,14 +121,17 @@ class NullStreamBuffer : public std::streambuf
 
 struct NullStream : public std::ostream
 {
-    NullStream():
-        std::ostream(new NullStreamBuffer) {}
+    NullStream() :
+         std::ostream(_nsb = new NullStreamBuffer) {}
         
     virtual ~NullStream()
     {
         delete rdbuf();
         rdbuf(0);
+        //delete _nsb;
     }
+
+    NullStreamBuffer* _nsb;
 };
 
 std::ostream&

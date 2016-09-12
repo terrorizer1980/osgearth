@@ -207,7 +207,6 @@ TileSourceOptions::fromConfig( const Config& conf )
 //------------------------------------------------------------------------
 
 // statics
-TileSource::Status TileSource::STATUS_OK = TileSource::Status();
 
 const char* TileSource::INTERFACE_NAME = "osgEarth::TileSource";
 
@@ -219,7 +218,8 @@ const TileSource::Mode TileSource::MODE_CREATE = 0x04;
 TileSource::TileSource(const TileSourceOptions& options) :
 _options( options ),
 _status ( Status::Error("Not initialized") ),
-_mode   ( 0 )
+_mode   ( 0 ),
+_openCalled( false )
 {
     this->setThreadSafeRefUnref( true );
 
@@ -276,49 +276,36 @@ TileSource::~TileSource()
     }
 }
 
-void
-TileSource::setStatus( TileSource::Status status )
-{
-    _status = status;
-}
-
-TileSource::Status
-TileSource::initialize(const osgDB::Options* options)
-{
-    // default implementation. Subclasses should override this.
-    return STATUS_OK;
-}
-
-const TileSource::Status&
+const Status&
 TileSource::open(const Mode&           openMode,
                  const osgDB::Options* options)
 {
-    _mode = openMode;
-
-    // Initialize the underlying data store
-    Status status = initialize(options);
-
-    // Check the return status. The TileSource MUST have a valid
-    // Profile after initialization.
-    if ( status == STATUS_OK )
+    if (!_openCalled)
     {
-        if ( getProfile() != 0L )
+        _mode = openMode;
+
+        // Initialize the underlying data store
+        Status status = initialize(options);
+
+        // Check the return status. The TileSource MUST have a valid
+        // Profile after initialization.
+        if ( status == STATUS_OK )
+        {
+            if ( getProfile() != 0L )
+            {
+                _status = status;
+            }
+            else 
+            {
+                _status = Status::Error("No profile available");
+            }
+        }
+        else
         {
             _status = status;
         }
-        else 
-        {
-            _status = Status::Error("No profile available");
-        }
-    }
-    else
-    {
-        _status = status;
-    }
 
-    if ( _status.isError() )
-    {
-        OE_WARN << LC << "Open failed: " << _status.message() << std::endl;
+        _openCalled = true;
     }
 
     return _status;
@@ -361,7 +348,7 @@ TileSource::createImage(const TileKey&        key,
                         ImageOperation*       prepOp, 
                         ProgressCallback*     progress )
 {
-    if ( _status != STATUS_OK )
+    if (getStatus().isError())
         return 0L;
 
     // Try to get it from the memcache fist
@@ -391,7 +378,7 @@ TileSource::createHeightField(const TileKey&        key,
                               HeightFieldOperation* prepOp, 
                               ProgressCallback*     progress )
 {
-    if ( _status != STATUS_OK )
+    if (getStatus().isError())
         return 0L;
 
     // Try to get it from the memcache first:
@@ -427,7 +414,7 @@ osg::HeightField*
 TileSource::createHeightField(const TileKey&        key,
                               ProgressCallback*     progress)
 {
-    if ( _status != STATUS_OK )
+    if (getStatus().isError())
         return 0L;
 
     osg::ref_ptr<osg::Image> image = createImage(key, progress);
@@ -445,7 +432,7 @@ TileSource::storeHeightField(const TileKey&     key,
                              osg::HeightField*  hf,
                               ProgressCallback* progress)
 {
-    if ( _status != STATUS_OK || hf == 0L )
+    if (getStatus().isError() || hf == 0L )
         return 0L;
 
     ImageToHeightFieldConverter conv;
@@ -460,7 +447,7 @@ TileSource::storeHeightField(const TileKey&     key,
 bool
 TileSource::isOK() const 
 {
-    return _status == STATUS_OK;
+    return _status.isOK();
 }
 
 void
@@ -747,61 +734,27 @@ TileSourceFactory::create(const TileSourceOptions& options)
     result = dynamic_cast<TileSource*>( osgDB::readObjectFile( driverExt, dbopt.get() ) );
     if ( !result )
     {
-        OE_WARN << LC << "Failed to load TileSource driver \"" << driver << "\"" << std::endl;
+        OE_INFO << LC << "Failed to load TileSource driver \"" << driver << "\"" << std::endl;
     }
 
-    OE_DEBUG << LC << "Tile source Profile = " << (result->getProfile() ? result->getProfile()->toString() : "NULL") << std::endl;
-
-    // apply an Override Profile if provided.
-    if ( result && options.profile().isSet() )
+    else
     {
-        const Profile* profile = Profile::create(*options.profile());
-        if ( profile )
+        OE_DEBUG << LC << "Tile source Profile = " << (result->getProfile() ? result->getProfile()->toString() : "NULL") << std::endl;
+
+        // apply an Override Profile if provided.
+        if ( options.profile().isSet() )
         {
-            result->setProfile( profile );
+            const Profile* profile = Profile::create(*options.profile());
+            if ( profile )
+            {
+                result->setProfile( profile );
+            }
         }
     }
 
     return result;
 }
 
-#if 0
-ReadWriteTileSource*
-TileSourceFactory::openReadWrite(const TileSourceOptions& options)
-{
-    ReadWriteTileSource* result = 0L;
-
-    std::string driver = options.getDriver();
-    if ( driver.empty() )
-    {
-        OE_WARN << LC << "ILLEGAL- no driver set for tile source" << std::endl;
-        return 0L;
-    }
-
-    osg::ref_ptr<osgDB::Options> dbopt = Registry::instance()->cloneOrCreateOptions();
-    dbopt->setPluginData      ( TILESOURCEOPTIONS_TAG,   (void*)&options );
-    dbopt->setPluginStringData( TILESOURCEINTERFACE_TAG, ReadWriteTileSource::INTERFACE_NAME );
-
-    std::string driverExt = std::string( ".osgearth_" ) + driver;
-    result = dynamic_cast<ReadWriteTileSource*>( osgDB::readObjectFile( driverExt, dbopt.get() ) );
-    if ( !result )
-    {
-        OE_WARN << LC << "Failed to load ReadWriteTileSource driver \"" << driver << "\"" << std::endl;
-    }
-
-    // apply an Override Profile if provided.
-    if ( result && options.profile().isSet() )
-    {
-        const Profile* profile = Profile::create(*options.profile());
-        if ( profile )
-        {
-            result->setProfile( profile );
-        }
-    }
-
-    return result;
-}
-#endif
 
 //------------------------------------------------------------------------
 

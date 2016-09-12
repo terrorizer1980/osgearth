@@ -52,14 +52,11 @@ public:
 
         if (!_options.elevationLayer().isSet())
         {
-            return Status::Error("Please specify a heightfield layer for the color ramp");
+            return Status::Error(Status::ConfigurationError, "Please specify a heightfield layer for the color ramp");
         }
         
         _layer = new ElevationLayer(*_options.elevationLayer() );
-        if (!_layer.valid())
-        {
-            return Status::Error("Failed to initialize the Please specify a heightfield layer for the color ramp");
-        }
+        _layer->open();
 
         setProfile(_layer->getProfile());
 
@@ -148,7 +145,7 @@ public:
         supportsExtension( "osgearth_colorramp", "Color ramp driver for osgEarth" );
     }
 
-    virtual const char* className()
+    virtual const char* className() const
     {
         return "ColorRamp Image Driver";
     }

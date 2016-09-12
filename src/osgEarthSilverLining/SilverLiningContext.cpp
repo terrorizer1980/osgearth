@@ -20,12 +20,54 @@
 #include "SilverLiningContext"
 #include "SilverLiningNode"
 #include <osg/Light>
+#include <osgDB/FileNameUtils>
 #include <osgEarth/SpatialReference>
+#include <cstdlib>
 
 #define LC "[SilverLiningContext] "
 
 using namespace osgEarth::SilverLining;
 
+
+/**
+ * Adapter that converts the return value of osgEarth::SilverLining::Callback::getMilliseconds()
+ * into a usable value for SilverLining using the SilverLining MillisecondTimer callback.
+ */
+class MillisecondTimerAdapter : public ::SilverLining::MillisecondTimer
+{
+public:
+    MillisecondTimerAdapter(SilverLiningContext* context) :
+    _context(context),
+    _defaultTimer(new ::SilverLining::MillisecondTimer)
+    {
+    }
+
+    virtual ~MillisecondTimerAdapter()
+    {
+        delete _defaultTimer;
+    }
+
+    virtual unsigned long SILVERLINING_API GetMilliseconds() const
+    {
+        osg::ref_ptr<SilverLiningContext> context;
+        unsigned long milliseconds = 0;
+        if (_context.lock(context))
+        {
+            osg::ref_ptr<Callback> callback = context->getCallback();
+            if (callback.valid())
+                milliseconds = callback->getMilliseconds();
+        }
+
+        // As per documentation, use the default SilverLining timer instead of returning 0
+        if (milliseconds != 0)
+            return milliseconds;
+        return _defaultTimer->GetMilliseconds();
+    }
+
+private:
+    osg::observer_ptr<SilverLiningContext> _context;
+    ::SilverLining::MillisecondTimer* _defaultTimer;
+};
 
 SilverLiningContext::SilverLiningContext(const SilverLiningOptions& options) :
 _options              ( options ),
@@ -43,9 +85,7 @@ _cumulusCongestusLayer (-1),
 _setupClouds(false)
 {
     // Create a SL atmosphere (the main SL object).
-    // TODO: plug in the username + license key.
-	//::srand(1234);
-	srand(0);
+    _msTimer = new MillisecondTimerAdapter(this);
 
     // Create a SL atmosphere (the main SL object).
     _atmosphere = new ::SilverLining::Atmosphere(
@@ -62,11 +102,9 @@ _setupClouds(false)
 
 SilverLiningContext::~SilverLiningContext()
 {
-    if ( _atmosphereWrapper )
         delete _atmosphereWrapper;
-
-    if ( _atmosphere )
         delete _atmosphere;
+    delete _msTimer;
 
     OE_INFO << LC << "Destroyed\n";
 }
@@ -124,11 +162,17 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 
             // constant random seed ensures consistent clouds across windows
             // TODO: replace this with something else since this is global! -gw
+            ::srand(1234);
             //srand(0);
-		
+            std::string resourcePath = _options.resourcePath().get();
+            if (resourcePath.empty() && ::getenv("SILVERLINING_PATH"))
+            {
+                resourcePath = osgDB::concatPaths(::getenv("SILVERLINING_PATH"), "Resources");
+            }
+
             int result = _atmosphere->Initialize(
                 ::SilverLining::Atmosphere::OPENGL,
-                _options.resourcePath()->c_str(),
+                resourcePath.c_str(),
                 true,
                 0 );
 
@@ -169,7 +213,9 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 					_atmosphere->SetRightVector( 1.0, 0.0, 0.0 );
 				}
 
-				
+                // Configure the timer used for animations
+                _atmosphere->GetConditions()->SetMillisecondTimer(_msTimer);
+
 #if 0 // todo: review this
                 _maxAmbientLightingAlt = 
                     _atmosphere->GetConfigOptionDouble("atmosphere-height");

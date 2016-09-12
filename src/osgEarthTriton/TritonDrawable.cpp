@@ -36,6 +36,10 @@ using namespace osgEarth::Triton;
 
 namespace
 {
+
+/** Default size of _contextDirty */
+static const size_t NUM_CONTEXTS = 64;
+
 #ifdef DEBUG_HEIGHTMAP
 	osg::Node*
 		makeFrustumFromCamera(osg::Camera* camera)
@@ -233,8 +237,6 @@ namespace
 	*/
 	class OceanTerrainChangedCallback : public osgEarth::TerrainCallback
 	{
-		TritonDrawable* _drawable;
-
 	public:
 		OceanTerrainChangedCallback(TritonDrawable* drawable)
 			: _drawable(drawable) { }
@@ -245,8 +247,13 @@ namespace
 			// When this happens we need to update the Triton height map.
 		void onTileAdded(const osgEarth::TileKey& tileKey, osg::Node* terrain, osgEarth::TerrainCallbackContext& context)
 		{
-			_drawable->dirtyAllContexts();
+            osg::ref_ptr<TritonDrawable> drawable;
+            if ( _drawable.lock(drawable) )
+                drawable->dirtyAllContexts();
 		}
+
+    private:
+        osg::observer_ptr<TritonDrawable> _drawable;
 	};
 
 
@@ -322,8 +329,18 @@ TritonDrawable::TritonDrawable(osgEarth::MapNode* mapNode, TritonContext* TRITON
 		this->getOrCreateStateSet()->setRenderBinDetails( render_bin_num, "DepthSortedBin" );
 	}else
 		this->getOrCreateStateSet()->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-	_contextDirty.resize(64);
+	_contextDirty.resize(NUM_CONTEXTS);
 	dirtyAllContexts();
+}
+
+TritonDrawable::~TritonDrawable()
+{
+    osg::ref_ptr<MapNode> mapNode;
+    osg::ref_ptr<osgEarth::TerrainCallback> callback;
+    if ( _mapNode.lock(mapNode) && _terrainChangedCallback.lock(callback) && mapNode->getTerrain() )
+    {
+        _mapNode->getTerrain()->removeTerrainCallback( callback );
+    }
 }
 
 void
@@ -650,15 +667,17 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
     if ( _TRITON->passHeightMapToTriton() ) 
     {
         unsigned cid = renderInfo.getContextID();
+        const bool validCid = (cid < _contextDirty.size());
 
         bool dirty =
-            ( _contextDirty[cid] ) ||
+            ( validCid && _contextDirty[cid] ) ||
             ( renderInfo.getView()->getCamera()->getViewMatrix()       != _viewMatrix ) ||
             ( renderInfo.getView()->getCamera()->getProjectionMatrix() != _projMatrix );
 
         if ( dirty )
         {
             updateHeightMap( renderInfo );
+            if ( validCid )
             _contextDirty[renderInfo.getContextID()] = 0;
             _viewMatrix = renderInfo.getView()->getCamera()->getViewMatrix();
             _projMatrix = renderInfo.getView()->getCamera()->getProjectionMatrix();
@@ -899,6 +918,7 @@ void TritonDrawable::setupHeightMap(osg::State& state)
     
     _heightCamera->addChild( mapNode->getTerrainEngine() );
     _terrainChangedCallback = new OceanTerrainChangedCallback(this);
+    if ( mapNode->getTerrain() )
     mapNode->getTerrain()->addTerrainCallback( _terrainChangedCallback.get() );
 
     osg::Group* root = osgEarth::findTopMostNodeOfType<osg::Group>(mapNode);

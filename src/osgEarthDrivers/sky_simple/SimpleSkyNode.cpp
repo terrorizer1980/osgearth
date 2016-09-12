@@ -59,7 +59,7 @@
 
 using namespace osgEarth;
 using namespace osgEarth::Util;
-using namespace osgEarth::Drivers::SimpleSky;
+using namespace osgEarth::SimpleSky;
 
 //---------------------------------------------------------------------------
 
@@ -237,7 +237,7 @@ SimpleSkyNode::initialize(const SpatialReference* srs)
     _cullContainer = new osg::Group();
     
     // set up the astronomical parameters:
-    _ellipsoidModel = srs->getEllipsoid();
+    _ellipsoidModel = srs ? srs->getEllipsoid() : new osg::EllipsoidModel();
     _innerRadius = osg::minimum(
         _ellipsoidModel->getRadiusPolar(),
         _ellipsoidModel->getRadiusEquator() );
@@ -426,11 +426,12 @@ SimpleSkyNode::makeSceneLighting()
     VirtualProgram* vp = VirtualProgram::getOrCreate( stateset );
     vp->setName( "SimpleSky Scene Lighting" );
 
-    if (_options.atmosphericLighting() == true && !Registry::capabilities().isGLES() )
+    if (_options.atmosphericLighting() == true)// && !Registry::capabilities().isGLES() )
     {
         Shaders pkg;
         pkg.load( vp, pkg.Ground_ONeil_Vert );
         pkg.load( vp, pkg.Ground_ONeil_Frag );
+        OE_INFO << LC << "Using O'Neil atmospheric lighting\n";
     }
 
     else
@@ -438,6 +439,7 @@ SimpleSkyNode::makeSceneLighting()
         _phong = new PhongLightingEffect();
         _phong->setCreateLightingUniform( false );
         _phong->attach( stateset );
+        OE_INFO << LC << "Using Phong lighting\n";
     }
 
     // calculate and apply the uniforms:
@@ -662,7 +664,10 @@ SimpleSkyNode::makeMoon()
     }
 }
 
-SimpleSkyNode::StarData::StarData(std::stringstream &ss)
+SimpleSkyNode::StarData::StarData(std::stringstream &ss) :
+right_ascension(0.0),
+declination(0.0),
+magnitude(0.0)
 {
     std::getline( ss, name, ',' );
     std::string buff;

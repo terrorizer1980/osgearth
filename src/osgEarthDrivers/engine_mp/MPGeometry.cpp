@@ -37,10 +37,58 @@ using namespace osgEarth;
 #define LC "[MPGeometry] "
 
 
+MPGeometry::MPGeometry() :
+osg::Geometry(),
+_frame(0L),
+_uidUniformNameID(0),
+_birthTimeUniformNameID(0u),
+_orderUniformNameID(0u),
+_opacityUniformNameID(0u),
+_texMatParentUniformNameID(0u),
+_tileKeyUniformNameID(0u),
+_minRangeUniformNameID(0u),
+_maxRangeUniformNameID(0u),
+_imageUnit(0),
+_imageUnitParent(0),
+_elevUnit(0),
+_supportsGLSL(false)
+{
+}
+
+MPGeometry::MPGeometry(const MPGeometry& rhs, const osg::CopyOp& cop) :
+osg::Geometry(rhs, cop),
+_frame(rhs._frame),
+_uidUniformNameID(rhs._uidUniformNameID),
+_birthTimeUniformNameID(rhs._birthTimeUniformNameID),
+_orderUniformNameID(rhs._orderUniformNameID),
+_opacityUniformNameID(rhs._opacityUniformNameID),
+_texMatParentUniformNameID(rhs._texMatParentUniformNameID),
+_tileKeyUniformNameID(rhs._tileKeyUniformNameID),
+_minRangeUniformNameID(rhs._minRangeUniformNameID),
+_maxRangeUniformNameID(rhs._maxRangeUniformNameID),
+_imageUnit(rhs._imageUnit),
+_imageUnitParent(rhs._imageUnitParent),
+_elevUnit(rhs._elevUnit),
+_supportsGLSL(rhs._supportsGLSL)
+{
+}
+
+
 MPGeometry::MPGeometry(const TileKey& key, const MapFrame& frame, int imageUnit) : 
 osg::Geometry    ( ),
 _frame           ( frame ),
-_imageUnit       ( imageUnit )
+_imageUnit       ( imageUnit ),
+_uidUniformNameID(0),
+_birthTimeUniformNameID(0u),
+_orderUniformNameID(0u),
+_opacityUniformNameID(0u),
+_texMatParentUniformNameID(0u),
+_tileKeyUniformNameID(0u),
+_minRangeUniformNameID(0u),
+_maxRangeUniformNameID(0u),
+_imageUnitParent(0),
+_elevUnit(0),
+_supportsGLSL(false)
 {
     _supportsGLSL = Registry::capabilities().supportsGLSL();
 
@@ -141,6 +189,8 @@ MPGeometry::renderPrimitiveSets(osg::State& state,
         uidLocation          = pcp->getUniformLocation( _uidUniformNameID );
         orderLocation        = pcp->getUniformLocation( _orderUniformNameID );
         texMatParentLocation = pcp->getUniformLocation( _texMatParentUniformNameID );
+        minRangeLocation = pcp->getUniformLocation( _minRangeUniformNameID );
+        maxRangeLocation = pcp->getUniformLocation( _maxRangeUniformNameID );
     }
     
     // apply the tilekey uniform once.
@@ -193,13 +243,10 @@ MPGeometry::renderPrimitiveSets(osg::State& state,
 
     // remember whether we applied a parent texture.
     bool usedTexParent = false;
-    bool useMinVisibleRange = false;
-    bool useMaxVisibleRange = false;
 
     if ( _layers.size() > 0 )
     {
         float prev_opacity        = -1.0f;
-        float prev_alphaThreshold = -1.0f;
 
         // first bind any shared layers. We still have to do this even if we are
         // in !renderColor mode b/c these textures could be used by vertex shaders
@@ -234,29 +281,8 @@ MPGeometry::renderPrimitiveSets(osg::State& state,
                         }
                     }
                 }
-
-                // check for min/rax range usage.
-                const ImageLayerOptions& layerOptions = layer._imageLayer->getImageLayerOptions();
-
-                if ( layerOptions.minVisibleRange().isSet() )
-                    useMinVisibleRange = true;
-                if ( layerOptions.maxVisibleRange().isSet() )
-                    useMaxVisibleRange = true;
             }
         }
-
-        // look up the minRange uniform if necessary
-        if ( useMinVisibleRange && pcp )
-        {
-            minRangeLocation = pcp->getUniformLocation( _minRangeUniformNameID );
-        }
-        
-        // look up the maxRange uniform if necessary
-        if ( useMaxVisibleRange && pcp )
-        {
-            maxRangeLocation = pcp->getUniformLocation( _maxRangeUniformNameID );
-        }
-
         if (renderColor)
         {
             // find the first opaque layer, top-down, and start there:

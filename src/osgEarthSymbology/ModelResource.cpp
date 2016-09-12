@@ -21,6 +21,7 @@
 #include <osgEarth/Utils>
 #include <osgEarth/Registry>
 #include <osgEarth/Capabilities>
+#include <osgEarth/ImageUtils>
 #include <osgUtil/Optimizer>
 #include <osg/ComputeBoundsVisitor>
 
@@ -32,7 +33,9 @@ using namespace osgEarth::Symbology;
 //---------------------------------------------------------------------------
 
 ModelResource::ModelResource( const Config& conf ) :
-InstanceResource( conf )
+InstanceResource( conf ),
+_canScaleToFitXY(true),
+_canScaleToFitZ(true)
 {
     mergeConfig( conf );
 }
@@ -40,7 +43,8 @@ InstanceResource( conf )
 void
 ModelResource::mergeConfig( const Config& conf )
 {
-    //nop
+    conf.getIfSet("can_scale_to_fit_xy", _canScaleToFitXY);
+    conf.getIfSet("can_scale_to_fit_z",  _canScaleToFitZ);
 }
 
 Config
@@ -48,7 +52,8 @@ ModelResource::getConfig() const
 {
     Config conf = InstanceResource::getConfig();
     conf.key() = "model";
-    //nop
+    conf.addIfSet("can_scale_to_fit_xy", _canScaleToFitXY);
+    conf.addIfSet("can_scale_to_fit_z",  _canScaleToFitZ);
     return conf;
 }
 
@@ -72,18 +77,34 @@ ModelResource::getBoundingBox(const osgDB::Options* dbo)
     return _bbox;
 }
 
+namespace
+{
+    struct SetUnRefPolicyToFalse : public TextureAndImageVisitor
+    {
+        void apply(osg::Texture& texture)
+        {
+            texture.setUnRefImageDataAfterApply(false);
+        }
+    };
+}
+
 osg::Node*
 ModelResource::createNodeFromURI( const URI& uri, const osgDB::Options* dbOptions ) const
 {
     osg::ref_ptr< osgDB::Options > options = dbOptions ? new osgDB::Options( *dbOptions ) : 0L;
 
     // Explicitly cache images so that models that share images will only load one copy.
+    // If the options struture doesn't contain an object cache, OSG will use the global
+    // object cache stored in the Registry. Without this, models that share textures or
+    // use an atlas will duplicate memory usage.
+    //
+    // I don't like having this here - it seems like it belongs elsewhere and the caller
+    // should be passing it in. But it needs to be set, so keep for now.
     if ( options.valid() )
     {
-        // does this REALLY belong here? Or should we rely on the incoming dboptions instead
-        // so the user/caller can decide if and how to cache images like texture atlases?
         options->setObjectCacheHint( osgDB::Options::CACHE_IMAGES );
     }
+
     osg::Node* node = 0L;
 
     ReadResult r = uri.readNode( options.get() );
@@ -96,10 +117,20 @@ ModelResource::createNodeFromURI( const URI& uri, const osgDB::Options* dbOption
 
         osgUtil::Optimizer o;
         o.optimize( node,
-            o.DEFAULT_OPTIMIZATIONS |
-            o.INDEX_MESH |
-            o.VERTEX_PRETRANSFORM |
+            o.REMOVE_REDUNDANT_NODES |
+            o.COMBINE_ADJACENT_LODS  |
+            o.MERGE_GEOMETRY         |
+            o.MAKE_FAST_GEOMETRY     |
+            o.CHECK_GEOMETRY         |
+            o.SHARE_DUPLICATE_STATE  |
+            o.INDEX_MESH             |
+            o.VERTEX_PRETRANSFORM    |
             o.VERTEX_POSTTRANSFORM );
+        
+
+        // Disable automatic texture unref since resources can be shared/paged.
+        SetUnRefPolicyToFalse visitor;
+        node->accept( visitor );
     }
     else // failing that, fall back on the old encoding format..
     {

@@ -69,7 +69,7 @@ namespace osgEarth { namespace Triton
         void SetPlanarReflectionProjection(osg::RefMatrix * proj) {_planarReflectionProjection = proj;};
 
     protected:
-        virtual ~TritonDrawable() { }
+        virtual ~TritonDrawable();
 
         osg::observer_ptr<TritonContext>  _TRITON;
         osg::observer_ptr<osgEarth::MapNode> _mapNode;

@@ -30,6 +30,7 @@
 #include <osgEarth/TraversalData>
 #include <osgEarth/Shadowing>
 #include <osgEarth/Utils>
+#include <osgEarth/TraversalData>
 
 #include <osg/Uniform>
 #include <osg/ComputeBoundsVisitor>
@@ -63,7 +64,11 @@ namespace
 
 TileNode::TileNode() : 
 _dirty        ( false ),
-_childrenReady( false )
+_childrenReady( false ),
+_minExpiryTime( 0.0 ),
+_minExpiryFrames( 0 ),
+_lastTraversalTime(0.0),
+_lastTraversalFrame(0.0)
 {
     osg::StateSet* stateSet = getOrCreateStateSet();
 
@@ -77,10 +82,13 @@ _childrenReady( false )
 void
 TileNode::create(const TileKey& key, EngineContext* context)
 {
+    if (!context)
+        return;
+
     _key = key;
 
     // Create mask records
-    osg::ref_ptr<MaskGenerator> masks = context ? new MaskGenerator(key, context->getOptions().tileSize().get(), context->getMapFrame()) : 0L;
+    osg::ref_ptr<MaskGenerator> masks = new MaskGenerator(key, context->getOptions().tileSize().get(), context->getMapFrame());
 
     // Get a shared geometry from the pool that corresponds to this tile key:
     osg::ref_ptr<osg::Geometry> geom;
@@ -123,24 +131,6 @@ TileNode::create(const TileKey& key, EngineContext* context)
         patchDrawable );
 
     // PPP: Better way to do this rather than here?
-    // Can't do it at RexTerrainEngineNode level, because the SurfaceNode is not valid yet
-    if (context->getSelectionInfo().initialized()==false)
-    {
-        static Threading::Mutex s_selInfoMutex;
-        Threading::ScopedMutexLock lock(s_selInfoMutex);
-        if ( context->getSelectionInfo().initialized()==false)
-        {
-            SelectionInfo& selectionInfo = const_cast<SelectionInfo&>(context->getSelectionInfo());
-
-            unsigned uiFirstLOD = *(context->_options.firstLOD());
-            unsigned uiMaxLod   = std::min( context->_options.maxLOD().get(), 20u ); // beyond LOD 19 or 20, morphing starts to lose precision.
-            unsigned uiTileSize = *(context->_options.tileSize());
-
-            selectionInfo.initialize(uiFirstLOD, uiMaxLod, uiTileSize, getVisibilityRangeHint(context));
-        }
-    }
-
-    // initialize all the per-tile uniforms the shaders will need:
     createPayloadStateSet(context);
 
     updateTileUniforms(context->getSelectionInfo());
@@ -168,7 +158,13 @@ TileNode::computeBound() const
 bool
 TileNode::isDormant(const osg::FrameStamp* fs) const
 {
-    return fs && fs->getFrameNumber() - _lastTraversalFrame > 2u;
+    const unsigned minMinExpiryFrames = 3u;
+
+    bool dormant = 
+           fs &&
+           fs->getFrameNumber() - _lastTraversalFrame > std::max(_minExpiryFrames, minMinExpiryFrames) &&
+           fs->getReferenceTime() - _lastTraversalTime > _minExpiryTime;
+    return dormant;
 }
 
 void
@@ -256,6 +252,8 @@ TileNode::setDirty(bool value)
 void
 TileNode::releaseGLObjects(osg::State* state) const
 {
+    OE_DEBUG << LC << "Tile " << _key.str() << " : Release GL objects\n";
+
     if ( getStateSet() )
         getStateSet()->releaseGLObjects(state);
     if ( _payloadStateSet.valid() )
@@ -269,25 +267,6 @@ TileNode::releaseGLObjects(osg::State* state) const
 
     osg::Group::releaseGLObjects(state);
 }
-
-float
-TileNode::getVisibilityRangeHint(EngineContext* context) const
-{    
-    unsigned firstLOD = context->_options.firstLOD().get();
-    float mtrf = context->_options.minTileRangeFactor().get();
-
-    if (getTileKey().getLOD()!=firstLOD)
-    {
-        OE_INFO << LC <<"Error: Visibility Range hint can be computed only using the first LOD"<<std::endl;
-        return -1;
-    }
-    // The motivation here is to use the extents of the tile at lowest resolution
-    // along with a factor as an estimate of the visibility range
-    const float factor = mtrf * 3.214f; //2.5f;
-    const osg::BoundingBox& box = _surface->getAlignedBoundingBox();
-    return factor * 0.5*std::max( box.xMax()-box.xMin(), box.yMax()-box.yMin() );
-}
-
 
 bool
 TileNode::shouldSubDivide(osgUtil::CullVisitor* cv, const SelectionInfo& selectionInfo)
@@ -319,7 +298,7 @@ TileNode::cull_stealth(osgUtil::CullVisitor* cv)
 {
     bool visible = false;
 
-    EngineContext* context = static_cast<EngineContext*>( cv->getUserData() );
+    EngineContext* context = VisitorData::fetch<EngineContext>(*cv, ENGINE_CONTEXT_TAG);
 
     // Shows all culled tiles, good for testing culling
     unsigned frame = cv->getFrameStamp()->getFrameNumber();
@@ -343,7 +322,7 @@ TileNode::cull_stealth(osgUtil::CullVisitor* cv)
 bool
 TileNode::cull(osgUtil::CullVisitor* cv)
 {
-    EngineContext* context = static_cast<EngineContext*>( cv->getUserData() );
+    EngineContext* context = VisitorData::fetch<EngineContext>(*cv, ENGINE_CONTEXT_TAG);
     const SelectionInfo& selectionInfo = context->getSelectionInfo();
 
     // Horizon check the surface first:
@@ -473,9 +452,11 @@ TileNode::accept_cull(osgUtil::CullVisitor* cv)
 {
     bool visible = false;
     
+    if (cv)
+    {
 
-    // update the timestamp so this tile doesn't become dormant.
     _lastTraversalFrame.exchange( cv->getFrameStamp()->getFrameNumber() );
+        _lastTraversalTime = cv->getFrameStamp()->getReferenceTime();
 
     if ( !cv->isCulled(*this) )
     {
@@ -484,6 +465,7 @@ TileNode::accept_cull(osgUtil::CullVisitor* cv)
         visible = cull( cv );
 
         cv->popStateSet();
+    }
     }
 
     return visible;
@@ -494,7 +476,7 @@ TileNode::accept_cull_stealth(osgUtil::CullVisitor* cv)
 {
     bool visible = false;
     
-    //if ( !cv->isCulled(*this) )
+    if (cv)
     {
         cv->pushStateSet( getStateSet() );
 
@@ -555,6 +537,14 @@ TileNode::createChildren(EngineContext* context)
     for(unsigned quadrant=0; quadrant<4; ++quadrant)
     {
         TileNode* node = new TileNode();
+        if (context->getOptions().minExpiryFrames().isSet())
+        {
+            node->setMinimumExpiryFrames( *context->getOptions().minExpiryFrames() );
+        }
+        if (context->getOptions().minExpiryTime().isSet())
+        {         
+            node->setMinimumExpiryTime( *context->getOptions().minExpiryTime() );
+        }
 
         // Build the surface geometry:
         node->create( getTileKey().createChildKey(quadrant), context );
@@ -681,7 +671,7 @@ void
 TileNode::load(osg::NodeVisitor& nv)
 {
     // Access the context:
-    EngineContext* context = static_cast<EngineContext*>( nv.getUserData() );
+    EngineContext* context = VisitorData::fetch<EngineContext>(nv, ENGINE_CONTEXT_TAG);
 
     // Create a new load request on demand:
     if ( !_loadRequest.valid() )

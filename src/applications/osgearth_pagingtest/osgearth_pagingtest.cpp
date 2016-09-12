@@ -45,7 +45,6 @@
 #include <osgEarthDrivers/feature_ogr/OGRFeatureOptions>
 #include <osgEarthDrivers/agglite/AGGLiteOptions>
 #include <osgEarthDrivers/model_feature_geom/FeatureGeomModelOptions>
-#include <osgEarthDrivers/model_feature_stencil/FeatureStencilModelOptions>
 
 #include <osgEarthDrivers/feature_mapnikvectortiles/MVTFeatureOptions>
 
@@ -268,9 +267,11 @@ int main(int argc, char** argv)
             featureOpt.url() = filenames[i];
 
             osg::ref_ptr< FeatureSource > features = FeatureSourceFactory::create( featureOpt );
-            features->initialize();
-            features->getFeatureProfile();
-
+            Status s = features->open();
+            if (s.isError()) {
+                OE_WARN << s.message() << "\n";
+                return -1;
+            }
 
             FeaturePager* featurePager = new FeaturePager(features, getStyle(randomColor(), 0.0), mapNode);
 

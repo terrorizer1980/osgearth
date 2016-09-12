@@ -18,7 +18,6 @@
 */
 #include "RexTerrainEngineNode"
 #include "Shaders"
-#include "QuickReleaseGLObjects"
 #include "SelectionInfo"
 
 #include <osgEarth/HeightFieldUtils>
@@ -51,10 +50,6 @@
 using namespace osgEarth::Drivers::RexTerrainEngine;
 using namespace osgEarth;
 
-
-// TODO: bins don't work with SSDK. No idea why.
-#define USE_RENDER_BINS 1
-
 //------------------------------------------------------------------------
 
 namespace
@@ -82,7 +77,7 @@ namespace
 //---------------------------------------------------------------------------
 
 static Threading::ReadWriteMutex s_engineNodeCacheMutex;
-//Caches the MapNodes that have been created
+//Caches the engines that have been created
 typedef std::map<UID, osg::observer_ptr<RexTerrainEngineNode> > EngineNodeCache;
 
 static
@@ -98,18 +93,6 @@ RexTerrainEngineNode::registerEngine(RexTerrainEngineNode* engineNode)
     Threading::ScopedWriteLock exclusiveLock( s_engineNodeCacheMutex );
     getEngineNodeCache()[engineNode->_uid] = engineNode;
     OE_DEBUG << LC << "Registered engine " << engineNode->_uid << std::endl;
-}
-
-void
-RexTerrainEngineNode::unregisterEngine( UID uid )
-{
-    Threading::ScopedWriteLock exclusiveLock( s_engineNodeCacheMutex );
-    EngineNodeCache::iterator k = getEngineNodeCache().find( uid );
-    if (k != getEngineNodeCache().end())
-    {
-        getEngineNodeCache().erase(k);
-        OE_DEBUG << LC << "Unregistered engine " << uid << std::endl;
-    }
 }
 
 // since this method is called in a database pager thread, we use a ref_ptr output
@@ -155,8 +138,7 @@ _tileCount            ( 0 ),
 _tileCreationTime     ( 0.0 ),
 _batchUpdateInProgress( false ),
 _refreshRequired      ( false ),
-_stateUpdateRequired  ( false ),
-_selectionInfo        ( 0L )
+_stateUpdateRequired  ( false )
 {
     // unique ID for this engine:
     _uid = Registry::instance()->createUID();
@@ -181,8 +163,6 @@ _selectionInfo        ( 0L )
 
 RexTerrainEngineNode::~RexTerrainEngineNode()
 {
-    unregisterEngine( _uid );
-
     if ( _update_mapf )
     {
         delete _update_mapf;
@@ -223,6 +203,12 @@ RexTerrainEngineNode::postInitialize( const Map* map, const TerrainOptions& opti
         _requireParentTextures = true;
     }
 
+    // Terrain morphing doesn't work in projected maps:
+    if (map->getSRS()->isProjected())
+    {
+        _terrainOptions.morphTerrain() = false;
+    }
+
     // if the envvar for tile expiration is set, overide the options setting
     const char* val = ::getenv("OSGEARTH_EXPIRATION_THRESHOLD");
     if ( val )
@@ -251,20 +237,19 @@ RexTerrainEngineNode::postInitialize( const Map* map, const TerrainOptions& opti
     _liveTiles = new TileNodeRegistry("live");
     _liveTiles->setMapRevision( _update_mapf->getRevision() );
 
-#if 0
-    if ( _terrainOptions.quickReleaseGLObjects() == true )
-    {
-        _deadTiles = new TileNodeRegistry("dead");
-        _quickReleaseInstalled = false;
-        ADJUST_UPDATE_TRAV_COUNT( this, +1 );
-    }
+    // A resource releaser that will call releaseGLObjects() on expired objects.
+    ResourceReleaser* releaser = 0;//
+// TODO:  This is simply to get osgearth to build against osg 3.2.0 for travis.  If we can update the travis build then we'll 
+#if OSG_VERSION_GREATER_OR_EQUAL(3,4,0)
+    releaser = new ResourceReleaser();
+    this->addChild( releaser );
 #endif
 
+
     // A shared geometry pool.
-    if ( ::getenv("OSGEARTH_REX_NO_POOL") == 0L )
-    {
-        _geometryPool = new GeometryPool( _terrainOptions );
-    }
+    _geometryPool = new GeometryPool( _terrainOptions );
+    _geometryPool->setReleaser( releaser );
+    this->addChild( _geometryPool.get() );
 
     // Make a tile loader
     PagerLoader* loader = new PagerLoader( this );
@@ -273,8 +258,9 @@ RexTerrainEngineNode::postInitialize( const Map* map, const TerrainOptions& opti
     this->addChild( _loader.get() );
 
     // Make a tile unloader
-    _unloader = new UnloaderGroup( _liveTiles.get(), _deadTiles.get() );
+    _unloader = new UnloaderGroup( _liveTiles.get() );
     _unloader->setThreshold( _terrainOptions.expirationThreshold().get() );
+    _unloader->setReleaser( releaser );
     this->addChild( _unloader.get() );
     
     // handle an already-established map profile:
@@ -399,15 +385,15 @@ RexTerrainEngineNode::setupRenderBindings()
 
 void RexTerrainEngineNode::destroySelectionInfo()
 {
-    if (_selectionInfo)
-    {
-        delete _selectionInfo; _selectionInfo = 0;
-    }
+    //if (_selectionInfo)
+    //{
+    //    delete _selectionInfo; _selectionInfo = 0;
+    //}
 }
 
 void RexTerrainEngineNode::buildSelectionInfo()
 {
-    _selectionInfo = new SelectionInfo;
+//    _selectionInfo = new SelectionInfo;
 }
 
 void
@@ -438,9 +424,20 @@ RexTerrainEngineNode::dirtyTerrain()
         setupRenderBindings();
     }
 
-    // recalculate the LOD morphing parameters:
-    destroySelectionInfo();
-    buildSelectionInfo();
+    // Calculate the LOD morphing parameters:
+    double averageRadius = 0.5*(
+        _update_mapf->getMapInfo().getSRS()->getEllipsoid()->getRadiusEquator() +
+        _update_mapf->getMapInfo().getSRS()->getEllipsoid()->getRadiusPolar());
+
+    double farLOD = 
+        _terrainOptions.minTileRangeFactor().get() *
+        3.214 * averageRadius;
+
+    _selectionInfo.initialize(
+        0u, // always zero, not the terrain options firstLOD
+        std::min( _terrainOptions.maxLOD().get(), 19u ),
+        _terrainOptions.tileSize().get(),
+        farLOD );
 
     // clear out the tile registry:
     if ( _liveTiles.valid() )
@@ -463,6 +460,14 @@ RexTerrainEngineNode::dirtyTerrain()
     for( unsigned i=0; i<keys.size(); ++i )
     {
         TileNode* tileNode = new TileNode();
+        if (context->getOptions().minExpiryFrames().isSet())
+        {
+            tileNode->setMinimumExpiryFrames( *context->getOptions().minExpiryFrames() );
+        }
+        if (context->getOptions().minExpiryTime().isSet())
+        {         
+            tileNode->setMinimumExpiryTime( *context->getOptions().minExpiryTime() );
+        }
                 
         // Next, build the surface geometry for the node.
         tileNode->create( keys[i], context );
@@ -506,31 +511,6 @@ RexTerrainEngineNode::dirtyState()
 void
 RexTerrainEngineNode::traverse(osg::NodeVisitor& nv)
 {
-#if 0
-    if ( nv.getVisitorType() == nv.UPDATE_VISITOR && _quickReleaseInstalled == false )
-    {
-        osg::Camera* cam = findFirstParentOfType<osg::Camera>( this );
-        if ( cam )
-        {
-            // get the installed PDC so we can nest them:
-            osg::Camera::DrawCallback* cbToNest = cam->getPostDrawCallback();
-
-            // if it's another QR callback, we'll just replace it.
-            QuickReleaseGLObjects* previousQR = dynamic_cast<QuickReleaseGLObjects*>(cbToNest);
-            if ( previousQR )
-                cbToNest = previousQR->_next.get();
-
-            cam->setPostDrawCallback( new QuickReleaseGLObjects(_deadTiles.get(), cbToNest) );
-
-            _quickReleaseInstalled = true;
-            OE_INFO << LC << "Quick release enabled" << std::endl;
-
-            // knock down the trav count set in the constructor.
-            ADJUST_UPDATE_TRAV_COUNT( this, -1 );
-        }
-    }
-#endif
-
     if ( nv.getVisitorType() == nv.CULL_VISITOR )
     {
         // Inform the registry of the current frame so that Tiles have access
@@ -552,9 +532,10 @@ RexTerrainEngineNode::traverse(osg::NodeVisitor& nv)
     
     if ( nv.getVisitorType() == nv.CULL_VISITOR && _loader.valid() ) // ensures that postInitialize has run
     {
+        VisitorData::store(nv, ENGINE_CONTEXT_TAG, this->getEngineContext());
         // Pass the tile creation context to the traversal.
-        osg::ref_ptr<osg::Referenced> data = nv.getUserData();
-        nv.setUserData( this->getEngineContext() );
+        //osg::ref_ptr<osg::Referenced> data = nv.getUserData();
+        //nv.setUserData( this->getEngineContext() );
 
         osgUtil::CullVisitor* cv = static_cast<osgUtil::CullVisitor*>(&nv);
 
@@ -564,8 +545,8 @@ RexTerrainEngineNode::traverse(osg::NodeVisitor& nv)
         TerrainEngineNode::traverse( nv );
         this->getEngineContext()->endCull( cv );
 
-        if ( data.valid() )
-            nv.setUserData( data.get() );
+        //if ( data.valid() )
+        //    nv.setUserData( data.get() );
     }
 
     else
@@ -592,7 +573,7 @@ RexTerrainEngineNode::getEngineContext()
             _deadTiles.get(),
             _renderBindings,
             _terrainOptions,
-            *_selectionInfo,
+            _selectionInfo,
             _tilePatchCallbacks);
     }
 
@@ -606,7 +587,7 @@ RexTerrainEngineNode::computeSampleSize(unsigned int levelOfDetail)
     unsigned int meshSize = *_terrainOptions.tileSize();
 
     unsigned int sampleSize = meshSize;
-    unsigned int level = maxLevel;
+    int level = maxLevel; // make sure it's signed for the loop below to work
 
     while( level >= 0 && levelOfDetail != level)
     {
@@ -714,12 +695,15 @@ RexTerrainEngineNode::createTile( const TileKey& key )
         }
     }
 
+    // cannot happen (says coverity; see loop above), so commenting this out -gw
+#if 0
     if (!populated)
     {
         // We have no heightfield so just create a reference heightfield.
         out_hf = HeightFieldUtils::createReferenceHeightField( key.getExtent(), 257, 257);
         sampleKey = key;
     }
+#endif
 
     GeoHeightField geoHF( out_hf.get(), sampleKey.getExtent() );    
     if (sampleKey != key)
@@ -1074,6 +1058,7 @@ RexTerrainEngineNode::updateState()
             // default min/max range uniforms. (max < min means ranges are disabled)
             terrainStateSet->addUniform( new osg::Uniform("oe_layer_minRange", 0.0f) );
             terrainStateSet->addUniform( new osg::Uniform("oe_layer_maxRange", -1.0f) );
+            terrainStateSet->addUniform( new osg::Uniform("oe_layer_attenuationRange", _terrainOptions.attentuationDistance().get()) );
             
             terrainStateSet->getOrCreateUniform(
                 "oe_min_tile_range_factor",

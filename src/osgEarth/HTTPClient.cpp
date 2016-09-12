@@ -34,9 +34,8 @@
 #include <algorithm>
 #include <curl/curl.h>
 
-// Whether to use WinInet instead of cURL
-//#define USE_WININET
-#ifdef USE_WININET
+// Whether to use WinInet instead of cURL - CMAKE option
+#ifdef OSGEARTH_USE_WININET_FOR_HTTP
 #include <WinInet.h>
 #pragma comment(lib, "wininet.lib")
 #endif
@@ -270,9 +269,11 @@ HTTPRequest::getURL() const
 
 /****************************************************************************/
 
-HTTPResponse::HTTPResponse( long _code )
-: _response_code( _code ),
-  _cancelled(false)
+HTTPResponse::HTTPResponse( long _code ) :
+_response_code( _code ),
+_cancelled(false),
+_duration_s(0.0),
+_lastModified(0u)
 {
     _parts.reserve(1);
 }
@@ -281,7 +282,9 @@ HTTPResponse::HTTPResponse( const HTTPResponse& rhs ) :
 _response_code( rhs._response_code ),
 _parts( rhs._parts ),
 _mimeType( rhs._mimeType ),
-_cancelled( rhs._cancelled )
+_cancelled( rhs._cancelled ),
+_duration_s(0.0),
+_lastModified(0u)
 {
     //nop
 }
@@ -388,7 +391,8 @@ HTTPClient::getClient()
 HTTPClient::HTTPClient() :
 _initialized    ( false ),
 _curl_handle    ( 0L ),
-_simResponseCode( -1L )
+_simResponseCode( -1L ),
+_previousHttpAuthentication(0L)
 {
     //nop
     //do no CURL calls here.
@@ -423,6 +427,13 @@ HTTPClient::initializeImpl()
     {
         _simResponseCode = osgEarth::as<long>(std::string(simCode), 404L);
         OE_WARN << LC << "Simulating a network error with Response Code = " << _simResponseCode << std::endl;
+    }
+
+    // Check to HTTP disabling (for testing)
+    const char* disable = getenv("OSGEARTH_HTTP_DISABLE");
+    if (disable)
+    {
+        _simResponseCode = 503L; // SERVICE UNAVAILABLE
     }
 
     // Dumps out HTTP request/response info
@@ -707,7 +718,7 @@ HTTPClient::download(const std::string& uri,
 }
 
 
-#ifdef USE_WININET
+#ifdef OSGEARTH_USE_WININET_FOR_HTTP
 
 namespace
 {
@@ -944,7 +955,7 @@ HTTPClient::doGet(const HTTPRequest&    request,
     return response;
 }
 
-#else // USE_WININET
+#else // OSGEARTH_USE_WININET_FOR_HTTP
 
 HTTPResponse
 HTTPClient::doGet(const HTTPRequest&    request,

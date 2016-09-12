@@ -41,6 +41,7 @@ _depthTestEnabled  ( true )
 
 ModelSourceOptions::~ModelSourceOptions()
 {
+    //nop
 }
 
 void
@@ -86,11 +87,22 @@ ModelSource::~ModelSource()
    //nop
 }
 
+const Status&
+ModelSource::open(const osgDB::Options* readOptions)
+{
+    _status = initialize(readOptions);
+    return _status;
+}
 
 osg::Node* 
 ModelSource::createNode(const Map*        map,
                         ProgressCallback* progress )
 {
+    if (getStatus().isError())
+    {
+        return 0L;
+    }
+
     osg::Node* node = createNodeImplementation(map, progress);
     if ( node )
     {
@@ -183,6 +195,7 @@ ModelSource::firePostProcessors( osg::Node* node )
 
 ModelSourceFactory::~ModelSourceFactory()
 {
+    //nop
 }
 
 ModelSource*
@@ -198,10 +211,10 @@ ModelSourceFactory::create( const ModelSourceOptions& options )
         rwopts->setPluginData( MODEL_SOURCE_OPTIONS_TAG, (void*)&options );
 
         modelSource = dynamic_cast<ModelSource*>( osgDB::readObjectFile( driverExt, rwopts.get() ) );
-        if ( !modelSource )
-        {
-            OE_WARN << "FAILED to load model source driver \"" << options.getDriver() << "\"" << std::endl;
-        }
+        //if ( !modelSource )
+        //{
+        //    OE_WARN << "FAILED to load model source driver \"" << options.getDriver() << "\"" << std::endl;
+        //}
     }
     else
     {

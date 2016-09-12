@@ -266,7 +266,6 @@ DrawInstanced::remove(osg::StateSet* stateset)
     pkg.unload( vp, pkg.InstancingVertex );
 
     stateset->removeUniform("oe_di_postex_TBO");
-    stateset->removeUniform("oe_di_postex_TBO_size");
 }
 
 
@@ -418,17 +417,21 @@ DrawInstanced::convertGraphToUseDrawInstanced( osg::Group* parent )
         posTBO->setInternalFormat( GL_RGBA32F_ARB );
         posTBO->setUnRefImageDataAfterApply( true );
 
+        // so the TBO will serialize properly.
+        image->setWriteHint(osg::Image::STORE_INLINE);
+
         // Tell the SG to skip the positioning texture.
         ShaderGenerator::setIgnoreHint(posTBO, true);
 
         osg::StateSet* stateset = instanceGroup->getOrCreateStateSet();
         stateset->setTextureAttribute(POSTEX_TBO_UNIT, posTBO);
-        stateset->getOrCreateUniform("oe_di_postex_TBO_size", osg::Uniform::INT)->set((int)tboSize);
 
 		// add the node as a child:
         instanceGroup->addChild( node );
 
         parent->addChild( instanceGroup );
+
+        //OE_INFO << LC << "ConvertToDI: instances=" << numInstancesToStore << "\n";
     }
 
     return true;

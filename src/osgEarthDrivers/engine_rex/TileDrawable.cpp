@@ -53,7 +53,9 @@ _drawPatch   ( false ),
 _skirtSize   ( skirtSize )
 {
     this->setDataVariance( DYNAMIC );
-    _geom->setDataVariance( DYNAMIC );
+
+    if (_geom.valid())
+        _geom->setDataVariance( DYNAMIC );
 
     this->setName( key.str() );
 
@@ -69,6 +71,8 @@ _skirtSize   ( skirtSize )
     _texMatrixUniformNameID       = osg::Uniform::getNameID( "oe_layer_texMatrix" );
     _texMatrixParentUniformNameID = osg::Uniform::getNameID( "oe_layer_texParentMatrix" );
     _texParentExistsUniformNameID = osg::Uniform::getNameID( "oe_layer_texParentExists" );
+    _minRangeUniformNameID        = osg::Uniform::getNameID( "oe_layer_minRange" );
+    _maxRangeUniformNameID        = osg::Uniform::getNameID( "oe_layer_maxRange" );
 
     _textureImageUnit       = SamplerBinding::findUsage(bindings, SamplerBinding::COLOR)->unit();
     _textureParentImageUnit = SamplerBinding::findUsage(bindings, SamplerBinding::COLOR_PARENT)->unit();
@@ -106,7 +110,7 @@ TileDrawable::drawPrimitivesImplementation(osg::RenderInfo& renderInfo) const
 void
 TileDrawable::drawPatches(osg::RenderInfo& renderInfo) const
 {
-    if ( _geom->getNumPrimitiveSets() < 1 )
+    if  (!_geom.valid() || _geom->getNumPrimitiveSets() < 1 )
         return;
 
     osg::State& state = *renderInfo.getState(); 
@@ -150,7 +154,7 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo, bool renderColor) const
     }
 
     // safely latch
-    if ( _geom->getNumPrimitiveSets() < 1 )
+    if ( !_geom.valid() || _geom->getNumPrimitiveSets() < 1 )
         return;
 
     // cannot store these in the object since there could be multiple GCs (and multiple
@@ -161,6 +165,8 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo, bool renderColor) const
     GLint texMatrixLocation          = -1;
     GLint texMatrixParentLocation    = -1;
     GLint texParentExistsLocation    = -1;
+    GLint minRangeLocation           = -1;
+    GLint maxRangeLocation           = -1;
 
     // The PCP can change (especially in a VirtualProgram environment). So we do need to
     // requery the uni locations each time unfortunately. TODO: explore optimizations.
@@ -172,6 +178,8 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo, bool renderColor) const
         texMatrixLocation           = pcp->getUniformLocation( _texMatrixUniformNameID );
         texMatrixParentLocation     = pcp->getUniformLocation( _texMatrixParentUniformNameID );
         texParentExistsLocation     = pcp->getUniformLocation( _texParentExistsUniformNameID );
+        minRangeLocation            = pcp->getUniformLocation( _minRangeUniformNameID );
+        maxRangeLocation            = pcp->getUniformLocation( _maxRangeUniformNameID );
     }
 
     float prevOpacity = -1.0f;
@@ -242,9 +250,15 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo, bool renderColor) const
                         ext->glUniform1f( opacityLocation, (GLfloat)opacity );
                         prevOpacity = opacity;
                     }
-                }
+                }         
 
-                for (int i=0; i < _geom->getNumPrimitiveSets(); i++)
+                // Apply the min/max range
+                float minRange = pass._layer->getImageLayerOptions().minVisibleRange().getOrUse(0.0);
+                float maxRange = pass._layer->getImageLayerOptions().maxVisibleRange().getOrUse(-1.0);
+                ext->glUniform1f( minRangeLocation, minRange );
+                ext->glUniform1f( maxRangeLocation, maxRange );
+
+                for (unsigned i=0; i < _geom->getNumPrimitiveSets(); i++)
                     _geom->getPrimitiveSet(i)->draw(state, true);
 
                 ++layersDrawn;
@@ -266,7 +280,7 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo, bool renderColor) const
 
         if ( renderColor )
         {
-            for (int i=0; i < _geom->getNumPrimitiveSets(); i++)
+            for (unsigned i=0; i < _geom->getNumPrimitiveSets(); i++)
             {
                 _geom->getPrimitiveSet(i)->draw(state, true);
             }
@@ -280,7 +294,7 @@ TileDrawable::drawSurface(osg::RenderInfo& renderInfo, bool renderColor) const
             glDrawElements(GL_TRIANGLES, de->size()-_skirtSize, GL_UNSIGNED_SHORT, (const GLvoid *)(ebo->getOffset(de->getBufferIndex())));
         
             // draw the remaining primsets normally
-            for (int i=1; i < _geom->getNumPrimitiveSets(); i++)
+            for (unsigned i=1; i < _geom->getNumPrimitiveSets(); i++)
             {
                 _geom->getPrimitiveSet(i)->draw(state, true);
             }
