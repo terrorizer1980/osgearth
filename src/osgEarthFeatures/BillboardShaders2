@@ -27,7 +27,47 @@ using namespace osgEarth;
 namespace
 {
 
-    const char* billboardVertShader =
+	/* const char* billboardVertShader =
+	"#version 120\n"
+        "void billboardVert(inout vec4 vertex) { \n"
+        "} \n";
+
+	  const char* billboardGeomShader =
+        "#version 400 compatibility\n"
+        "#pragma vp_name BillboardTest\n"
+
+        "layout(triangles) in; \n"
+        "layout(triangle_strip) out; \n"
+        "layout(max_vertices = 3) out; \n"
+        
+        "void VP_LoadVertex(in int); \n"
+        "void VP_EmitViewVertex(); \n"
+
+        "uniform float osg_FrameTime; \n"
+
+        "void billboardGeom() \n"
+        "{ \n"
+        "    float strength = 0.25 + sin(osg_FrameTime*2.0)*0.25; \n"
+        "    vec4 cen = (gl_in[0].gl_Position + gl_in[1].gl_Position + gl_in[2].gl_Position)/3.0; \n"        
+        "    for(int i=0; i < 3; ++i ) \n"
+        "    { \n"
+        "        VP_LoadVertex(i); \n"
+        "        vec4 pos = gl_in[i].gl_Position; \n"
+        "        pos += vec4(normalize(cen.xyz-pos.xyz) * distance(cen, pos) * strength, 0.0); \n"
+        "        gl_Position = pos; \n"
+        "        VP_EmitViewVertex(); \n"
+        "    } \n"
+        "    EndPrimitive(); \n"
+        "} \n";
+		*/
+
+
+	
+
+
+
+    
+	const char* billboardVertShader =
         "#version " GLSL_VERSION_STR "\n"
         //"#extension GL_EXT_geometry_shader4 : enable\n"
         GLSL_DEFAULT_PRECISION_FLOAT "\n"
@@ -39,11 +79,8 @@ namespace
         "    color = gl_Color;\n"
         "    gl_Position = gl_Vertex;\n"
         "}\n";
-
-
-    /**
-     * 
-     */
+		
+    
     const char* billboardGeomShader =
         "#version " GLSL_VERSION_STR "\n"
         "#extension GL_EXT_geometry_shader4 : enable\n"
@@ -108,13 +145,16 @@ namespace
         "    EndPrimitive(); \n"
         "}\n";
 
-
+		 
     const char* billboardFragmentShader =
         "#version " GLSL_VERSION_STR "\n"
         //"#extension GL_EXT_geometry_shader4 : enable\n"
         GLSL_DEFAULT_PRECISION_FLOAT "\n"
         "uniform sampler2D billboard_tex; \n"
 		"uniform bool oe_mode_GL_LIGHTING; \n"
+		"uniform float oe_thermal_mode;\n"
+		"uniform float oe_veg_temperature_detail_strength = 1.0;\n"
+		"uniform float oe_veg_temperature = 275;\n"
         "varying vec2 tex_coord;\n"
         "varying float brightness;\n"
 		"varying vec3 bnormal; \n"
@@ -129,7 +169,15 @@ namespace
 		"    float NdotL = max(dot(n, light_dir), 0);\n"
 		"	 color.rgb *= (NdotL * gl_LightSource[0].diffuse.xyz + gl_LightSource[0].ambient.xyz);\n"
 		"    }\n"
-        //"    if ( color.a < 0.1 ) discard; \n"
+		"    if(oe_thermal_mode > 0)\n"
+	    "    {\n"
+		"		color.r  = ((1.0 - color.r) + (1.0 - color.g) + (1.0 - color.b))/3.0;\n"
+		"		color.r = oe_veg_temperature + color.r*oe_veg_temperature_detail_strength;\n"
+		"       color.g = color.r;\n"
+		"       color.b = color.r;\n"
+		"       if ( color.a < 0.2 ) discard; \n"
+	    "    }\n"
+       
         "    gl_FragColor = color; \n"
         "}\n";
 }

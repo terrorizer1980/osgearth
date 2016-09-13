@@ -34,7 +34,7 @@ namespace osgEarth { namespace Triton
             osgEarth::Util::OceanOptions( conf )
         {
             setDriver( "triton" );
-            _useHeightMap.init( true );
+            _useHeightMap.init( false );
             _heightMapSize.init( 1024 );
             _renderBinNumber.init( 12 );
             fromConfig( _conf );

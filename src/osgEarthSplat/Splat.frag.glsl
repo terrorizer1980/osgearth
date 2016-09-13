@@ -67,6 +67,10 @@ uniform float oe_splat_threshold;
 uniform float oe_splat_minSlope;
 #endif
 
+uniform float oe_terrain_temperature_detail_strength = 1;
+uniform float oe_terrain_temperature = 282.5;
+uniform float oe_thermal_mode = 0;
+
 
 uniform samplerBuffer oe_splat_coverageLUT;
 
@@ -337,6 +341,14 @@ void oe_splat_complex(inout vec4 color)
 	fade = fade/fade_dist;
 	color.rgb = mix(color.rgb, groundColor, fade);
 #endif
+
+	if(oe_thermal_mode > 0)
+	{
+		color.r  = ((1.0 - color.r) + (1.0 - color.g) + (1.0 - color.b))/3.0;
+		color.r = oe_terrain_temperature + color.r*oe_terrain_temperature_detail_strength;
+		color.g = color.r;
+		color.b = color.r;
+	}
 
     // uncomment to visualize slope.
     //color.rgba = vec4(env.slope,0,0,1);

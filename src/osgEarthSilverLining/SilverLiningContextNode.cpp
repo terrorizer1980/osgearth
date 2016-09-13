@@ -78,7 +78,7 @@ _map(map)
 			_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( render_bin_num, "DepthSortedBin" );
 		}
 		else
-			_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 11, "DepthSortedBin" );
+			_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 2, "DepthSortedBin" );
 		 _geode->addDrawable( _cloudsDrawable.get() );
 	}
 

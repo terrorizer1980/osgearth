@@ -212,6 +212,7 @@ osg::Geode*
 		
 			//for now just using an osg::Program
 			//TODO: need to add GeometryShader support to the shader comp setup
+			
 			osg::Program* pgm = new osg::Program;
 			pgm->setName("billboard_program");
 			pgm->addShader( new osg::Shader( osg::Shader::VERTEX, billboardVertShader ) );
@@ -221,6 +222,19 @@ osg::Geode*
 			pgm->setParameter( GL_GEOMETRY_INPUT_TYPE_EXT, GL_POINTS );
 			pgm->setParameter( GL_GEOMETRY_OUTPUT_TYPE_EXT, GL_TRIANGLE_STRIP );
 			geode_ss->setAttribute(pgm);
+
+			/*
+			VirtualProgram* vp = VirtualProgram::getOrCreate(geode_ss);
+			
+			vp->getTemplate()->setParameter( GL_GEOMETRY_VERTICES_OUT_EXT, 4 );
+			vp->getTemplate()->setParameter( GL_GEOMETRY_INPUT_TYPE_EXT, GL_POINTS );
+			vp->getTemplate()->setParameter( GL_GEOMETRY_OUTPUT_TYPE_EXT, GL_TRIANGLE_STRIP );
+
+			//vp->setFunction( "billboardVert", billboardVertShader, osgEarth::ShaderComp::LOCATION_VERTEX_MODEL );
+			vp->setFunction( "billboardGeom", billboardGeomShader, osgEarth::ShaderComp::LOCATION_GEOMETRY );
+			//vp->setFunction( "main3", billboardFragmentShader, osgEarth::ShaderComp::LOCATION_FRAGMENT_COLORING );
+		
+			vp->setShaderLogging(true, "jh_test.glsl");*/
 
 			geode_ss->setMode( GL_CULL_FACE, osg::StateAttribute::OFF );
 			geode->setCullingActive(false);

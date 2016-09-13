@@ -322,13 +322,15 @@ TritonDrawable::TritonDrawable(osgEarth::MapNode* mapNode, TritonContext* TRITON
 	// Place in the depth-sorted bin and set a rendering order.
 	// We want Triton to render after the terrain.
 	//this->getOrCreateStateSet()->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+	int render_bin_num = 1;
 	char* render_bin = ::getenv("OSGEARTH_TRITON_RB");
 	if(render_bin)
 	{
-		int render_bin_num = atoi(render_bin);
+		render_bin_num = atoi(render_bin);
+	}
 		this->getOrCreateStateSet()->setRenderBinDetails( render_bin_num, "DepthSortedBin" );
-	}else
-		this->getOrCreateStateSet()->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+
+	//this->getOrCreateStateSet()->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
 	_contextDirty.resize(NUM_CONTEXTS);
 	dirtyAllContexts();
 }
