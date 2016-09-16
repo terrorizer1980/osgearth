@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
-* Copyright 2015 Pelican Mapping
+* Copyright 2016 Pelican Mapping
 * http://osgearth.org
 *
 * osgEarth is free software; you can redistribute it and/or modify
@@ -129,7 +129,8 @@ TileModel::NormalData::NormalData(osg::HeightField* hf,
                                   bool              fallbackData) :
 _hf          ( hf ),
 _locator     ( locator ),
-_fallbackData( fallbackData )
+_fallbackData( fallbackData ),
+_unit        ( -1 )
 {
     _neighbors._center = hf;
 }

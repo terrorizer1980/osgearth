@@ -43,6 +43,14 @@ namespace osgEarth
 
         /** Submit a collection of objects for release. */
         void push(const ObjectList& nodes);
+#if OSG_VERSION_LESS_THAN(3,4,0)
+	public: // META_Object specialization
+		virtual osg::Object* cloneType() const { return new ResourceReleaser(); }
+        virtual osg::Object* clone(const osg::CopyOp& copyop) const { return 0; }
+        virtual bool isSameKindAs(const osg::Object* obj) const { return dynamic_cast<const ResourceReleaser*>(obj)!=NULL; }
+        virtual const char* libraryName() const { return "osgEarth"; }
+        virtual const char* className() const { return "ResourceReleaser"; }
+#endif
 
     public: // osg::Drawable
 

@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
- * Copyright 2015 Pelican Mapping
+ * Copyright 2016 Pelican Mapping
  * http://osgearth.org
  *
  * osgEarth is free software; you can redistribute it and/or modify
@@ -34,16 +34,24 @@ MonitorUI::MonitorUI()
     this->setVertAlign(ALIGN_BOTTOM);
 
     int r=0;
-    this->setControl(0, r, new ui::LabelControl("Private Mem:"));
-    _pb = new ui::LabelControl();
-    _pb->setHorizAlign(ALIGN_RIGHT);
-    this->setControl(1, r, _pb.get());
 
-    ++r;
-    this->setControl(0, r, new ui::LabelControl("Working Set:"));
+    this->setControl(0, r, new ui::LabelControl("Physical RAM:"));
     _ws = new ui::LabelControl();
     _ws->setHorizAlign(ALIGN_RIGHT);
     this->setControl(1, r, _ws.get());
+    ++r;
+
+    this->setControl(0, r, new ui::LabelControl("Total RAM:"));
+    _pb = new ui::LabelControl();
+    _pb->setHorizAlign(ALIGN_RIGHT);
+    this->setControl(1, r, _pb.get());
+    ++r;
+
+    this->setControl(0, r, new ui::LabelControl("Peak RAM:"));
+    _ppb = new ui::LabelControl();
+    _ppb->setHorizAlign(ALIGN_RIGHT);
+    this->setControl(1, r, _ppb.get());
+    ++r;
 }
 
 void
@@ -51,9 +59,9 @@ MonitorUI::update(const osg::FrameStamp* fs)
 {
     if (fs && fs->getFrameNumber() % 15 == 0)
     {
-        unsigned bytes = Memory::getProcessPrivateUsage();
-        _pb->setText(Stringify() << (bytes / 1048576) << " M");
-        _ws->setText(Stringify() << (Memory::getProcessUsage() / 1048576) << " M");
+        _ws->setText(Stringify() << (Memory::getProcessPhysicalUsage() / 1048576) << " M");
+        _pb->setText(Stringify() << (Memory::getProcessPrivateUsage() / 1048576) << " M");
+        _ppb->setText(Stringify() << (Memory::getProcessPeakPrivateUsage() / 1048576) << " M");
 
         //Registry::instance()->startActivity("Current Mem", Stringify() <<  (bytes / 1048576) << " M");
         //Registry::instance()->startActivity("Peak Mem", Stringify() << (Memory::getProcessPeakUsage() / 1048576) << " M");

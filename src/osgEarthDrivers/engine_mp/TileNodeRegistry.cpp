@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
-* Copyright 2015 Pelican Mapping
+* Copyright 2016 Pelican Mapping
 * http://osgearth.org
 *
 * osgEarth is free software; you can redistribute it and/or modify
@@ -56,7 +56,7 @@ TileNodeRegistry::setMapRevision(const Revision& rev,
     {
         if ( _maprev != rev || setToDirty )
         {
-            Threading::ScopedWriteLock exclusive( _tilesMutex );
+            Threading::ScopedMutexLock exclusive( _tilesMutex );
 
             if ( _maprev != rev || setToDirty )
             {
@@ -81,7 +81,7 @@ TileNodeRegistry::setDirty(const GeoExtent& extent,
                            unsigned         minLevel,
                            unsigned         maxLevel)
 {
-    Threading::ScopedWriteLock exclusive( _tilesMutex );
+    Threading::ScopedMutexLock exclusive( _tilesMutex );
     
     bool checkSRS = false;
     for( TileNodeMap::iterator i = _tiles.begin(); i != _tiles.end(); ++i )
@@ -102,7 +102,7 @@ TileNodeRegistry::add( TileNode* tile )
 {
     if ( tile )
     {
-        Threading::ScopedWriteLock exclusive( _tilesMutex );
+        Threading::ScopedMutexLock exclusive( _tilesMutex );
         _tiles[ tile->getKey() ] = tile;
         if ( _revisioningEnabled )
             tile->setMapRevision( _maprev );
@@ -130,31 +130,6 @@ TileNodeRegistry::add( TileNode* tile )
             // if there were waiters whose keys weren't found in the registry,
             // they should not have been there anyway!
             _notifications.erase(i);
-                    
-            //for(unsigned j=0; j<waiters.size(); )
-            //{
-            //    TileKey& waiter = waiters[j];
-            //    TileNodeMap::iterator k = _tiles.find(waiter);
-            //    if ( k != _tiles.end() )
-            //    {
-            //        k->second->notifyOfArrival( tile );
-
-            //        // erase the waiter by swapping the back element into the 
-            //        // current position and resizing the vector:
-            //        waiter = waiters.back();
-            //        waiters.resize( waiters.size()-1 );
-            //    }
-            //    else
-            //    {
-            //        ++j;
-            //    }
-            //}
-
-            //// when the waiters list goes empty, remove the entire list
-            //if ( waiters.size() == 0 )
-            //{
-            //    _notifications.erase( i );
-            //}
         }
 
         // Listen for east and south neighbors of the new tile:
@@ -169,7 +144,7 @@ TileNodeRegistry::remove( TileNode* tile )
 {
     if ( tile )
     {
-        Threading::ScopedWriteLock exclusive( _tilesMutex );
+        Threading::ScopedMutexLock exclusive( _tilesMutex );
         _tiles.erase( tile->getKey() );
         OE_TEST << LC << _name << ": tiles=" << _tiles.size() << std::endl;
         
@@ -181,24 +156,10 @@ TileNodeRegistry::remove( TileNode* tile )
 }
 
 
-void
-TileNodeRegistry::move(TileNode* tile, TileNodeRegistry* destination)
-{
-    if ( tile )
-    {
-        // ref just in case remove() is the last reference
-        osg::ref_ptr<TileNode> tileSafe = tile;
-        remove( tile );
-        if ( destination )
-            destination->add( tileSafe.get() );
-    }
-}
-
-
 bool
 TileNodeRegistry::get( const TileKey& key, osg::ref_ptr<TileNode>& out_tile )
 {
-    Threading::ScopedReadLock shared( _tilesMutex );
+    Threading::ScopedMutexLock shared( _tilesMutex );
 
     TileNodeMap::iterator i = _tiles.find(key);
     if ( i != _tiles.end() && i->second.valid() )
@@ -213,7 +174,7 @@ TileNodeRegistry::get( const TileKey& key, osg::ref_ptr<TileNode>& out_tile )
 bool
 TileNodeRegistry::take( const TileKey& key, osg::ref_ptr<TileNode>& out_tile )
 {
-    Threading::ScopedWriteLock exclusive( _tilesMutex );
+    Threading::ScopedMutexLock exclusive( _tilesMutex );
 
     TileNodeMap::iterator i = _tiles.find(key);
     if ( i != _tiles.end() )
@@ -226,24 +187,11 @@ TileNodeRegistry::take( const TileKey& key, osg::ref_ptr<TileNode>& out_tile )
     return false;
 }
 
-
-void
-TileNodeRegistry::run( TileNodeRegistry::Operation& op )
-{
-    Threading::ScopedWriteLock lock( _tilesMutex );
-    unsigned size = _tiles.size();
-    op.operator()( _tiles );
-    if ( size != _tiles.size() )
-        OE_TEST << LC << _name << ": tiles=" << _tiles.size() << ", notifications=" << _notifications.size() << std::endl;
-}
-
-
 void
 TileNodeRegistry::run( const TileNodeRegistry::ConstOperation& op ) const
 {
-    Threading::ScopedReadLock lock( _tilesMutex );
+    Threading::ScopedMutexLock lock( _tilesMutex );
     op.operator()( _tiles );
-    OE_TEST << LC << _name << ": tiles=" << _tiles.size() << ", notifications=" << _notifications.size() << std::endl;
 }
 
 
@@ -257,7 +205,7 @@ TileNodeRegistry::empty() const
 void
 TileNodeRegistry::startListeningFor(const TileKey& tileToWaitFor, TileNode* waiter)
 {
-    //Threading::ScopedWriteLock lock( _tilesMutex );
+    //Threading::ScopedMutexLock lock( _tilesMutex );
     // ASSUME EXCLUSIVE LOCK
 
     TileNodeMap::iterator i = _tiles.find( tileToWaitFor );
@@ -278,7 +226,7 @@ TileNodeRegistry::startListeningFor(const TileKey& tileToWaitFor, TileNode* wait
 void
 TileNodeRegistry::stopListeningFor(const TileKey& tileToWaitFor, TileNode* waiter)
 {
-    //Threading::ScopedWriteLock lock( _tilesMutex );
+    //Threading::ScopedMutexLock lock( _tilesMutex );
     // ASSUME EXCLUSIVE LOCK
 
     Notifications::iterator i = _notifications.find(tileToWaitFor);
@@ -293,4 +241,23 @@ TileNodeRegistry::stopListeningFor(const TileKey& tileToWaitFor, TileNode* waite
             _notifications.erase(i);
         }
     }
+}
+
+void
+TileNodeRegistry::releaseAll(ResourceReleaser* releaser)
+{
+    ResourceReleaser::ObjectList objects;
+    {
+        Threading::ScopedMutexLock exclusive(_tilesMutex);
+
+        for (TileNodeMap::iterator i = _tiles.begin(); i != _tiles.end(); ++i)
+        {
+            objects.push_back(i->second.get());
+        }
+
+        _tiles.clear();
+        _notifications.clear();
+    }
+
+    releaser->push(objects);
 }

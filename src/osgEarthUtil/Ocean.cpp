@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
-* Copyright 2015 Pelican Mapping
+* Copyright 2016 Pelican Mapping
 * http://osgearth.org
 *
 * osgEarth is free software; you can redistribute it and/or modify
@@ -192,7 +192,9 @@ OceanNode::create(MapNode* mapNode)
 const OceanOptions&
 OceanDriver::getOceanOptions(const osgDB::Options* options) const
 {
-    return *static_cast<const OceanOptions*>( options->getPluginData(OPTIONS_TAG) );
+    static OceanOptions s_default;
+    const void* data = options->getPluginData(OPTIONS_TAG);
+    return data ? *static_cast<const OceanOptions*>(data) : s_default;
 }
 
 

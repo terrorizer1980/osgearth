@@ -1,6 +1,6 @@
 /* -*-c++-*- */
 /* osgEarth - Dynamic map generation toolkit for OpenSceneGraph
-* Copyright 2015 Pelican Mapping
+* Copyright 2016 Pelican Mapping
 * http://osgearth.org
 *
 * osgEarth is free software; you can redistribute it and/or modify
@@ -422,11 +422,16 @@ MPTerrainEngineNode::postInitialize( const Map* map, const TerrainOptions& optio
     _liveTiles->setRevisioningEnabled( _terrainOptions.incrementalUpdate() == true );
     _liveTiles->setMapRevision( _update_mapf->getRevision() );
 
-    // set up a registry for quick release:
-    if ( _terrainOptions.quickReleaseGLObjects() == true )
-    {
-        _deadTiles = new TileNodeRegistry("dead");
-    }
+    // Facility to properly release GL objects
+
+    _releaser = new ResourceReleaser();
+#if OSG_VERSION_GREATER_OR_EQUAL(3,4,0)
+	this->addChild(_releaser.get());
+#else
+	osg::Geode* geod = new osg::Geode();
+	geod->addDrawable(_releaser);
+	this->addChild(geod);
+#endif
 
     // reserve GPU resources. Must do this before initializing the model factory.
     if ( _primaryUnit < 0 )
@@ -567,17 +572,15 @@ MPTerrainEngineNode::getTerrainStateSet()
 
 namespace
 {
-    struct NotifyExistingNodesOp : public TileNodeRegistry::Operation
+    struct NotifyExistingNodesOp : public TileNodeRegistry::ConstOperation
     {
         TerrainEngine::NodeCallback* _cb;
 
         NotifyExistingNodesOp(TerrainEngine::NodeCallback* cb) : _cb(cb) { }
 
-        void operator()(TileNodeRegistry::TileNodeMap& tiles)
+        void operator()(const TileNodeRegistry::TileNodeMap& tiles) const
         {
-            //OE_INFO << LC << "Gonna notify " << tiles.size() << " existing nodes...\n";
-
-            for(TileNodeRegistry::TileNodeMap::iterator i = tiles.begin();
+            for(TileNodeRegistry::TileNodeMap::const_iterator i = tiles.begin();
                 i != tiles.end();
                 ++i)
             {
@@ -617,7 +620,11 @@ MPTerrainEngineNode::dirtyTerrain()
     }
 
     // New terrain
-    _terrain = new TerrainNode( _deadTiles.get() );
+    _terrain = new TerrainNode();
+
+    // Clear out the tile registry:
+    _liveTiles->releaseAll(_releaser.get());
+
 
 #ifdef USE_RENDER_BINS
     _terrain->getOrCreateStateSet()->setRenderBinDetails( 0, _terrainRenderBinPrototype->getName() );
@@ -640,7 +647,7 @@ MPTerrainEngineNode::dirtyTerrain()
         // create a root node for each root tile key.
         OE_INFO << LC << "Creating " << keys.size() << " root keys.." << std::endl;
 
-        TilePagedLOD* root = new TilePagedLOD( _uid, _liveTiles, _deadTiles );
+        TilePagedLOD* root = new TilePagedLOD( _uid, _liveTiles, _releaser.get() );
         root->setRangeFactor(_terrainOptions.minTileRangeFactor().get());
         _terrain->addChild( root );
 
@@ -665,8 +672,6 @@ MPTerrainEngineNode::dirtyTerrain()
                 OE_WARN << LC << "Couldn't make tile for root key: " << keys[i].str() << std::endl;
             }
         }
-
-        _rootTilesRegistered = false;
     }
 
     updateState();
@@ -713,8 +718,6 @@ MPTerrainEngineNode::traverse(osg::NodeVisitor& nv)
         //OE_NOTICE << LC << "Live = " << _liveTiles->size() << ", Dead = " << _deadTiles->size() << std::endl;
         _liveTiles->run( CheckForOrphans() );
         Registry::instance()->startActivity("MP live tiles", Stringify() << _liveTiles->size());
-        if (_deadTiles.valid())
-            Registry::instance()->startActivity("MP dead tiles", Stringify() << _deadTiles->size());
     }
 #endif
 
@@ -746,7 +749,7 @@ MPTerrainEngineNode::getKeyNodeFactory()
             _tileModelFactory.get(),
             compiler,
             _liveTiles.get(),
-            _deadTiles.get(),
+            _releaser.get(),
             _terrainOptions,
             this );
     }
