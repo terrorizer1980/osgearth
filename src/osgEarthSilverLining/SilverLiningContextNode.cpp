@@ -204,7 +204,7 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 
 						if (fog)
 						{
-							float hazeDensity = 1.0 / 100000;
+							float hazeDensity = 1.0 / 10000;
 
 							// Decrease fog density with altitude, to avoid fog effects through the vacuum of space.
 							static const double H = 8435.0; // Pressure scale height of Earth's atmosphere
@@ -214,13 +214,28 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 							hazeDensity *= isothermalEffect;
 
 							float r, g, b;
-							
-							// Note, the fog color returned is already lit
-							//float density;
-							//_SL->getAtmosphere()->GetFogSettings(&density, &r, &g, &b);
-							_SL->getAtmosphere()->GetHorizonColor(0, 0, &r, &g, &b);
-							fog->setColor(osg::Vec4(r, g, b, 1.0));
-							fog->setDensity(hazeDensity);
+						
+							bool silverLiningHandledTheFog = false;
+							if (_SL->getAtmosphere()->GetFogEnabled())
+							{
+								float density;
+								// Note, the fog color returned is already lit
+								_SL->getAtmosphere()->GetFogSettings(&density, &r, &g, &b);
+
+								if (density > hazeDensity)
+								{
+									fog->setColor(osg::Vec4(r, g, b, 1.0));
+									//fog->setDensity(density);
+									silverLiningHandledTheFog = true;
+								}
+							}
+
+							if (!silverLiningHandledTheFog)
+							{
+								_SL->getAtmosphere()->GetHorizonColor(0, 0, &r, &g, &b);
+								fog->setColor(osg::Vec4(r, g, b, 1.0));
+								//fog->setDensity(hazeDensity);
+							}
 						}
 					}
 				}

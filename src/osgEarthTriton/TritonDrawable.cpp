@@ -752,10 +752,24 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
             environment->SetDirectionalLight( ::Triton::Vector3(0,0,1), ::Triton::Vector3(1,1,1) );
             environment->SetAmbientLight( ::Triton::Vector3(0.88f, 0.88f, 0.88f) );
         }
+		///////////////ADDED BY JH//////////////////
+		osg::Vec3d eye, center, up;
+		osg::Camera* camera = renderInfo.getCurrentCamera();
+		camera->getViewMatrixAsLookAt(eye, center, up);
+		
+		osg::ref_ptr< osg::RefMatrix > localToWorld = new osg::RefMatrix;
+		osg::ref_ptr< osg::RefMatrix > worldToLocal = new osg::RefMatrix;
+		double lat, lon, alt;
+		osg::ref_ptr< osg::EllipsoidModel > ellipsoidModel = new osg::EllipsoidModel;
+		ellipsoidModel->convertXYZToLatLongHeight(eye.x(), eye.y(), eye.z(), lat, lon, alt);
+		ellipsoidModel->computeLocalToWorldTransformFromLatLongHeight(lat, lon, alt, *localToWorld);
+		worldToLocal->set(osg::Matrix::inverse(*localToWorld));
+		osg::Matrix m = *worldToLocal*osg::Matrix::rotate(-osg::PI_2, osg::X_AXIS); //static skybox
+		///////////////end//////////////////
 
-        // Build transform from our cube map orientation space to native Triton orientation
-        // See worldToCubeMap function used in SkyBox to orient sky texture so that sky is up and earth is down
-        osg::Matrix m = osg::Matrix::rotate( osg::PI_2, osg::X_AXIS ); // = worldToCubeMap
+		// Build transform from our cube map orientation space to native Triton orientation
+		// See worldToCubeMap function used in SkyBox to orient sky texture so that sky is up and earth is down
+		//osg::Matrix m = osg::Matrix::rotate( osg::PI_2, osg::X_AXIS ); // = worldToCubeMap
 
         ::Triton::Matrix3 transformFromYUpToZUpCubeMapCoords(
             m(0,0), m(0,1), m(0,2),
@@ -782,6 +796,29 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
                                                       planarProjection, 0.125  );
             }
         }
+
+		double visibility;
+		::Triton::Vector3 t_default_fog_color;
+		environment->GetAboveWaterVisibility(visibility, t_default_fog_color);
+
+		osg::Fog* fog = (osg::Fog *) _mapNode->getStateSet()->getAttribute(osg::StateAttribute::FOG);
+		if (fog)
+		{
+			osg::Vec4 fog_color = fog->getColor();
+			::Triton::Vector3 t_fog_color(fog_color.x(), fog_color.y(), fog_color.z());
+			float fog_den = fog->getDensity();
+			if (fog_den >= 0.f)
+			{
+				//density = 3.912 / visibility
+				environment->SetAboveWaterVisibility(3.912f / fog_den, t_fog_color);
+			}
+			else
+			{
+				environment->SetAboveWaterVisibility(visibility, t_fog_color);
+			}
+		}
+		else
+			environment->SetAboveWaterVisibility(visibility, t_default_fog_color);
 
         // Draw the ocean for the current time sample
         if ( _TRITON->getOcean() )
@@ -946,6 +983,7 @@ void TritonDrawable::setupHeightMap(osg::State& state)
 
 		std::string resPath(tritonPath);
 #ifdef _WIN32
+		//resPath += "\\Samples\\bluecloud";
 		resPath += "\\Samples\\";
 #else
 		resPath += "/Samples/";
@@ -964,6 +1002,13 @@ void TritonDrawable::setupHeightMap(osg::State& state)
 		osg::Image* imageNegY = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negY));
 		osg::Image* imagePosZ = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(posZ));
 		osg::Image* imageNegZ = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(negZ));
+
+		/*osg::Image* imagePosX = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(_rt));
+		osg::Image* imageNegX = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(_lf));
+		osg::Image* imagePosY = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(_up));
+		osg::Image* imageNegY = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(_dn));
+		osg::Image* imagePosZ = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(_fr));
+		osg::Image* imageNegZ = osgDB::readImageFile(resPath + CUBEMAP_FILENAME(_bk));*/
 
 		if (imagePosX && imageNegX && imagePosY && imageNegY && imagePosZ && imageNegZ) {
 			cubemap->setImage(osg::TextureCubeMap::POSITIVE_X, imagePosX);
