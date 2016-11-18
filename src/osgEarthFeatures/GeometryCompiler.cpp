@@ -19,6 +19,7 @@
 #include "GeometryCompiler"
 #include <osgEarthFeatures/BuildGeometryFilter>
 #include <osgEarthFeatures/BuildTextFilter>
+#include <osgEarthFeatures/BuildVegetationBillboardFilter>
 #include <osgEarthFeatures/AltitudeFilter>
 #include <osgEarthFeatures/CentroidFilter>
 #include <osgEarthFeatures/ExtrudeGeometryFilter>
@@ -255,6 +256,7 @@ GeometryCompiler::compile(FeatureList&          workingSet,
     const MarkerSymbol*    marker    = style.get<MarkerSymbol>();    // to be deprecated
     const IconSymbol*      icon      = style.get<IconSymbol>();
     const ModelSymbol*     model     = style.get<ModelSymbol>();
+	const VegetationBillboardSymbol* billboard = style.get<VegetationBillboardSymbol>();
 
     // Perform tessellation first.
     if ( line )
@@ -280,6 +282,7 @@ GeometryCompiler::compile(FeatureList&          workingSet,
     // if the style was empty, use some defaults based on the geometry type of the
     // first feature.
     if ( !point && !line && !polygon && !marker && !extrusion && !text && !model && !icon && workingSet.size() > 0 )
+    if ( !point && !line && !polygon && !marker && !extrusion && !text && !model && !icon && !billboard && workingSet.size() > 0 )
     {
         Feature* first = workingSet.begin()->get();
         Geometry* geom = first->getGeometry();
@@ -505,6 +508,49 @@ GeometryCompiler::compile(FeatureList&          workingSet,
             resultGroup->addChild( node );
         }
     }
+	// billboard geometry
+	else if ( billboard )
+	{
+		// use a separate filter context since we'll be munging the data
+		FilterContext localCX = sharedCX;
+
+		//first convert all polys to points using the scattering filter
+		for( FeatureList::iterator f_iter = workingSet.begin(); f_iter != workingSet.end(); ++f_iter )
+		{
+			Feature* f = f_iter->get();
+			if ( f && f->getGeometry() )
+			{
+				if ( f->getGeometry()->getComponentType() == Geometry::TYPE_POLYGON )
+				{
+					ScatterFilter scatter;
+					scatter.setDensity(billboard->density().get());
+					scatter.setRandom( true );
+					scatter.setRandomSeed( billboard->randomSeed().get() );
+					FeatureList featureList;
+					featureList.push_back(f);
+					scatter.push( featureList, localCX );
+				}
+			}
+		}
+
+		
+		if ( altRequired )
+		{
+			//clamp to ground...
+			AltitudeFilter clamp;
+			clamp.setPropertiesFromStyle( style );
+			sharedCX = clamp.push( workingSet, localCX );
+			altRequired = false;
+		}
+		
+		BuildVegetationBillboardFilter filter( style );
+	
+		osg::Node* node = filter.push( workingSet, sharedCX );
+		if ( node )
+		{
+			resultGroup->addChild( node );
+		}
+	}
 
     if ( text || icon )
     {

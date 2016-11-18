@@ -14,6 +14,7 @@ SET(LIB_NAME osgEarthFeatures)
 SET(HEADER_PATH ${OSGEARTH_SOURCE_DIR}/include/${LIB_NAME})
 SET(LIB_PUBLIC_HEADERS
     AltitudeFilter
+	BuildVegetationBillboardFilter
     BufferFilter
     BuildGeometryFilter  
     BuildTextFilter
@@ -53,12 +54,14 @@ SET(LIB_PUBLIC_HEADERS
     TessellateOperator
     TextSymbolizer
     TransformFilter
+	VegetationBillboardShaders
     VirtualFeatureSource
 )
 
 SET(TARGET_SRC
     AltitudeFilter.cpp
     BufferFilter.cpp
+	BuildVegetationBillboardFilter.cpp
     BuildGeometryFilter.cpp 
     BuildTextFilter.cpp
     CentroidFilter.cpp
@@ -136,8 +139,12 @@ LINK_INTERNAL(${LIB_NAME}
 )
 
 SET(LINK_VARS OSG_LIBRARY OSGUTIL_LIBRARY OSGSIM_LIBRARY OSGTERRAIN_LIBRARY OSGDB_LIBRARY OSGFX_LIBRARY OSGVIEWER_LIBRARY OSGTEXT_LIBRARY OSGGA_LIBRARY OPENTHREADS_LIBRARY)
+
 IF(PROTOBUF_FOUND AND PROTOBUF_PROTOC_EXECUTABLE)
-  SET(LINK_VARS ${LINK_VARS} PROTOBUF_LIBRARY)
+   #Hack to avoid linking to list Protobuf_LIBRARY in LINK_WITH_VARIABLES
+   SET(Protobuf_LIBRARIES ${Protobuf_LIBRARY})
+   SET(Protobuf_LIBRARY ${Protobuf_LIBRARY_RELEASE})
+   SET(LINK_VARS ${LINK_VARS} Protobuf_LIBRARY)
 ENDIF()
 
 

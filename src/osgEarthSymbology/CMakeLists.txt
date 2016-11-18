@@ -18,7 +18,8 @@ SET(LIB_PUBLIC_HEADERS
     BBoxSymbol
     BillboardResource
     BillboardSymbol
-    Common
+    VegetationBillboardSymbol
+	Common
     Color
     CoverageSymbol
     CssUtils
@@ -66,6 +67,7 @@ ADD_LIBRARY(${LIB_NAME} ${OSGEARTH_USER_DEFINED_DYNAMIC_OR_STATIC}
     BBoxSymbol.cpp
     BillboardResource.cpp
     BillboardSymbol.cpp
+	VegetationBillboardSymbol.cpp
     Color.cpp
     CoverageSymbol.cpp
     CssUtils.cpp
