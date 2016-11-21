@@ -38,7 +38,12 @@ namespace osgEarth { namespace Splat
         /** Classification coverage options */
         optional<CoverageOptions>& coverage() { return _coverage; }
         const optional<CoverageOptions>& coverage() const { return _coverage; }
-
+	//start JH
+	optional<float>& colorMinRange() { return _colorMinRange; }
+        const optional<float>& colorMinRange() const { return _colorMinRange; }
+	optional<float>& colorRatio() { return _colorRatio; }
+        const optional<float>& colorRatio() const { return _colorRatio; }
+	//end JH
         /** Zone definitions */
         ZoneOptionsVector& zones() { return _zones; }
         const ZoneOptionsVector& zones() const { return _zones; }
@@ -54,6 +59,10 @@ namespace osgEarth { namespace Splat
     public:
         Config getConfig() const {
             Config conf = DriverConfigOptions::getConfig();
+			//start JH
+			conf.updateIfSet("color_min_range", _colorMinRange);
+			conf.updateIfSet("color_ratio", _colorRatio);
+			//end JH
             conf.updateObjIfSet( "coverage", _coverage );
             Config zones("zones");
             for(int i=0; i<_zones.size(); ++i) {
@@ -74,6 +83,10 @@ namespace osgEarth { namespace Splat
 
     private:
         void fromConfig( const Config& conf ) {
+			//start JH
+			conf.getIfSet("color_min_range", _colorMinRange);
+			conf.getIfSet("color_ratio", _colorRatio);
+			//end JH
             conf.getObjIfSet( "coverage", _coverage );
             const Config* zones = conf.child_ptr("zones");
             if ( zones ) {
@@ -86,6 +99,10 @@ namespace osgEarth { namespace Splat
 
         
         optional<CoverageOptions>  _coverage;
+		//start JH
+		optional<float>       _colorMinRange;
+		optional<float>       _colorRatio;
+		//end JH
         ZoneOptionsVector          _zones;
     };
 

@@ -111,7 +111,13 @@ SplatExtension::connect(MapNode* mapNode)
         _splatEffect->setDBOptions( _dbo.get() );
         _splatEffect->setZones( myZones );
         _splatEffect->setCoverage( myCoverage.get() );
+		//start JH: Transfer imagery options to effect
+		if ( colorMinRange().isSet() )
+			_splatEffect->setColorMinRange((float) colorMinRange().get() );
 
+		if ( colorRatio().isSet() )
+			_splatEffect->setColorRatio((float) colorRatio().get());
+		//end JH
         mapNode->getTerrainEngine()->addEffect( _splatEffect.get() );
     }
 

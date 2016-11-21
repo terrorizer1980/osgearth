@@ -65,15 +65,15 @@ namespace osgEarth { namespace Splat
          */
         void setZones(const Zones& zones) { _zones = zones; }
         const Zones& getZones() const { return _zones; }
-
-
+		//start JH
+		void setColorRatio(float value) {_colorRatio = value;}
+		void setColorMinRange(float value) {_colorMinRange = value;}
+		//end JH
     public: // TerrainEffect interface
 
         void onInstall(TerrainEngineNode* engine);
 
         void onUninstall(TerrainEngineNode* engine);
-
-
     protected:
         virtual ~SplatTerrainEffect() { }
 
@@ -103,6 +103,10 @@ namespace osgEarth { namespace Splat
         osg::ref_ptr<Coverage>              _coverage;
 
         Zones                               _zones;
+		//start JH
+		float								_colorRatio;
+		float								_colorMinRange;
+		//end JH
 
     };
 

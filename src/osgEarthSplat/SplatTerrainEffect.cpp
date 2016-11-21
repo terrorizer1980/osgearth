@@ -176,7 +176,16 @@ SplatTerrainEffect::onInstall(TerrainEngineNode* engine)
 
 
                 SplattingShaders splatting;
-
+				//start JH
+				if (_colorRatio > 0)
+				{
+					//bool use_color_map = (::getenv("SPLAT_USE_COLOR_IMAGE") != 0L);
+					splatting.define("SPLAT_USE_COLOR_IMAGE", true);
+					stateset->addUniform(new osg::Uniform("oe_splat_color_ratio", _colorRatio));
+					stateset->addUniform(new osg::Uniform("oe_splat_color_start_dist", _colorMinRange));
+				}
+				//end JH
+				
                 splatting.define( "SPLAT_EDIT",        _editMode );
                 splatting.define( "SPLAT_GPU_NOISE",   _gpuNoise );
                 splatting.define( "OE_USE_NORMAL_MAP", engine->normalTexturesRequired() );
