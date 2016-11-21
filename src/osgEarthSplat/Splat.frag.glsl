@@ -15,6 +15,9 @@
 // define to activate GPU-generated noise instead of a noise texture.
 #pragma vp_define SPLAT_GPU_NOISE
 
+//JH: define to activate color image layer mixing.
+#pragma vp_define SPLAT_USE_COLOR_IMAGE
+//end JH
 // include files
 #pragma include Splat.types.glsl
 #pragma include Splat.frag.common.glsl
@@ -41,12 +44,27 @@ uniform int oe_splat_scaleOffsetInt;
 uniform float oe_splat_detailRange;
 uniform float oe_splat_noiseScale;
 
+//start JH: Color imagery uniforms
+#ifdef SPLAT_USE_COLOR_IMAGE
+uniform float oe_splat_color_start_dist;
+uniform float oe_splat_color_ratio;
+uniform sampler2D oe_color_tex;
+uniform mat4 oe_color_tex_mat;
+#endif
+//end JH
+
 #ifdef SPLAT_EDIT
 uniform float oe_splat_brightness;
 uniform float oe_splat_contrast;
 uniform float oe_splat_threshold;
 uniform float oe_splat_minSlope;
 #endif
+
+//start JH: Temprature uniforms
+uniform float oe_terrain_temperature_detail_strength = 1;
+uniform float oe_terrain_temperature = 282.5;
+uniform float oe_thermal_mode = 0;
+//end JH
 
 // lookup table containing the coverage value => texture index mappings
 uniform samplerBuffer oe_splat_coverageLUT;
@@ -286,7 +304,30 @@ void oe_splat_complex(inout vec4 color)
 
     color = mix(color, texel, texel.a);
     color.a = 1.0;
+//start JH
+#ifdef SPLAT_USE_COLOR_IMAGE
+	vec3 groundColor = texture(oe_color_tex, (oe_color_tex_mat*oe_layer_tilec).st).rgb;
+	//float fade_dist = oe_splat_color_start_dist/2.0 + 0.1;
+	//float fade = clamp(oe_splat_range, oe_splat_color_start_dist, oe_splat_color_start_dist + fade_dist);
+	//fade = (fade-oe_splat_color_start_dist)/fade_dist;
+	float fade_dist = oe_splat_color_start_dist + 0.1;
+	float fade = clamp(oe_splat_range, 0, fade_dist);
+	fade = fade/fade_dist;
+	color.rgb = mix(color.rgb, color.rgb*(2.2*groundColor), oe_splat_color_ratio*fade);
+	fade_dist = 50000;
+	fade = clamp(oe_splat_range, 0, fade_dist);
+	fade = fade/fade_dist;
+	color.rgb = mix(color.rgb, groundColor, fade);
+#endif
 
+	if(oe_thermal_mode > 0)
+	{
+		color.r  = ((1.0 - color.r) + (1.0 - color.g) + (1.0 - color.b))/3.0;
+		color.r = oe_terrain_temperature + color.r*oe_terrain_temperature_detail_strength;
+		color.g = color.r;
+		color.b = color.r;
+	}
+//end JH
     // uncomment to visualize slope.
     //color.rgba = vec4(env.slope,0,0,1);
 }
