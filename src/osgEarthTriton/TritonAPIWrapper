@@ -64,6 +64,9 @@ namespace osgEarth { namespace Triton
 
         void SimulateSeaState(double bs, double winddir);
 
+		void SetAboveWaterVisibility(double visibility, osg::Vec3 fog_color);
+		void SetEnvironmentMap(unsigned int id); 
+
     public:
         Environment(uintptr_t handle) : _handle(handle) { }
         uintptr_t _handle;
