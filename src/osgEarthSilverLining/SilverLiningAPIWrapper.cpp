@@ -38,6 +38,18 @@ SETGET_EXPLICIT(Atmosphere, EnableLensFlare, GetLensFlareEnabled, bool);
 void Atmosphere::SetSkyModel(SkyModel skyModel) { HANDLE->SetSkyModel(static_cast< ::SkyModel >(skyModel)); }
 Atmosphere::SkyModel Atmosphere::GetSkyModel() const { return static_cast<SkyModel>(HANDLE->GetSkyModel()); }
 AtmosphericConditions Atmosphere::GetConditions() const { return AtmosphericConditions((uintptr_t)HANDLE->GetConditions()); }
+bool Atmosphere::GetFogEnabled() const { return HANDLE->GetFogEnabled(); }
+void Atmosphere::GetFogSettings(float &density, osg::Vec3 &color) const { float r, g, b; HANDLE->GetFogSettings(&density, &r, &g, &b); color.set(r, g, b); }
+osg::Vec3 Atmosphere::GetHorizonColor(float yaw, float pitch) const { float r, g, b; HANDLE->GetHorizonColor(yaw, pitch, &r, &g, &b); return osg::Vec3(r, g, b); }
+void Atmosphere::SetHaze(const osg::Vec3 &color, double depth, double density) { HANDLE->SetHaze(color.x(), color.y(), color.z(),depth, density);}
+	
+unsigned int Atmosphere::GetEnvironmentMap(int facesToRender, bool floatingPoint, void* cameraID, bool drawClouds, bool drawSunAndMoon) const
+{
+	void* pid;
+	bool ret = HANDLE->GetEnvironmentMap(pid, facesToRender, floatingPoint, cameraID, drawClouds, drawSunAndMoon);
+	return (unsigned int)pid;
+}
+
 SETGET(Atmosphere, Gamma, double);
 SETGET(Atmosphere, InfraRedMode, bool);
 
@@ -71,6 +83,10 @@ bool AtmosphericConditions::RemoveWindVolume(int layerHandle) { return HANDLE->R
 void AtmosphericConditions::ClearWindVolumes() { HANDLE->ClearWindVolumes(); }
 void AtmosphericConditions::SetPresetConditions(ConditionPresets preset, Atmosphere& atm) { HANDLE->SetPresetConditions(static_cast< ::SilverLining::AtmosphericConditions::ConditionPresets >(preset), *(::SilverLining::Atmosphere*)atm._handle); }
 void AtmosphericConditions::EnableTimePassage(bool enabled, long relightFrequencyMS) { HANDLE->EnableTimePassage(enabled, relightFrequencyMS); }
+osg::Vec3 AtmosphericConditions::GetLocation() const{ return osg::Vec3(HANDLE->GetLocation().GetLatitude(), HANDLE->GetLocation().GetLongitude(), HANDLE->GetLocation().GetAltitude()); }
+void AtmosphericConditions::SetFog(double density, const osg::Vec3 &color) { HANDLE->SetFog(density, color.x(), color.y(), color.z()); }
+
+
 
 //................................
 WindVolume::WindVolume() :
