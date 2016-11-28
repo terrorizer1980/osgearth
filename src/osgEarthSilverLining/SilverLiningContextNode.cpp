@@ -24,9 +24,13 @@
 #include "SilverLiningSkyDrawable"
 #include "SilverLiningCloudsDrawable"
 
+#include <osgEarth/MapNode>
+
 #include <osg/Light>
 #include <osg/LightSource>
 #include <osgEarth/CullingUtils>
+#include <osg/Depth>
+#include <osg/Fog>
 
 #undef  LC
 #define LC "[SilverLiningContextNode] "
@@ -62,7 +66,14 @@ _lastAltitude(DBL_MAX)
 
     // Clouds draw after everything else
     _cloudsDrawable = new CloudsDrawable(this);
-    _cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 99, "DepthSortedBin" );
+		char* render_bin = ::getenv("OSGEARTH_SL_CLOUDS_RB");
+		if(render_bin)
+		{
+			int render_bin_num = atoi(render_bin);
+			_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( render_bin_num, "DepthSortedBin" );
+		}
+		else
+			_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails( 2, "DepthSortedBin" );
     _geode->addDrawable(_cloudsDrawable.get());
 
     // SL requires an update pass.
@@ -146,6 +157,53 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 					_SL->updateLight();
 					//_SL->getAtmosphere()->UpdateSkyAndClouds();
 					//_SL->getAtmosphere()->CullObjects();
+
+					//start JH: update fog
+					/*osgEarth::MapNode* mapNode = osgEarth::findTopMostNodeOfType<osgEarth::MapNode>(_silverLiningNode);
+					if (mapNode)
+					{
+						osg::Fog* fog = (osg::Fog *) mapNode->getStateSet()->getAttribute(osg::StateAttribute::FOG);
+
+						if (fog)
+						{
+							double visibiliy = _SL->getAtmosphere()->GetConditions()->GetVisibility();
+							float hazeDensity = 1.0 / visibiliy;
+
+							// Decrease fog density with altitude, to avoid fog effects through the vacuum of space.
+							static const double H = 8435.0; // Pressure scale height of Earth's atmosphere
+							double isothermalEffect = exp(-(_SL->getAtmosphere()->GetConditions()->GetLocation().GetAltitude() / H));
+							if (isothermalEffect <= 0) isothermalEffect = 1E-9;
+							if (isothermalEffect > 1.0) isothermalEffect = 1.0;
+							hazeDensity *= isothermalEffect;
+
+							float r, g, b;
+						
+							bool silverLiningHandledTheFog = false;
+							if (_SL->getAtmosphere()->GetFogEnabled())
+							{
+								//std::cout << "HAS FOG";
+								float density;
+								// Note, the fog color returned is already lit
+								_SL->getAtmosphere()->GetFogSettings(&density, &r, &g, &b);
+
+								if (density > hazeDensity)
+								{
+									//std::cout << "DENSITY < HAZE";
+									fog->setColor(osg::Vec4(r, g, b, 1.0));
+									fog->setDensity(density);
+									silverLiningHandledTheFog = true;
+								}
+							}
+
+							if (!silverLiningHandledTheFog)
+							{
+								_SL->getAtmosphere()->GetHorizonColor(0, 0, &r, &g, &b);
+								fog->setColor(osg::Vec4(r, g, b, 1.0));
+								fog->setDensity(hazeDensity);
+							}
+						}
+					}*/
+					//end JH
 				}
 			}
         }

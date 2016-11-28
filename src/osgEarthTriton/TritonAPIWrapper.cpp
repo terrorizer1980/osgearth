@@ -68,6 +68,17 @@ osg::Vec3 Environment::GetAmbientLightColor() const {
 void Environment::SimulateSeaState(double bscale, double winddir) {
     HANDLE->SimulateSeaState(bscale, winddir);
 }
+void Environment::SetAboveWaterVisibility(double visibility, osg::Vec3 fog_color){
+	HANDLE->SetAboveWaterVisibility(visibility, ::Triton::Vector3(fog_color.x(), fog_color.y(), fog_color.z()));
+}
+
+void Environment::SetEnvironmentMap(unsigned int id){
+	::Triton::TextureHandle env_id = (::Triton::TextureHandle) id;
+	HANDLE->SetEnvironmentMap(env_id);
+}
+
+
+
 SETGET(Environment, SunIntensity, float);
 
 //................................

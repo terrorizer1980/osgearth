@@ -20,6 +20,7 @@
 #define OSGEARTH_SILVERLINING_API_WRAPPER 1
 
 #include "Common"
+#include <osg/Vec3>
 #include <stdint.h> // for uintptr_t
 
 
@@ -164,6 +165,8 @@ namespace osgEarth { namespace SilverLining
 
         void EnableTimePassage(bool enabled, long relightFrequencyMS);
 
+		osg::Vec3 GetLocation() const;
+		void SetFog(double density, const osg::Vec3 &color);
     public:
         AtmosphericConditions(uintptr_t handle) : _handle(handle) { }
         uintptr_t _handle;
@@ -192,6 +195,11 @@ namespace osgEarth { namespace SilverLining
 
         AtmosphericConditions GetConditions() const;
 
+		bool GetFogEnabled() const; 
+		void Atmosphere::GetFogSettings(float &density, osg::Vec3 &color) const;
+		osg::Vec3 GetHorizonColor(float yaw, float pitch) const;
+		unsigned int GetEnvironmentMap(int facesToRender = 6, bool floatingPoint = false, void* cameraID = 0,bool drawClouds = true, bool drawSunAndMoon = true) const;
+		void SetHaze(const osg::Vec3 &color, double depth, double density);
     public:
         Atmosphere(uintptr_t handle) : _handle(handle) { }
         uintptr_t _handle;
