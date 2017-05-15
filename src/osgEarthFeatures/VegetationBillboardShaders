@@ -74,7 +74,7 @@ namespace
         "varying out vec3 normal;\n"
         "varying out vec4 color;\n"
 		"varying out float oe_fogFactor;\n"
-		"uniform int oe_fog_algo;\n"
+		"uniform int oe_fog_algo = 3;\n"
 	    "void main(void)\n"
         "{\n"
         "    normal = gl_Normal;\n"
@@ -201,7 +201,7 @@ namespace
 		"       if ( color.a < 0.2 ) discard; \n"
 	    "    }\n"
         "	 color.rgb = mix( gl_Fog.color.rgb, color.rgb, oe_gefogFactor);\n"
-        "    gl_FragColor = color; \n"
+	    "    gl_FragColor = color; \n"
         "}\n";
 }
 
