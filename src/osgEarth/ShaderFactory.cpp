@@ -836,7 +836,9 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
         {
             for( OrderedFunctionMap::const_iterator i = viewStage->begin(); i != viewStage->end(); ++i )
             {
-                buf << INDENT << i->second._name << "(vp_Vertex); \n";
+				//HACK JH:gl_MultiTexCoord not available in geometry shader 
+				if(i->second._name != "oe_sg_vert")
+					buf << INDENT << i->second._name << "(vp_Vertex); \n";
             }
         }
 

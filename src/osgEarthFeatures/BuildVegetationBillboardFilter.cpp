@@ -22,6 +22,7 @@
 #include <osgEarthSymbology/TextSymbol>
 #include <osgEarthFeatures/FeatureIndex>
 #include <osgEarth/Clamping>
+#include <osgEarth/VirtualProgram>
 #include <osgText/Text>
 #include <osg/AlphaFunc>
 #include <osg/BlendFunc>
@@ -54,6 +55,7 @@ BuildVegetationBillboardFilter::push( FeatureList& input, FilterContext& context
 	return delocalize( result);
 }
 
+//#define OLD_VEG_TECH
 
 osg::Geode*
 	BuildVegetationBillboardFilter::processBillboards(FeatureList& features, FilterContext& context)
@@ -95,7 +97,6 @@ osg::Geode*
 		}
 	}
 
-
 	if ( allpoints.size() > 0 )
 	{
 			osg::ref_ptr<osg::Geometry> osgGeom = new osg::Geometry();
@@ -105,7 +106,9 @@ osg::Geode*
 			transformAndLocalize(allpoints , featureSRS, verts, mapSRS, _world2local, makeECEF );
 
 			osg::Vec3Array* normals = new osg::Vec3Array(verts->size());
+#ifdef OLD_VEG_TECH
 			osg::Vec4Array* colors = new osg::Vec4Array(verts->size());
+#endif
 			Random rng;
 
 			float scale_var = billboard_symb->scaleVariance().get();
@@ -114,22 +117,26 @@ osg::Geode*
 		
 			for (int i=0; i < allpoints.size(); i++)
 			{
-				//osg::Vec3 world_pos = (*verts)[i];
-				//world_pos.normalize();
-				//osg::Vec3 normal = world_pos;
-				//(*normals)[i] = normal;//osg::Matrix::transform3x3(normal, w2l);
-				
-				(*normals)[i] = osg::Vec3(0,0,1); //all points are localized, up-vector == +z  
-				double intensity = (0.5 + int_var*(rng.next() - 0.5))*0.3;
 				double scale_factor = 1.0 + (rng.next()) * scale_var;
-				(*colors)[i].set( intensity, intensity, scale_factor, 1 );
+				double intensity = (0.5 + int_var*(rng.next() - 0.5))*0.3;
+#ifdef OLD_VEG_TECH
+				(*normals)[i] = osg::Vec3(0,0,1); //all points are localized, up-vector == +z  
+				(*colors)[i].set( intensity, intensity, scale_factor, 1.0 );
+#else
+				(*normals)[i].set(intensity, intensity, scale_factor);
+#endif			
 			}
 			
 			osgGeom->setVertexArray( verts );
 			osgGeom->setNormalArray( normals );
 			osgGeom->setNormalBinding( osg::Geometry::BIND_PER_VERTEX );
+#ifdef OLD_VEG_TECH
 			osgGeom->setColorArray(colors);
-			osgGeom->setColorBinding( osg::Geometry::BIND_PER_VERTEX );
+			osgGeom->setColorBinding( osg::Geometry::BIND_PER_VERTEX);
+			
+#endif
+			//osg::Vec2Array* texCoords = new osg::Vec2Array(verts->size());
+
 			osgGeom->addPrimitiveSet( new osg::DrawArrays( GL_POINTS, 0, verts->size() ) );
 			
 			//Load image
@@ -151,13 +158,13 @@ osg::Geode*
 			osgGeom->setName("BillboardPoints");
 			geode->addDrawable(osgGeom);
 
-			//osg::ref_ptr<StateSetCache> cache = new StateSetCache();
-			//Registry::shaderGenerator().run(geode, cache.get());
-
 			//set the texture related uniforms
 			osg::StateSet* geode_ss = geode->getOrCreateStateSet();
 			geode_ss->setTextureAttributeAndModes( 2, tex, 1 );
+			
+#ifdef OLD_VEG_TECH
 			geode_ss->getOrCreateUniform("billboard_tex", osg::Uniform::SAMPLER_2D)->set( 2 );
+#endif
 
 			float bbWidth = (float)tex->getImage()->s() / 2.0f;
 			float bbHeight = (float)tex->getImage()->t();
@@ -208,11 +215,7 @@ osg::Geode*
 					new osg::BlendFunc(GL_ONE, GL_ZERO, GL_ONE, GL_ZERO),
 					osg::StateAttribute::OVERRIDE );
 			}
-
-		
-			//for now just using an osg::Program
-			//TODO: need to add GeometryShader support to the shader comp setup
-			
+#ifdef OLD_VEG_TECH
 			osg::Program* pgm = new osg::Program;
 			pgm->setName("billboard_program");
 			pgm->addShader( new osg::Shader( osg::Shader::VERTEX, billboardVertShader ) );
@@ -222,20 +225,110 @@ osg::Geode*
 			pgm->setParameter( GL_GEOMETRY_INPUT_TYPE_EXT, GL_POINTS );
 			pgm->setParameter( GL_GEOMETRY_OUTPUT_TYPE_EXT, GL_TRIANGLE_STRIP );
 			geode_ss->setAttribute(pgm);
+#else
+			const char* vegetationGeomShader =
+				"#version " GLSL_VERSION_STR "\n"
+				"#pragma vp_location   geometry\n"
+				"#pragma vp_name VegetationGS\n"
+				"#pragma vp_entryPoint VegetationGeomShader\n"
+				"#extension GL_EXT_geometry_shader4 : enable\n"
+				"layout(points) in; \n"
+				"layout(triangle_strip) out; \n"
+				"layout(max_vertices = 4) out; \n"
+				GLSL_DEFAULT_PRECISION_FLOAT "\n"
+				"varying out float brightness;\n"
+				"uniform float billboard_width; \n"
+				"uniform float billboard_height; \n"
+				"void VP_LoadVertex(in int); \n"
+				"void VP_EmitViewVertex(); \n"
+				"vec3 vp_Normal;\n"
+				"vec4 vp_Color;\n"
+				"out vec4 oe_sg_texcoord2;\n"
+				"void VegetationGeomShader(void)\n"
+				"{\n"
 
-			/*
+				"    vec4 bb_color = vec4(1.0, 1.0, 1.0, 1.0);\n"
+				"    VP_LoadVertex(0); \n"
+				"    brightness = vp_Normal.x*2;\n"
+				"    float scale = vp_Normal.z;\n"
+				"    vec3 normal = vec3(0.0, 0.0, 1.0);\n"
+				"    vec4 base_pos = gl_ModelViewMatrix * gl_in[0].gl_Position;\n"
+				"    vec4 top_pos = gl_ModelViewMatrix * (gl_in[0].gl_Position + vec4(normal*billboard_height*scale, 0.0));\n"
+				"    \n"
+				// TODO: this width calculation isn't great but works for now
+				"    vec4 center_v = gl_ModelViewMatrix * vec4(0.,0.,0.,1.);\n"
+				"    vec4 right_v = gl_ModelViewMatrix * vec4(billboard_width*scale,0.,0.,1.);\n"
+				"    float width = distance(right_v, center_v);\n"
+				"    \n"
+
+				//"    brightness = gl_in[0].gl_Color.r*2.0;\n"
+				//"    vp_Color = bb_color; \n"
+				"    gl_Position = (top_pos + vec4(-width, 0.0, 0.0, 0.0)); \n"
+				"    oe_sg_texcoord2 = vec4(0.0, 1.0, 0.0, 0.0); \n"
+				"	 vp_Normal =  normal;\n"
+				"    vp_Color = bb_color; \n"
+				"    VP_EmitViewVertex(); \n"
+
+				//"    vp_Color = bb_color; \n"
+				"    gl_Position = (top_pos + vec4(width, 0.0, 0.0, 0.0)); \n"
+				"    oe_sg_texcoord2 = vec4(1.0, 1.0, 0.0, 0.0); \n"
+				//"    tex_coord = vec2(1.0, 1.0); \n"
+				"	 vp_Normal =  normal;\n"
+				"    vp_Color = bb_color; \n"
+				"    VP_EmitViewVertex(); \n"
+
+				//"    vp_Color = bb_color; \n"
+				"    brightness = vp_Normal.x;\n"
+				"    gl_Position = (base_pos + vec4(-width, 0.0, 0.0, 0.0)); \n"
+				"    oe_sg_texcoord2 = vec4(0.0, 0.0, 0.0, 0.0); \n"
+				"	 vp_Normal =  normal;\n"
+				"    vp_Color = bb_color; \n"
+				"    VP_EmitViewVertex(); \n"
+				
+				//"    vp_Color = bb_color; \n"
+				"    gl_Position = (base_pos + vec4(width, 0.0, 0.0, 0.0)); \n"
+				"    oe_sg_texcoord2 = vec4(1.0, 0.0, 0.0, 0.0); \n"
+				"	 vp_Normal =  normal;\n"
+				"    vp_Color = bb_color; \n"
+				"    VP_EmitViewVertex(); \n"
+				"    EndPrimitive(); \n"
+				"}\n";
+
+
+			const char* vegetationFragShader =
+				"#version " GLSL_VERSION_STR "\n"
+				"#pragma vp_name VegetationFS\n"
+				"#pragma vp_entryPoint VegetationFragShader\n"
+				"#pragma vp_location   fragment_coloring\n"
+				"varying float brightness;\n"
+				"uniform float oe_thermal_mode;\n"
+				"uniform float oe_veg_temperature_detail_strength = 1.0;\n"
+				"uniform float oe_veg_temperature = 275;\n"
+				"void VegetationFragShader(inout vec4 color) \n"
+				"{ \n"
+				//"    if (color.a < 0.2) discard; \n"
+				"    float contrast = clamp(1.0-brightness, 0.85, 1.0);\n"
+				"    color.rgb = clamp(((color.rgb-0.5)*contrast + 0.5) * (1.0+brightness), 0.0, 1.0);\n"
+				"    if(oe_thermal_mode > 0)\n"
+				"    {\n"
+				"		color.r  = ((1.0 - color.r) + (1.0 - color.g) + (1.0 - color.b))/3.0;\n"
+				"		color.r = oe_veg_temperature + color.r*oe_veg_temperature_detail_strength;\n"
+				"       color.g = color.r;\n"
+				"       color.b = color.r;\n"
+				"       if ( color.a < 0.2 ) discard; \n"
+				"    }\n"
+				"} \n";
+
 			VirtualProgram* vp = VirtualProgram::getOrCreate(geode_ss);
-			
-			vp->getTemplate()->setParameter( GL_GEOMETRY_VERTICES_OUT_EXT, 4 );
-			vp->getTemplate()->setParameter( GL_GEOMETRY_INPUT_TYPE_EXT, GL_POINTS );
-			vp->getTemplate()->setParameter( GL_GEOMETRY_OUTPUT_TYPE_EXT, GL_TRIANGLE_STRIP );
+			//VirtualProgram* vp = new VirtualProgram();
+			vp->getTemplate()->setParameter(GL_GEOMETRY_VERTICES_OUT_EXT, 4);
+			vp->getTemplate()->setParameter(GL_GEOMETRY_INPUT_TYPE_EXT, GL_POINTS);
+			vp->getTemplate()->setParameter(GL_GEOMETRY_OUTPUT_TYPE_EXT, GL_TRIANGLE_STRIP);
 
-			//vp->setFunction( "billboardVert", billboardVertShader, osgEarth::ShaderComp::LOCATION_VERTEX_MODEL );
-			vp->setFunction( "billboardGeom", billboardGeomShader, osgEarth::ShaderComp::LOCATION_GEOMETRY );
-			//vp->setFunction( "main3", billboardFragmentShader, osgEarth::ShaderComp::LOCATION_FRAGMENT_COLORING );
-		
-			vp->setShaderLogging(true, "jh_test.glsl");*/
-
+			vp->setFunction("VegetationGeomShader", vegetationGeomShader, osgEarth::ShaderComp::LOCATION_GEOMETRY);
+			vp->setFunction("VegetationFragShader", vegetationFragShader, osgEarth::ShaderComp::LOCATION_FRAGMENT_COLORING);
+			geode_ss->setAttribute(vp, osg::StateAttribute::ON);
+#endif
 			geode_ss->setMode( GL_CULL_FACE, osg::StateAttribute::OFF );
 			geode->setCullingActive(false);
 		}
