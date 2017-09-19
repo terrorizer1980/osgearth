@@ -96,7 +96,7 @@ public:
         //todo
     }
 
-    void onDrawOcean(Environment& env, Ocean& ocean)
+    void onDrawOcean(Environment& env, Ocean& ocean, osg::Camera* camera)
     {
         s_settings.apply(env, ocean);
     }
