@@ -36,7 +36,9 @@ set(TARGET_GLSL
     GPUClamping.vert.glsl
     GPUClamping.vert.lib.glsl
     GPUClamping.frag.glsl
-    Instancing.vert.glsl)
+    Instancing.vert.glsl
+	Vegetation.geom.glsl
+	Vegetation.frag.glsl)
 
 set(SHADERS_CPP "${CMAKE_CURRENT_BINARY_DIR}/AutoGenShaders.cpp")
 
