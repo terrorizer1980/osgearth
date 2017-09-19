@@ -353,7 +353,7 @@ osg::Geode*
 			//vp->setFunction("VegetationGeomShader", vegetationGeomShader, osgEarth::ShaderComp::LOCATION_GEOMETRY);
 			//vp->setFunction("VegetationFragShaderColoring", vegetationFragShaderColoring, osgEarth::ShaderComp::LOCATION_FRAGMENT_COLORING);
 			geode_ss->setAttribute(vp, osg::StateAttribute::ON);
-			vp->setShaderLogging(true, "c:/temp/veg_shaders.glsl");
+			//vp->setShaderLogging(true, "c:/temp/veg_shaders.glsl");
 #endif
 			geode_ss->setMode( GL_CULL_FACE, osg::StateAttribute::OFF );
 			geode->setCullingActive(false);
