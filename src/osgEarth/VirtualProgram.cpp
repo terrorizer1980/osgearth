@@ -1788,7 +1788,17 @@ PolyShader::prepare()
         // for a VERTEX_VIEW or VERTEX_CLIP shader, these might get moved to another stage.
         if ( _location == ShaderComp::LOCATION_VERTEX_VIEW || _location == ShaderComp::LOCATION_VERTEX_CLIP )
         {
-            _geomShader = new osg::Shader(osg::Shader::GEOMETRY, _source);
+			//JH: workaround to avoid using gl_MultiTexCoord in geometry shader...this is probably true for tess-eval shader also but not confirmed.
+			if (_name == "oe_sg_vert")
+			{
+				//replace with empty program!
+				const char* oe_sg_vert_nop = "void oe_sg_vert(inout vec4 vertex_view){}\n";
+				_geomShader = new osg::Shader(osg::Shader::GEOMETRY, oe_sg_vert_nop);
+				
+			}
+			else
+				_geomShader = new osg::Shader(osg::Shader::GEOMETRY, _source);
+
             if ( !_name.empty() )
                 _geomShader->setName(_name);
             ShaderPreProcessor::run( _geomShader.get() );

@@ -38,5 +38,12 @@ namespace osgEarth
         // DrawInstanced
         InstancingVertex = "Instancing.vert.glsl";
         _sources[InstancingVertex] = "@Instancing.vert.glsl@";
+
+		//Vegetation shaders
+		VegetationGeometry = "Vegetation.geom.glsl";
+        _sources[VegetationGeometry] = "@Vegetation.geom.glsl@";
+
+		VegetationFragment = "Vegetation.frag.glsl";
+        _sources[VegetationFragment] = "@Vegetation.frag.glsl@";
     }
 };

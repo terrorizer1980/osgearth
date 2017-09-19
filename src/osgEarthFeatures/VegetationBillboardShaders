@@ -112,8 +112,8 @@ namespace
 		"varying in float oe_fogFactor[];\n"
 		"uniform float oe_logDepth_FC;\n"
 		//"varying float oe_logDepth_logz;\n"
-        "uniform float billboard_width; \n"
-        "uniform float billboard_height; \n"
+        "uniform float oe_billboard_width; \n"
+        "uniform float oe_billboard_height; \n"
         "uniform sampler2D billboard_tex; \n"
 		"vec4 clip(vec4 clip)\n"
         "{\n"
@@ -132,11 +132,11 @@ namespace
 		"	 bnormal = normalize(gl_NormalMatrix * vec3(0.0,0.0,1.0));\n"
 		
         "    vec4 v = gl_ModelViewMatrix * gl_PositionIn[0];\n"
-        "    vec4 v2 = gl_ModelViewMatrix * (gl_PositionIn[0] + vec4(normal[0]*billboard_height*scale, 0.0));\n"
+        "    vec4 v2 = gl_ModelViewMatrix * (gl_PositionIn[0] + vec4(normal[0]*oe_billboard_height*scale, 0.0));\n"
         "    \n"
         // TODO: this width calculation isn't great but works for now
         "    vec4 center_v = gl_ModelViewMatrix * vec4(0.,0.,0.,1.);\n"
-        "    vec4 right_v = gl_ModelViewMatrix * vec4(billboard_width*scale,0.,0.,1.);\n"
+        "    vec4 right_v = gl_ModelViewMatrix * vec4(oe_billboard_width*scale,0.,0.,1.);\n"
         "    float width = distance(right_v, center_v);\n"
         "    \n"
 
