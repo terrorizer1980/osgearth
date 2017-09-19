@@ -32,9 +32,9 @@ namespace osgEarth { namespace SilverLining
     public:
         virtual void onInitialize(Atmosphere& atmosphere) { }
 
-        virtual void onDrawSky(Atmosphere& atmosphere) { }
+        virtual void onDrawSky(Atmosphere& atmosphere, osg::Camera* camera) { }
 
-        virtual void onDrawClouds(Atmosphere& atmosphere) { }
+        virtual void onDrawClouds(Atmosphere& atmosphere, osg::Camera* camera) { }
 
         /**
          * Returns elapsed milliseconds from epoch for clouds animation.

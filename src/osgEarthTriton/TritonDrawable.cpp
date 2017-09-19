@@ -507,9 +507,11 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         // User pre-draw callback:
         if (_TRITON->getCallback())
         {
+			osg::Camera* camera = renderInfo.getCurrentCamera();
             _TRITON->getCallback()->onDrawOcean(
                 _TRITON->getEnvironmentWrapper(),
-                _TRITON->getOceanWrapper());
+                _TRITON->getOceanWrapper(),
+				camera);
         }
 
         // The sun position is roughly where it is in our skybox texture:

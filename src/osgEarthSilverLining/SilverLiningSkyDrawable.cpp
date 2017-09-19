@@ -81,7 +81,7 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
         // invoke the user callback if it exists
         if (_SL->getCallback())
-            _SL->getCallback()->onDrawSky(_SL->getAtmosphereWrapper());
+            _SL->getCallback()->onDrawSky(_SL->getAtmosphereWrapper(), camera);
 
         // draw the sky.
         _SL->getAtmosphere()->DrawSky(
