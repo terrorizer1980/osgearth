@@ -23,6 +23,7 @@
 #include <osgEarthFeatures/FeatureIndex>
 #include <osgEarth/Clamping>
 #include <osgEarth/VirtualProgram>
+#include <osgEarth/Shaders>
 #include <osgText/Text>
 #include <osg/AlphaFunc>
 #include <osg/BlendFunc>
@@ -136,6 +137,7 @@ osg::Geode*
 			
 #endif
 			//osg::Vec2Array* texCoords = new osg::Vec2Array(verts->size());
+			//osgGeom->setTexCoordArray(2,texCoords);
 
 			osgGeom->addPrimitiveSet( new osg::DrawArrays( GL_POINTS, 0, verts->size() ) );
 			
@@ -161,6 +163,7 @@ osg::Geode*
 			//set the texture related uniforms
 			osg::StateSet* geode_ss = geode->getOrCreateStateSet();
 			geode_ss->setTextureAttributeAndModes( 2, tex, 1 );
+			geode_ss->addUniform(new osg::Uniform("oe_billboard_tex", 2));
 			
 #ifdef OLD_VEG_TECH
 			geode_ss->getOrCreateUniform("billboard_tex", osg::Uniform::SAMPLER_2D)->set( 2 );
@@ -187,8 +190,8 @@ osg::Geode*
 				}
 			}
 
-			geode_ss->getOrCreateUniform("billboard_width", osg::Uniform::FLOAT)->set( bbWidth );
-			geode_ss->getOrCreateUniform("billboard_height", osg::Uniform::FLOAT)->set( bbHeight );
+			geode_ss->getOrCreateUniform("oe_billboard_width", osg::Uniform::FLOAT)->set( bbWidth );
+			geode_ss->getOrCreateUniform("oe_billboard_height", osg::Uniform::FLOAT)->set( bbHeight );
 		
 
 			if(!osg::DisplaySettings::instance()->getMultiSamples())
@@ -226,7 +229,8 @@ osg::Geode*
 			pgm->setParameter( GL_GEOMETRY_OUTPUT_TYPE_EXT, GL_TRIANGLE_STRIP );
 			geode_ss->setAttribute(pgm);
 #else
-			const char* vegetationGeomShader =
+		/*	const char* vegetationGeomShader =
+				//"#version 330 \n"
 				"#version " GLSL_VERSION_STR "\n"
 				"#pragma vp_location   geometry\n"
 				"#pragma vp_name VegetationGS\n"
@@ -243,7 +247,7 @@ osg::Geode*
 				"void VP_EmitViewVertex(); \n"
 				"vec3 vp_Normal;\n"
 				"vec4 vp_Color;\n"
-				"out vec4 oe_sg_texcoord2;\n"
+				"out vec4 veg_texcoord;\n"
 				"void VegetationGeomShader(void)\n"
 				"{\n"
 
@@ -264,14 +268,14 @@ osg::Geode*
 				//"    brightness = gl_in[0].gl_Color.r*2.0;\n"
 				//"    vp_Color = bb_color; \n"
 				"    gl_Position = (top_pos + vec4(-width, 0.0, 0.0, 0.0)); \n"
-				"    oe_sg_texcoord2 = vec4(0.0, 1.0, 0.0, 0.0); \n"
+				"    veg_texcoord = vec4(0.0, 1.0, 0.0, 0.0); \n"
 				"	 vp_Normal =  normal;\n"
 				"    vp_Color = bb_color; \n"
 				"    VP_EmitViewVertex(); \n"
 
 				//"    vp_Color = bb_color; \n"
 				"    gl_Position = (top_pos + vec4(width, 0.0, 0.0, 0.0)); \n"
-				"    oe_sg_texcoord2 = vec4(1.0, 1.0, 0.0, 0.0); \n"
+				"    veg_texcoord = vec4(1.0, 1.0, 0.0, 0.0); \n"
 				//"    tex_coord = vec2(1.0, 1.0); \n"
 				"	 vp_Normal =  normal;\n"
 				"    vp_Color = bb_color; \n"
@@ -280,14 +284,14 @@ osg::Geode*
 				//"    vp_Color = bb_color; \n"
 				"    brightness = vp_Normal.x;\n"
 				"    gl_Position = (base_pos + vec4(-width, 0.0, 0.0, 0.0)); \n"
-				"    oe_sg_texcoord2 = vec4(0.0, 0.0, 0.0, 0.0); \n"
+				"    veg_texcoord = vec4(0.0, 0.0, 0.0, 0.0); \n"
 				"	 vp_Normal =  normal;\n"
 				"    vp_Color = bb_color; \n"
 				"    VP_EmitViewVertex(); \n"
 				
 				//"    vp_Color = bb_color; \n"
 				"    gl_Position = (base_pos + vec4(width, 0.0, 0.0, 0.0)); \n"
-				"    oe_sg_texcoord2 = vec4(1.0, 0.0, 0.0, 0.0); \n"
+				"    veg_texcoord = vec4(1.0, 0.0, 0.0, 0.0); \n"
 				"	 vp_Normal =  normal;\n"
 				"    vp_Color = bb_color; \n"
 				"    VP_EmitViewVertex(); \n"
@@ -295,18 +299,22 @@ osg::Geode*
 				"}\n";
 
 
-			const char* vegetationFragShader =
+			const char* vegetationFragShaderColoring =
 				"#version " GLSL_VERSION_STR "\n"
 				"#pragma vp_name VegetationFS\n"
-				"#pragma vp_entryPoint VegetationFragShader\n"
+				"#pragma vp_entryPoint VegetationFragShaderColoring\n"
 				"#pragma vp_location   fragment_coloring\n"
+				"uniform sampler2D veg_texure;\n"
+				"in vec4 veg_texcoord;\n"
 				"varying float brightness;\n"
 				"uniform float oe_thermal_mode;\n"
 				"uniform float oe_veg_temperature_detail_strength = 1.0;\n"
 				"uniform float oe_veg_temperature = 275;\n"
-				"void VegetationFragShader(inout vec4 color) \n"
+				"void VegetationFragShaderColoring(inout vec4 color) \n"
 				"{ \n"
 				//"    if (color.a < 0.2) discard; \n"
+				"	 vec4 texel = texture2D(veg_texure, veg_texcoord.xy);\n"
+				"    color = texel;\n"
 				"    float contrast = clamp(1.0-brightness, 0.85, 1.0);\n"
 				"    color.rgb = clamp(((color.rgb-0.5)*contrast + 0.5) * (1.0+brightness), 0.0, 1.0);\n"
 				"    if(oe_thermal_mode > 0)\n"
@@ -319,15 +327,33 @@ osg::Geode*
 				"    }\n"
 				"} \n";
 
+
+			const char* vegetationVertexShader =
+				"#version 330 compatibility\n"
+				"#pragma vp_entryPoint VegetationVertexShader\n"
+				"#pragma vp_location   vertex_view\n"
+				"#pragma vp_varying vec4 oe_sg_texcoord2\n"
+				"vec4 oe_sg_texcoord2;\n"
+				"void VegetationVertexShader(inout vec4 vertex) { \n"
+				"    oe_sg_texcoord2 = gl_MultiTexCoord2;\n"
+				"} \n";
+				*/
+		
 			VirtualProgram* vp = VirtualProgram::getOrCreate(geode_ss);
 			//VirtualProgram* vp = new VirtualProgram();
 			vp->getTemplate()->setParameter(GL_GEOMETRY_VERTICES_OUT_EXT, 4);
 			vp->getTemplate()->setParameter(GL_GEOMETRY_INPUT_TYPE_EXT, GL_POINTS);
 			vp->getTemplate()->setParameter(GL_GEOMETRY_OUTPUT_TYPE_EXT, GL_TRIANGLE_STRIP);
 
-			vp->setFunction("VegetationGeomShader", vegetationGeomShader, osgEarth::ShaderComp::LOCATION_GEOMETRY);
-			vp->setFunction("VegetationFragShader", vegetationFragShader, osgEarth::ShaderComp::LOCATION_FRAGMENT_COLORING);
+			osgEarth::Shaders pkg;
+			pkg.load(vp, pkg.VegetationGeometry);
+			pkg.load(vp, pkg.VegetationFragment);
+		
+			//vp->setFunction("VegetationVertexShader", vegetationVertexShader, osgEarth::ShaderComp::LOCATION_VERTEX_MODEL);
+			//vp->setFunction("VegetationGeomShader", vegetationGeomShader, osgEarth::ShaderComp::LOCATION_GEOMETRY);
+			//vp->setFunction("VegetationFragShaderColoring", vegetationFragShaderColoring, osgEarth::ShaderComp::LOCATION_FRAGMENT_COLORING);
 			geode_ss->setAttribute(vp, osg::StateAttribute::ON);
+			//vp->setShaderLogging(true, "c:/temp/veg_shaders.glsl");
 #endif
 			geode_ss->setMode( GL_CULL_FACE, osg::StateAttribute::OFF );
 			geode->setCullingActive(false);

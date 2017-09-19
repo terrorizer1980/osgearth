@@ -36,6 +36,9 @@ namespace osgEarth
         std::string DrapingVertex, DrapingFragment;
         std::string GPUClampingVertex, GPUClampingFragment, GPUClampingVertexLib;
         std::string InstancingVertex;
+		//ADDON
+		std::string VegetationGeometry;
+		std::string VegetationFragment;
 	};	
 
 } // namespace osgEarth
