@@ -139,12 +139,12 @@ struct SLCallback : public osgEarth::SilverLining::Callback
         atmosphere.EnableLensFlare(true);
     }
 
-    void onDrawSky(Atmosphere& atmosphere)
+	void onDrawSky(Atmosphere& atmospher, osg::Camera* camera)
     {
         //nop
     }
 
-    void onDrawClouds(Atmosphere& atmosphere)
+	void onDrawClouds(Atmosphere& atmosphere, osg::Camera* camera)
     {
         s_settings.apply(atmosphere);
     }
