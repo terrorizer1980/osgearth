@@ -78,6 +78,19 @@ TritonContext::passHeightMapToTriton() const
     return _options.useHeightMap() == true;
 }
 
+
+bool
+TritonContext::updateHeightMapOnTerrainLoad() const
+{
+	return _options.updateHeightMapOnTerrainLoad() == true;
+}
+
+double
+TritonContext::getHeightMapUpdateDistance() const
+{
+	return _options.heightMapUpdateDistance().get();
+}
+
 int
 TritonContext::getHeightMapSize() const
 {
@@ -136,7 +149,7 @@ TritonContext::initialize(osg::RenderInfo& renderInfo)
 
             float openGLVersion = osg::getGLVersionNumber();
             enum ::Triton::Renderer tritonOpenGlVersion = ::Triton::OPENGL_2_0;
-            if( openGLVersion == 4.1 )
+            if( openGLVersion >= 4.1 )
                 tritonOpenGlVersion = ::Triton::OPENGL_4_1;
             else if( openGLVersion == 4.0 )
                 tritonOpenGlVersion = ::Triton::OPENGL_4_0;

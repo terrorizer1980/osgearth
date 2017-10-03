@@ -68,6 +68,9 @@ namespace osgEarth { namespace Triton
 
         bool passHeightMapToTriton() const;
 
+		double getHeightMapUpdateDistance() const;
+		bool updateHeightMapOnTerrainLoad() const;
+
         int getHeightMapSize() const;
 
         const std::string& getMaskLayerName() const;

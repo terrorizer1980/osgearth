@@ -30,12 +30,36 @@
 #include <osgEarth/MapNode>
 #include <osgEarth/Terrain>
 #include <osgEarth/NativeProgramAdapter>
-
+#include <Version.h>
+#if TRITON_MAJOR_VERSION >= 3 && TRITON_MINOR_VERSION >= 82
+	#define USE_TRITON_CAMERA
+#endif
 const unsigned int TRITON_OCEAN_MASK = 0x4; // 0100
+
 
 namespace osgEarth { namespace Triton
 {
     class TritonContext;
+
+	class CameraData
+	{
+	public:
+		CameraData() : _dirty(true)
+#ifdef USE_TRITON_CAMERA
+			,_tritonCamera(0)
+#endif
+		{}
+		virtual ~CameraData(){}
+		bool _dirty;
+        osg::ref_ptr<osg::Camera> _heightCamera;
+		osg::ref_ptr<osg::Texture2D> _heightMap;
+		//osg::Matrix _viewMatrix;
+        //osg::Matrix _projMatrix;
+		osg::Vec3d _lastEye;
+#ifdef USE_TRITON_CAMERA
+		::Triton::Camera* _tritonCamera;
+#endif
+    };
 
     /**
      * Custom drawable for rendering the Triton ocean effects
@@ -51,11 +75,12 @@ namespace osgEarth { namespace Triton
         // custom draw (called with an active GC)
         void drawImplementation(osg::RenderInfo& ri) const;
 
-        void setupHeightMap(osg::State& state);
+        void setupHeightMap(osg::RenderInfo& renderInfo, CameraData* cam_data);
 
-        void updateHeightMap(osg::RenderInfo& renderInfo) const;
+        //void updateHeightMap(osg::RenderInfo& renderInfo) const;
+		void updateHeightMap(osg::RenderInfo& renderInfo, CameraData* cam_data) const;
 
-        void dirtyAllContexts();
+        void dirtyAllCameras();
 
 #if OSG_VERSION_GREATER_THAN(3,3,1)
         osg::BoundingBox computeBoundingBox() const
@@ -74,21 +99,19 @@ namespace osgEarth { namespace Triton
         osg::observer_ptr<osgEarth::MapNode> _mapNode;
         osg::ref_ptr<osg::TextureCubeMap> _cubeMap;
         osg::BoundingBox                  _bbox;
-        osg::ref_ptr<osg::Texture2D> _heightMap;
-        osg::ref_ptr<osg::Camera> _heightCamera;
-        osg::observer_ptr<osgEarth::TerrainCallback> _terrainChangedCallback;
+        mutable osg::observer_ptr<osgEarth::TerrainCallback> _terrainChangedCallback;
 
         osg::ref_ptr< osg::Texture2D >       _planarReflectionMap;
         osg::ref_ptr< osg::RefMatrix >       _planarReflectionProjection;
 
-        mutable osg::buffered_object<int>         _contextDirty;
-        mutable osg::Matrix                       _viewMatrix;
-        mutable osg::Matrix                       _projMatrix;
-
+        //mutable osg::buffered_object<int>         _contextDirty;
         mutable osg::buffered_object<osgEarth::NativeProgramAdapterCollection> _adapters;
-
+		typedef std::map<osg::Camera*, CameraData*> CameraDataMap;
+		mutable CameraDataMap _CameraData;
         TritonDrawable(const TritonDrawable& copy, const osg::CopyOp& op=osg::CopyOp::SHALLOW_COPY) { }
     };
+
+	
 
 } } // namespace osgEarth::Triton
 
