@@ -39,6 +39,7 @@ namespace osgEarth { namespace Triton
             _renderBinNumber.init( 12 );
 			_updateHeightMapOnTerrainLoad.init(true);
 			_heightMapUpdateDistance.init(1.0);
+			_quality.init("GOOD");
             fromConfig( _conf );
         }
 
@@ -76,6 +77,9 @@ namespace osgEarth { namespace Triton
         optional<std::string>& maskLayer() { return _maskLayerName; }
         const optional<std::string>& maskLayer() const { return _maskLayerName; }
 
+		optional<std::string>& quality() { return _quality; }
+		const optional<std::string>& quality() const { return _quality; }
+
 		osgEarth::optional<bool>& updateHeightMapOnTerrainLoad() { return _updateHeightMapOnTerrainLoad; }
 		const osgEarth::optional<bool>& updateHeightMapOnTerrainLoad() const { return _updateHeightMapOnTerrainLoad; }
 
@@ -91,6 +95,8 @@ namespace osgEarth { namespace Triton
             conf.addIfSet("height_map_size", _heightMapSize);
             conf.addIfSet("render_bin_number",   _renderBinNumber);
             conf.addIfSet("mask_layer", _maskLayerName);
+
+			conf.addIfSet("quality", _quality);
 
 			conf.addIfSet("update_height_map_on_terrain_load", _updateHeightMapOnTerrainLoad);
 			conf.addIfSet("height_map_update_distance", _heightMapUpdateDistance);
@@ -113,6 +119,8 @@ namespace osgEarth { namespace Triton
             conf.getIfSet("render_bin_number",   _renderBinNumber);
             conf.getIfSet("mask_layer", _maskLayerName);
 
+			conf.getIfSet("quality", _quality);
+
 			conf.getIfSet("update_height_map_on_terrain_load", _updateHeightMapOnTerrainLoad);
 			conf.getIfSet("height_map_update_distance", _heightMapUpdateDistance);
 
@@ -126,6 +134,7 @@ namespace osgEarth { namespace Triton
         osgEarth::optional<int>         _heightMapSize;
         osgEarth::optional<int>         _renderBinNumber;
         osgEarth::optional<std::string> _maskLayerName;
+		osgEarth::optional<std::string> _quality;
 
 		osgEarth::optional<bool>        _updateHeightMapOnTerrainLoad;
 		osgEarth::optional<double>       _heightMapUpdateDistance;

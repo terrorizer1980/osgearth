@@ -167,14 +167,23 @@ TritonContext::initialize(osg::RenderInfo& renderInfo)
                 wf.SetWind( 10.0, 0.0 );
                 _environment->AddWindFetch( wf );
 
-                _ocean = ::Triton::Ocean::Create(
-                    _environment, 
-                    ::Triton::JONSWAP );
+				::Triton::OceanQuality quality = ::Triton::OceanQuality::GOOD;
+				if (_options.quality() == "BETTER")
+					quality = ::Triton::OceanQuality::BETTER;
+				else if (_options.quality() == "BETTER")
+					quality = ::Triton::OceanQuality::BEST;
+
+                _ocean = ::Triton::Ocean::Create(_environment, 
+                    ::Triton::JONSWAP,
+					false,
+					false, quality);
+				//_ocean->SetDepthOffset(0.01);
             }
 
             if ( _ocean )
             {
                 _oceanWrapper = new Ocean((uintptr_t)_ocean);
+				
 
                 // fire init callback if available
                 if (_callback.valid())
