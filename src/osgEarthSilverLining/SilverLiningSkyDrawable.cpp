@@ -94,6 +94,7 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         // Dirty the state and the program tracking to prevent GL state conflicts.
         renderInfo.getState()->dirtyAllVertexArrays();
         renderInfo.getState()->dirtyAllAttributes();
+		renderInfo.getState()->dirtyAllModes();
 
 #if 0
 #if OSG_VERSION_GREATER_OR_EQUAL(3,4,0)
