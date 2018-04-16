@@ -470,7 +470,7 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::GOD_RAYS), prefix));
         adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::SPRAY_PARTICLES), prefix));
         adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WAKE_SPRAY_PARTICLES), prefix));
-        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_DECALS), prefix));
+//        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_DECALS), prefix));
         adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE_PATCH), prefix));
         adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE), prefix));
     }
@@ -479,7 +479,8 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
     // Pass the final view and projection matrices into Triton.
     if ( environment )
     {
-        environment->SetCameraMatrix( state->getModelViewMatrix().ptr() );
+        //environment->SetCameraMatrix( state->getModelViewMatrix().ptr() );
+       environment->SetCameraMatrix(renderInfo.getCurrentCamera()->getViewMatrix().ptr());
         environment->SetProjectionMatrix( state->getProjectionMatrix().ptr() );
     }
 
@@ -513,7 +514,8 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         {
             _TRITON->getCallback()->onDrawOcean(
                 _TRITON->getEnvironmentWrapper(),
-                _TRITON->getOceanWrapper());
+                _TRITON->getOceanWrapper(),
+                renderInfo);
         }
 
         // The sun position is roughly where it is in our skybox texture:

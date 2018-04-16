@@ -21,6 +21,7 @@
 
 #include "Common"
 #include "TritonAPIWrapper"
+#include <osg/RenderInfo>
 
 namespace osgEarth { namespace Triton
 {
@@ -32,7 +33,7 @@ namespace osgEarth { namespace Triton
     public:
         virtual void onInitialize(Environment& env, Ocean& ocean) { }
 
-        virtual void onDrawOcean(Environment& env, Ocean& ocean) { }
+        virtual void onDrawOcean(Environment& env, Ocean& ocean, osg::RenderInfo& renderInfo) { }
     };
 
 } } // namespace osgEarth::Triton
