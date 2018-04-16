@@ -56,15 +56,36 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
         _SL->initialize( renderInfo );
 
+        const osg::State* state = renderInfo.getState();
+
+        osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ]; // thread safe.
+        if ( adapters.empty() )
+        {
+            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetSkyShader()) );
+            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetBillboardShader()) );
+            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetStarShader()) );
+            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetPrecipitationShader()) );
+
+            SL_VECTOR(unsigned) handles = _SL->getAtmosphere()->GetActivePlanarCloudShaders();
+            for(int i=0; i<handles.size(); ++i)          
+                adapters.push_back( new osgEarth::NativeProgramAdapter(state, handles[i]) );
+        }
+        adapters.apply( state );
+
+        
         // convey the sky box size (far plane) to SL:
         double fovy, ar, znear, zfar;
         _SL->setCamera(camera);
         camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
         _SL->setSkyBoxSize( zfar < 100000.0 ? zfar : 100000.0 );
 
+        //JH: moved here to avoid problems with Triton flickering, maybe one frame off... 
+        _SL->getAtmosphere()->SetProjectionMatrix(renderInfo.getState()->getProjectionMatrix().ptr());
+        _SL->getAtmosphere()->SetCameraMatrix(renderInfo.getCurrentCamera()->getViewMatrix().ptr());
+
         // invoke the user callback if it exists
         if (_SL->getCallback())
-            _SL->getCallback()->onDrawSky(_SL->getAtmosphereWrapper());
+            _SL->getCallback()->onDrawSky(_SL->getAtmosphereWrapper(), renderInfo);
 
         // draw the sky.
         _SL->getAtmosphere()->DrawSky(
@@ -72,11 +93,14 @@ SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
             _SL->getSRS()->isGeographic(),
             _SL->getSkyBoxSize(),
             true,
-            false );
+            false,
+            true,
+            camera);
 
         // Dirty the state and the program tracking to prevent GL state conflicts.
         renderInfo.getState()->dirtyAllVertexArrays();
         renderInfo.getState()->dirtyAllAttributes();
+        renderInfo.getState()->dirtyAllModes();
 
 #if 0
 #if OSG_VERSION_GREATER_OR_EQUAL(3,4,0)

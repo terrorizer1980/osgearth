@@ -136,8 +136,8 @@ SilverLiningContextNode::traverse(osg::NodeVisitor& nv)
 					// TODO: make this multi-camera safe
 					_SL->setCameraPosition( nv.getEyePoint() );
 					osgUtil::CullVisitor* cv = Culling::asCullVisitor(nv);
-					_SL->getAtmosphere()->SetCameraMatrix( cv->getModelViewMatrix()->ptr() );
-					_SL->getAtmosphere()->SetProjectionMatrix( cv->getProjectionMatrix()->ptr() );
+					//_SL->getAtmosphere()->SetCameraMatrix( cv->getModelViewMatrix()->ptr() );
+					//_SL->getAtmosphere()->SetProjectionMatrix( cv->getProjectionMatrix()->ptr() );
 
 					_lastAltitude = _SL->getSRS()->isGeographic() ?
 						cv->getEyePoint().length() - _SL->getSRS()->getEllipsoid()->getRadiusEquator() :

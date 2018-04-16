@@ -134,7 +134,7 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 
             // constant random seed ensures consistent clouds across windows
             // TODO: replace this with something else since this is global! -gw
-            ::srand(1234);
+            //::srand(1234);
 
             std::string resourcePath = _options.resourcePath().get();
             if (resourcePath.empty() && ::getenv("SILVERLINING_PATH"))
@@ -147,6 +147,7 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
                 resourcePath.c_str(),
                 true,
                 0 );
+			_atmosphere->GetRandomNumberGenerator()->Seed(1234);
 
             if ( result != ::SilverLining::Atmosphere::E_NOERROR )
             {
@@ -159,8 +160,30 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 
                 // Defaults for a projected terrain. ECEF terrain vectors are set
                 // in updateLocation().
+#define TEST_FIX_LOCATION
+#ifdef TEST_FIX_LOCATION       
+				osg::Vec3d worldpos;
+				osg::Vec3d fixedLocation(-122.3345, 37.558147,0);
+				_srs->transformToWorld(fixedLocation, worldpos);
+				osg::Vec3d up = worldpos;
+				up.normalize();
+				osg::Vec3d north = osg::Vec3d(0, 1, 0);
+				osg::Vec3d east = north ^ up;
+
+				// Check for edge case of north or south pole
+				if (east.length2() == 0)
+				{
+					east = osg::Vec3d(1, 0, 0);
+				}
+				east.normalize();
+
+				_atmosphere->SetUpVector(up.x(), up.y(), up.z());
+				_atmosphere->SetRightVector(east.x(), east.y(), east.z());
+#else
                 _atmosphere->SetUpVector( 0.0, 0.0, 1.0 );
                 _atmosphere->SetRightVector( 1.0, 0.0, 0.0 );
+
+#endif
 
                 // Configure the timer used for animations
                 _atmosphere->GetConditions()->SetMillisecondTimer(_msTimer);
@@ -277,10 +300,10 @@ SilverLiningContext::updateLocation()
         }
 
         east.normalize();
-
+#ifndef TEST_FIX_LOCATION
         _atmosphere->SetUpVector(up.x(), up.y(), up.z());
         _atmosphere->SetRightVector(east.x(), east.y(), east.z());
-
+#endif
         // Get new lat / lon / altitude
         osg::Vec3d latLonAlt;
         _srs->transformFromWorld(_cameraPos, latLonAlt);

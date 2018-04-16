@@ -19,6 +19,7 @@
 #include <osg/Drawable>
 #include <osg/RenderInfo>
 #include <osg/Version>
+#include <osgEarth/NativeProgramAdapter>
 
 namespace osgEarth { namespace SilverLining
 {
@@ -50,7 +51,7 @@ namespace osgEarth { namespace SilverLining
 
         osg::observer_ptr<SilverLiningContext> _SL;
 		SilverLiningContextNode* _contextNode;
-        
+		mutable osg::buffered_object<osgEarth::NativeProgramAdapterCollection> _adapters;
         SkyDrawable(const SkyDrawable& copy, const osg::CopyOp& op=osg::CopyOp::SHALLOW_COPY) { }
     };
 

@@ -77,7 +77,7 @@ void
 SilverLiningNode::attach(osg::View* view, int lightNum)
 {
     _light->setLightNum( lightNum );
-    //view->setLight( _light.get() );
+    view->setLight( _light.get() );
     //view->setLightingMode( osg::View::SKY_LIGHT );
     view->setLightingMode(osg::View::NO_LIGHT);
 }

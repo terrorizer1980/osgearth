@@ -21,6 +21,7 @@
 
 #include "Common"
 #include "SilverLiningAPIWrapper"
+#include <osg/RenderInfo>
 
 namespace osgEarth { namespace SilverLining
 {
@@ -32,9 +33,9 @@ namespace osgEarth { namespace SilverLining
     public:
         virtual void onInitialize(Atmosphere& atmosphere) { }
 
-        virtual void onDrawSky(Atmosphere& atmosphere) { }
+        virtual void onDrawSky(Atmosphere& atmosphere, osg::RenderInfo& renderInfo) { }
 
-        virtual void onDrawClouds(Atmosphere& atmosphere) { }
+        virtual void onDrawClouds(Atmosphere& atmosphere, osg::RenderInfo& renderInfo) { }
 
         /**
          * Returns elapsed milliseconds from epoch for clouds animation.

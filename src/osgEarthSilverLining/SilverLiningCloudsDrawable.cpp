@@ -71,10 +71,10 @@ CloudsDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
         // invoke the user callback if it exists
         if (_SL->getCallback())
-            _SL->getCallback()->onDrawClouds(_SL->getAtmosphereWrapper());
+            _SL->getCallback()->onDrawClouds(_SL->getAtmosphereWrapper(), renderInfo);
 
         renderInfo.getState()->disableAllVertexArrays();
-        _SL->getAtmosphere()->DrawObjects( true, true, true );
+        _SL->getAtmosphere()->DrawObjects( true, true, true,0,false,camera);
 
         // Restore the GL state to where it was before.
         state->dirtyAllVertexArrays();
