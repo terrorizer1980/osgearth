@@ -72,7 +72,7 @@ CloudsDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         // invoke the user callback if it exists
         if (_SL->getCallback())
             _SL->getCallback()->onDrawClouds(_SL->getAtmosphereWrapper(), renderInfo);
-
+		_SL->getAtmosphere()->CullObjects(false);
         renderInfo.getState()->disableAllVertexArrays();
         _SL->getAtmosphere()->DrawObjects( true, true, true,0,false,camera);
 
