@@ -19,7 +19,6 @@
 #include <SilverLining.h>
 
 #include "SilverLiningNode"
-#include "SilverLiningContextNode"
 #include "SilverLiningContext"
 #include "SilverLiningSkyDrawable"
 #include "SilverLiningCloudsDrawable"
@@ -62,6 +61,21 @@ _callback(callback)
     //_lighting->setCreateLightingUniform( false );
     _lighting->attach( stateset );
 
+	// Geode to hold each of the SL drawables:
+	_geode = new osg::Geode();
+	_geode->setCullingActive(false);
+
+	// Draws the sky before everything else
+	_skyDrawable = new SkyDrawable(this);
+	_skyDrawable->getOrCreateStateSet()->setRenderBinDetails(-99, "RenderBin");
+	_geode->addDrawable(_skyDrawable.get());
+
+	// Clouds draw after everything else
+	_cloudsDrawable = new CloudsDrawable(this);
+	_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails(99, "DepthSortedBin");
+	 _geode->addDrawable(_cloudsDrawable.get());
+
+
     // need update traversal.
     ADJUST_UPDATE_TRAV_COUNT(this, +1);
 }
@@ -82,61 +96,48 @@ SilverLiningNode::attach(osg::View* view, int lightNum)
     view->setLightingMode(osg::View::NO_LIGHT);
 }
 
-unsigned
-SilverLiningNode::getNumContexts() const
-{
-    return static_cast<unsigned>(_contextList.size());
-}
-
-osg::StateSet*
-SilverLiningNode::getCloudsStateSet(unsigned index) const
-{
-    if (index < getNumContexts())
-    {
-        const SilverLiningContextNode* node = dynamic_cast<const SilverLiningContextNode*>(_contextList[index].get());
-        if ( node )
-            return node->getCloudsStateSet();
-    }
-    return 0L;
-}
-
-osg::StateSet*
-SilverLiningNode::getSkyStateSet(unsigned index) const
-{
-    if (index < getNumContexts())
-    {
-        const SilverLiningContextNode* node = dynamic_cast<const SilverLiningContextNode*>(_contextList[index].get());
-        if ( node )
-            return node->getSkyStateSet();
-    }
-    return 0L;
-}
-
 void
 SilverLiningNode::onSetDateTime()
 {
-    for (CameraContextMap::const_iterator itr = _contexts.begin();
-        itr != _contexts.end();
-        ++itr)
-    {
-        SilverLiningContextNode* node = dynamic_cast<SilverLiningContextNode* > ((*itr).second.get());
-        if(node)
-            node->onSetDateTime();
-    }
+	::SilverLining::LocalTime utcTime;
+	utcTime.SetFromEpochSeconds(getDateTime().asTimeStamp());
+
+	ContextMap::iterator iter = _contextMap.begin();
+	while(iter != _contextMap.end())
+	{
+		iter->second->getAtmosphere()->GetConditions()->SetTime(utcTime);
+		iter++;
+	}
 }
 
 void
 SilverLiningNode::onSetMinimumAmbient()
 {
-    for (CameraContextMap::const_iterator itr = _contexts.begin();
-        itr != _contexts.end();
-        ++itr)
-    {
-        SilverLiningContextNode* node = dynamic_cast<SilverLiningContextNode* > ((*itr).second.get());
-        if(node)
-            node->onSetMinimumAmbient();
-    }
+	ContextMap::iterator iter = _contextMap.begin();
+	while(iter != _contextMap.end())
+	{
+		iter->second->setMinimumAmbient(getMinimumAmbient());
+		iter++;
+	}
 }
+
+osg::ref_ptr<SilverLiningContext> SilverLiningNode::getOrCreateContext(osg::RenderInfo& renderInfo)
+{
+	Threading::ScopedMutexLock excl(_contextMapMutex);
+	//osg::Camera* key = renderInfo.getCurrentCamera();
+	int key = renderInfo.getContextID();
+	ContextMap::iterator iter = _contextMap.find(key);
+	if (iter != _contextMap.end())
+	{
+		return iter->second;
+	}
+	//Create context
+	osg::ref_ptr<SilverLiningContext>  context = new SilverLiningContext(_options,  _mapSRS, _callback);
+	//context->setMinimumAmbient(getMinimumAmbient());
+	_contextMap[key] = context;
+	return context;
+}
+
 
 void
 SilverLiningNode::traverse(osg::NodeVisitor& nv)
@@ -146,59 +147,38 @@ SilverLiningNode::traverse(osg::NodeVisitor& nv)
     if ( nv.getVisitorType() == nv.CULL_VISITOR )
     {
         osgUtil::CullVisitor* cv = Culling::asCullVisitor(nv);
-        osg::Camera* camera = cv->getCurrentCamera();
-        if ( camera )
-        {
-            Threading::ScopedMutexLock lock(s_mutex);
 
-            CameraContextMap::const_iterator i = _contexts.find(camera);
-            if (i == _contexts.end())
-            {
-                _camerasToAdd.insert(camera);
-            }
-
-            else
-            {
-                i->second->accept(nv);
-            }
-        }
+		osg::Camera* camera = cv->getCurrentCamera();
+		if (camera)
+		{
+			//osg::Camera* key = camera;
+			int key = camera->getGraphicsContext()->getState()->getContextID();
+			ContextMap::const_iterator iter = _contextMap.find(key);
+			if (iter != _contextMap.end())
+			{
+				SilverLiningContext* context = iter->second;
+				// TODO: make this multi-camera safe
+				osgUtil::CullVisitor* cv = Culling::asCullVisitor(nv);
+				context->updateLight(_light);
+			}
+		}
     }
 
     else if (nv.getVisitorType() == nv.UPDATE_VISITOR)
     {
-        {
-            Threading::ScopedMutexLock lock(s_mutex);
-            if (!_camerasToAdd.empty())
-            {
-                for (CameraSet::const_iterator i = _camerasToAdd.begin(); i != _camerasToAdd.end(); ++i)
-                {
-                    SilverLiningContextNode* newNode = new SilverLiningContextNode(this, i->get(), _light.get(), _mapSRS, _options, _callback.get());
-                    _contexts[i->get()] = newNode;
-                    _contextList.push_back(newNode);
-                }
-                _camerasToAdd.clear();
-            }
-        }
-
-        for (CameraContextMap::const_iterator i = _contexts.begin(); i != _contexts.end(); ++i)
-        {
-            i->second->accept(nv);
-        }
-    }
-
-    else
-    {
-        Threading::ScopedMutexLock lock(s_mutex);
-        for (CameraContextMap::const_iterator i = _contexts.begin(); i != _contexts.end(); ++i)
-        {
-            i->second->accept(nv);
-        }
+		int frameNumber = nv.getFrameStamp()->getFrameNumber();
+		_skyDrawable->dirtyBound();
     }
 
     if ( _lightSource.valid() )
     {
         _lightSource->accept(nv);
     }
+
+	if (_geode.valid())
+	{
+		_geode->accept(nv);
+	}
 
     osgEarth::Util::SkyNode::traverse(nv);
 }

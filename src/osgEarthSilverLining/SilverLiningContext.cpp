@@ -69,8 +69,12 @@ private:
     ::SilverLining::MillisecondTimer* _defaultTimer;
 };
 
-SilverLiningContext::SilverLiningContext(const SilverLiningOptions& options) :
+SilverLiningContext::SilverLiningContext(const SilverLiningOptions& options,
+	const osgEarth::SpatialReference* srs,
+	Callback* cb) :
 _options              ( options ),
+_srs                  ( srs ),
+_callback             ( cb ),
 _initAttempted        ( false ),
 _initFailed           ( false ),
 _maxAmbientLightingAlt( -1.0 ),
@@ -98,30 +102,120 @@ SilverLiningContext::~SilverLiningContext()
 }
 
 void
-SilverLiningContext::setCallback(Callback* cb)
-{
-    _callback = cb;
-}
-
-void
-SilverLiningContext::setLight(osg::Light* light)
-{
-    _light = light;
-}
-
-void
-SilverLiningContext::setSRS(const osgEarth::SpatialReference* srs)
-{
-    _srs = srs;
-}
-
-void
 SilverLiningContext::setMinimumAmbient(const osg::Vec4f& value)
 {
     _minAmbient = value;
 }
 
-static int SILVERLINING_ENABLE_FIXED_UP_VEC = 1;
+osgEarth::NativeProgramAdapterCollection& SilverLiningContext::getOrCreateAdapters(osg::RenderInfo& renderInfo)
+{
+	osg::State* state = renderInfo.getState();
+
+	// adapt the SL shaders so they can accept OSG uniforms:
+	osgEarth::NativeProgramAdapterCollection& adapters = _adapters[state->getContextID()]; // thread safe.
+	if (adapters.empty())
+	{
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, getAtmosphere()->GetSkyShader()));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, getAtmosphere()->GetBillboardShader()));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, getAtmosphere()->GetStarShader()));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, getAtmosphere()->GetPrecipitationShader()));
+		//adapters.push_back(new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetAtmosphericLimbShader()) );
+
+		SL_VECTOR(unsigned) handles = getAtmosphere()->GetActivePlanarCloudShaders();
+		for (int i = 0; i<handles.size(); ++i)
+			adapters.push_back(new osgEarth::NativeProgramAdapter(state, handles[i]));
+	}
+	return adapters;
+}
+static osgEarth::Threading::Mutex _drawMutex;
+
+void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
+{
+	Threading::ScopedMutexLock excl(_drawMutex);
+	renderInfo.getState()->disableAllVertexArrays();
+	
+	initialize(renderInfo);
+
+	osg::Camera* camera = renderInfo.getCurrentCamera();
+
+	const osg::State* state = renderInfo.getState();
+
+	osgEarth::NativeProgramAdapterCollection& adapters = getOrCreateAdapters(renderInfo);
+	adapters.apply(state);
+
+	// convey the sky box size (far plane) to SL:
+	double fovy, ar, znear, zfar;
+	//setCamera(camera);
+	camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
+	//setSkyBoxSize(zfar < 100000.0 ? zfar : 100000.0);
+	setSkyBoxSize(zfar);
+
+	osg::Vec3d eye, center, up;
+	renderInfo.getCurrentCamera()->getViewMatrixAsLookAt(eye, center, up);
+	updateLocation(eye);
+
+	//JH: moved here to avoid problems with Triton flickering, maybe one frame off... 
+	getAtmosphere()->SetProjectionMatrix(renderInfo.getState()->getProjectionMatrix().ptr());
+	getAtmosphere()->SetCameraMatrix(renderInfo.getCurrentCamera()->getViewMatrix().ptr());
+
+	// invoke the user callback if it exists
+	if (_callback)
+		_callback->onDrawSky(getAtmosphereWrapper(), renderInfo);
+
+	// draw the sky.
+	getAtmosphere()->DrawSky(
+		true,
+		getSRS()->isGeographic(),
+		getSkyBoxSize(),
+		true,
+		false,
+		true,
+		camera);
+
+	// Dirty the state and the program tracking to prevent GL state conflicts.
+	renderInfo.getState()->dirtyAllVertexArrays();
+	renderInfo.getState()->dirtyAllAttributes();
+	renderInfo.getState()->dirtyAllModes();
+
+#if 0
+#if OSG_VERSION_GREATER_OR_EQUAL(3,4,0)
+	osg::GLExtensions* api = renderInfo.getState()->get<osg::GLExtensions>();
+#else
+	osg::GL2Extensions* api = osg::GL2Extensions::Get(renderInfo.getState()->getContextID(), true);
+#endif
+	api->glUseProgram((GLuint)0);
+	renderInfo.getState()->setLastAppliedProgramObject(0L);
+#endif
+
+	renderInfo.getState()->apply();
+}
+
+void SilverLiningContext::onDrawClouds(osg::RenderInfo& renderInfo)
+{
+	Threading::ScopedMutexLock excl(_drawMutex);
+	osg::State* state = renderInfo.getState();
+	// adapt the SL shaders so they can accept OSG uniforms:
+	osgEarth::NativeProgramAdapterCollection& adapters = getOrCreateAdapters(renderInfo);
+	adapters.apply(state);
+
+	renderInfo.getState()->disableAllVertexArrays();
+
+	
+	getAtmosphere()->CullObjects(true);
+
+	// invoke the user callback if it exists
+	if (getCallback())
+		getCallback()->onDrawClouds(getAtmosphereWrapper(), renderInfo);
+
+	getAtmosphere()->DrawObjects(true, true, true, 0, false, renderInfo.getCurrentCamera());
+
+	// Restore the GL state to where it was before.
+	state->dirtyAllVertexArrays();
+	state->dirtyAllAttributes();
+
+	state->apply();
+}
+
 void
 SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 {
@@ -133,14 +227,10 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
         {
             _initAttempted = true;
 
+			std::cout << "CONTEXT ID:" << renderInfo.getContextID() << "\n";
             // constant random seed ensures consistent clouds across windows
             // TODO: replace this with something else since this is global! -gw
             //::srand(1234);
-
-			if(::getenv("SILVERLINING_ENABLE_FIXED_UP_VEC"))
-			{
-				SILVERLINING_ENABLE_FIXED_UP_VEC = atoi(::getenv("SILVERLINING_ENABLE_FIXED_UP_VEC"));
-			}
 
             std::string resourcePath = _options.resourcePath().get();
             if (resourcePath.empty() && ::getenv("SILVERLINING_PATH"))
@@ -166,34 +256,30 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 
                 // Defaults for a projected terrain. ECEF terrain vectors are set
                 // in updateLocation().
+//#define TEST_FIX_LOCATION
+#ifdef TEST_FIX_LOCATION       
+				osg::Vec3d worldpos;
+				osg::Vec3d fixedLocation(-122.3345, 37.558147,0);
+				_srs->transformToWorld(fixedLocation, worldpos);
+				osg::Vec3d up = worldpos;
+				up.normalize();
+				osg::Vec3d north = osg::Vec3d(0, 1, 0);
+				osg::Vec3d east = north ^ up;
 
-                if (SILVERLINING_ENABLE_FIXED_UP_VEC > 0)
-                {
-                    osg::Vec3d worldpos;
+				// Check for edge case of north or south pole
+				if (east.length2() == 0)
+				{
+					east = osg::Vec3d(1, 0, 0);
+				}
+				east.normalize();
 
-                    osg::Vec3d fixedLocation(18.4867, 57.4684, 0);
-                    _srs->transformToWorld(fixedLocation, worldpos);
-                    osg::Vec3d up = worldpos;
-                    up.normalize();
-                    osg::Vec3d north = osg::Vec3d(0, 1, 0);
-                    osg::Vec3d east = north ^ up;
+				_atmosphere->SetUpVector(up.x(), up.y(), up.z());
+				_atmosphere->SetRightVector(east.x(), east.y(), east.z());
+#else
+				_atmosphere->SetUpVector(0.0, 0.0, 1.0);
+				_atmosphere->SetRightVector(1.0, 0.0, 0.0);
 
-                    // Check for edge case of north or south pole
-                    if (east.length2() == 0)
-                    {
-                        east = osg::Vec3d(1, 0, 0);
-                    }
-                    east.normalize();
-
-                    _atmosphere->SetUpVector(up.x(), up.y(), up.z());
-                    _atmosphere->SetRightVector(east.x(), east.y(), east.z());
-                }
-                else
-                {
-                    _atmosphere->SetUpVector(0.0, 0.0, 1.0);
-                    _atmosphere->SetRightVector(1.0, 0.0, 0.0);
-                }
-
+#endif
 
                 // Configure the timer used for animations
                 _atmosphere->GetConditions()->SetMillisecondTimer(_msTimer);
@@ -240,9 +326,10 @@ SilverLiningContext::setupClouds()
 }
 
 void
-SilverLiningContext::updateLight()
+SilverLiningContext::updateLight(osg::Light *light)
 {
-    if ( !ready() || !_light.valid() || !_srs.valid() )
+	Threading::ScopedMutexLock excl(_drawMutex);
+    if ( !ready() || light == NULL || !_srs.valid() )
         return;
 
     float ra, ga, ba, rd, gd, bd, x, y, z;
@@ -284,13 +371,13 @@ SilverLiningContext::updateLight()
         osg::clampAbove(ga, _minAmbient.b()),
         1.0);
 
-    _light->setAmbient( ambient );
-    _light->setDiffuse( osg::Vec4(rd, gd, bd, 1.0f) );
-    _light->setPosition( osg::Vec4(direction, 0.0f) ); //w=0 means "at infinity"
+	light->setAmbient( ambient );
+	light->setDiffuse( osg::Vec4(rd, gd, bd, 1.0f) );
+	light->setPosition( osg::Vec4(direction, 0.0f) ); //w=0 means "at infinity"
 }
 
 void
-SilverLiningContext::updateLocation()
+SilverLiningContext::updateLocation(const osg::Vec3d &camera_pos)
 {
     if ( !ready() || !_srs.valid() )
         return;
@@ -298,28 +385,25 @@ SilverLiningContext::updateLocation()
     if ( _srs->isGeographic() )
     {
         // Get new local orientation
-        if (SILVERLINING_ENABLE_FIXED_UP_VEC == 0)
+        osg::Vec3d up = camera_pos;
+        up.normalize();
+        osg::Vec3d north = osg::Vec3d(0, 1, 0);
+        osg::Vec3d east = north ^ up;
+
+        // Check for edge case of north or south pole
+        if (east.length2() == 0)
         {
-            osg::Vec3d up = _cameraPos;
-            up.normalize();
-            osg::Vec3d north = osg::Vec3d(0, 1, 0);
-            osg::Vec3d east = north ^ up;
-
-            // Check for edge case of north or south pole
-            if (east.length2() == 0)
-            {
-                east = osg::Vec3d(1, 0, 0);
-            }
-
-            east.normalize();
-     
-            _atmosphere->SetUpVector(up.x(), up.y(), up.z());
-            _atmosphere->SetRightVector(east.x(), east.y(), east.z());
+            east = osg::Vec3d(1, 0, 0);
         }
-        
+
+        east.normalize();
+#ifndef TEST_FIX_LOCATION
+        _atmosphere->SetUpVector(up.x(), up.y(), up.z());
+        _atmosphere->SetRightVector(east.x(), east.y(), east.z());
+#endif
         // Get new lat / lon / altitude
         osg::Vec3d latLonAlt;
-        _srs->transformFromWorld(_cameraPos, latLonAlt);
+        _srs->transformFromWorld(camera_pos, latLonAlt);
 
         ::SilverLining::Location loc;
         loc.SetAltitude ( latLonAlt.z() );

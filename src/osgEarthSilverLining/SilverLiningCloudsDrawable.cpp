@@ -19,7 +19,7 @@
 #include <SilverLining.h>
 #include "SilverLiningCloudsDrawable"
 #include "SilverLiningContext"
-#include "SilverLiningContextNode"
+#include "SilverLiningNode"
 #include <osgEarth/SpatialReference>
 
 #undef  LC
@@ -28,9 +28,8 @@
 using namespace osgEarth::SilverLining;
 
 
-CloudsDrawable::CloudsDrawable(SilverLiningContextNode* contexNode) :
-_SL(contexNode->getSLContext()),
-_contextNode(contexNode)
+CloudsDrawable::CloudsDrawable(SilverLiningNode* node) :
+_contextNode(node)
 {
     // call this to ensure draw() gets called every frame.
     setSupportsDisplayList( false );
@@ -44,45 +43,8 @@ _contextNode(contexNode)
 void
 CloudsDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 {
-	osg::Camera* camera = renderInfo.getCurrentCamera();
-#ifndef SL_USE_CULL_MASK
-	if(_contextNode->getTargetCamera() == camera)
-#endif
-	{
-	if ( _SL->ready())
-	{
-	    osg::State* state = renderInfo.getState();
-
-        // adapt the SL shaders so they can accept OSG uniforms:
-        osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ]; // thread safe.
-        if ( adapters.empty() )
-        {
-            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetSkyShader()) );
-            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetBillboardShader()) );
-            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetStarShader()) );
-            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetPrecipitationShader()) );
-            //adapters.push_back(new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetAtmosphericLimbShader()) );
-
-            SL_VECTOR(unsigned) handles = _SL->getAtmosphere()->GetActivePlanarCloudShaders();
-            for(int i=0; i<handles.size(); ++i)          
-                adapters.push_back( new osgEarth::NativeProgramAdapter(state, handles[i]) );
-        }
-        adapters.apply( state );
-
-        // invoke the user callback if it exists
-        if (_SL->getCallback())
-            _SL->getCallback()->onDrawClouds(_SL->getAtmosphereWrapper(), renderInfo);
-		_SL->getAtmosphere()->CullObjects(false);
-        renderInfo.getState()->disableAllVertexArrays();
-        _SL->getAtmosphere()->DrawObjects( true, true, true,0,false,camera);
-
-        // Restore the GL state to where it was before.
-        state->dirtyAllVertexArrays();
-        state->dirtyAllAttributes();
-
-        state->apply();
-    }
-	}
+	osg::ref_ptr<SilverLiningContext>  sl_context = _contextNode->getOrCreateContext(renderInfo);
+	sl_context->onDrawClouds(renderInfo);
 }
 
 osg::BoundingBox
@@ -93,11 +55,11 @@ CloudsDrawable::computeBound() const
 #endif
 {
     osg::BoundingBox cloudBoundBox;
-    if ( !_SL->ready() )
+    //if ( !_SL->ready() )
         return cloudBoundBox;
     
-    double minX, minY, minZ, maxX, maxY, maxZ;
+    /*double minX, minY, minZ, maxX, maxY, maxZ;
     _SL->getAtmosphere()->GetCloudBounds( minX, minY, minZ, maxX, maxY, maxZ );
     cloudBoundBox.set( osg::Vec3d(minX, minY, minZ), osg::Vec3d(maxX, maxY, maxZ) );
-    return cloudBoundBox;
+    return cloudBoundBox;*/
 }

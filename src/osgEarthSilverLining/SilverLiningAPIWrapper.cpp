@@ -126,7 +126,7 @@ SETGET(CloudLayer, CloudWrapping, bool)
 SETGET(CloudLayer, FadeTowardEdges, bool)
 SETGET(CloudLayer, Alpha, double)
 
-void CloudLayer::SetLayerPosition(double e, double n) { HANDLE->SetLayerPosition(e, n); }
+void CloudLayer::SetLayerPosition(double e, double n) { HANDLE->SetLayerPosition(e, n); HANDLE->SetCurveTowardGround(true);}
 void CloudLayer::GetLayerPosition(double& e, double& n) const { HANDLE->GetLayerPosition(e, n); }
 
 void CloudLayer::SetWind(double windEast, double windSouth) { HANDLE->SetWind(windEast, windSouth); }

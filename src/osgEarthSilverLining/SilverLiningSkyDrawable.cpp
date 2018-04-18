@@ -19,7 +19,7 @@
 #include <SilverLining.h>
 #include "SilverLiningSkyDrawable"
 #include "SilverLiningContext"
-#include "SilverLiningContextNode"
+#include "SilverLiningNode"
 #include <osgEarth/SpatialReference>
 
 #define LC "[SilverLining:SkyDrawable] "
@@ -27,10 +27,8 @@
 using namespace osgEarth::SilverLining;
 
 
-SkyDrawable::SkyDrawable(SilverLiningContextNode* contexNode) :
-_SL(contexNode->getSLContext()),
-_contextNode(contexNode)
-
+SkyDrawable::SkyDrawable(SilverLiningNode* node) :
+_contextNode(node)
 {
     // call this to ensure draw() gets called every frame.
     setSupportsDisplayList( false );
@@ -44,77 +42,69 @@ _contextNode(contexNode)
 void
 SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 {
-    osg::Camera* camera = renderInfo.getCurrentCamera();
-#ifndef SL_USE_CULL_MASK
-	//Check if this is the target camera
-	if (_contextNode->getTargetCamera() == camera) 
-#endif 
+	osg::ref_ptr<SilverLiningContext>  sl_context = _contextNode->getOrCreateContext(renderInfo);
+	sl_context->onDrawSky(renderInfo);
+	/*osg::Camera* camera = renderInfo.getCurrentCamera();
+	renderInfo.getState()->disableAllVertexArrays();
+	sl_context->initialize(renderInfo);
+
+	const osg::State* state = renderInfo.getState();
+
+	osgEarth::NativeProgramAdapterCollection& adapters = _adapters[state->getContextID()]; // thread safe.
+	if (adapters.empty())
 	{
-	if ( camera)
-    {
-        renderInfo.getState()->disableAllVertexArrays();
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, sl_context->getAtmosphere()->GetSkyShader()));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, sl_context->getAtmosphere()->GetBillboardShader()));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, sl_context->getAtmosphere()->GetStarShader()));
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, sl_context->getAtmosphere()->GetPrecipitationShader()));
 
-        _SL->initialize( renderInfo );
+		SL_VECTOR(unsigned) handles = sl_context->getAtmosphere()->GetActivePlanarCloudShaders();
+		for (int i = 0; i < handles.size(); ++i)
+			adapters.push_back(new osgEarth::NativeProgramAdapter(state, handles[i]));
+	}
+	adapters.apply(state);
 
-        const osg::State* state = renderInfo.getState();
 
-        osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ]; // thread safe.
-        if ( adapters.empty() )
-        {
-            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetSkyShader()) );
-            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetBillboardShader()) );
-            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetStarShader()) );
-            adapters.push_back( new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetPrecipitationShader()) );
+	// convey the sky box size (far plane) to SL:
+	double fovy, ar, znear, zfar;
+	sl_context->setCamera(camera);
+	camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
+	sl_context->setSkyBoxSize(zfar < 100000.0 ? zfar : 100000.0);
 
-            SL_VECTOR(unsigned) handles = _SL->getAtmosphere()->GetActivePlanarCloudShaders();
-            for(int i=0; i<handles.size(); ++i)          
-                adapters.push_back( new osgEarth::NativeProgramAdapter(state, handles[i]) );
-        }
-        adapters.apply( state );
+	//JH: moved here to avoid problems with Triton flickering, maybe one frame off... 
+	sl_context->getAtmosphere()->SetProjectionMatrix(renderInfo.getState()->getProjectionMatrix().ptr());
+	sl_context->getAtmosphere()->SetCameraMatrix(renderInfo.getCurrentCamera()->getViewMatrix().ptr());
 
-        
-        // convey the sky box size (far plane) to SL:
-        double fovy, ar, znear, zfar;
-        _SL->setCamera(camera);
-        camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
-        _SL->setSkyBoxSize( zfar < 100000.0 ? zfar : 100000.0 );
+	// invoke the user callback if it exists
+	if (sl_context->getCallback())
+		sl_context->getCallback()->onDrawSky(sl_context->getAtmosphereWrapper(), renderInfo);
 
-        //JH: moved here to avoid problems with Triton flickering, maybe one frame off... 
-        _SL->getAtmosphere()->SetProjectionMatrix(renderInfo.getState()->getProjectionMatrix().ptr());
-        _SL->getAtmosphere()->SetCameraMatrix(renderInfo.getCurrentCamera()->getViewMatrix().ptr());
+	// draw the sky.
+	sl_context->getAtmosphere()->DrawSky(
+		true,
+		sl_context->getSRS()->isGeographic(),
+		sl_context->getSkyBoxSize(),
+		true,
+		false,
+		true,
+		camera);
 
-        // invoke the user callback if it exists
-        if (_SL->getCallback())
-            _SL->getCallback()->onDrawSky(_SL->getAtmosphereWrapper(), renderInfo);
-
-        // draw the sky.
-        _SL->getAtmosphere()->DrawSky(
-            true,
-            _SL->getSRS()->isGeographic(),
-            _SL->getSkyBoxSize(),
-            true,
-            false,
-            true,
-            camera);
-
-        // Dirty the state and the program tracking to prevent GL state conflicts.
-        renderInfo.getState()->dirtyAllVertexArrays();
-        renderInfo.getState()->dirtyAllAttributes();
-        renderInfo.getState()->dirtyAllModes();
+	// Dirty the state and the program tracking to prevent GL state conflicts.
+	renderInfo.getState()->dirtyAllVertexArrays();
+	renderInfo.getState()->dirtyAllAttributes();
+	renderInfo.getState()->dirtyAllModes();
 
 #if 0
 #if OSG_VERSION_GREATER_OR_EQUAL(3,4,0)
-        osg::GLExtensions* api = renderInfo.getState()->get<osg::GLExtensions>();
+	osg::GLExtensions* api = renderInfo.getState()->get<osg::GLExtensions>();
 #else
-        osg::GL2Extensions* api = osg::GL2Extensions::Get(renderInfo.getState()->getContextID(), true);
+	osg::GL2Extensions* api = osg::GL2Extensions::Get(renderInfo.getState()->getContextID(), true);
 #endif
-        api->glUseProgram((GLuint)0);
-        renderInfo.getState()->setLastAppliedProgramObject(0L);
+	api->glUseProgram((GLuint)0);
+	renderInfo.getState()->setLastAppliedProgramObject(0L);
 #endif
 
-        renderInfo.getState()->apply();
-    }
-	}
+	renderInfo.getState()->apply();*/
 }
 
 osg::BoundingBox
@@ -125,7 +115,8 @@ SkyDrawable::computeBound() const
 #endif
 {
     osg::BoundingBox skyBoundBox;
-    if ( !_SL->ready() )
+	return skyBoundBox;
+    /*if (_SL == NULL || !_SL->ready() )
         return skyBoundBox;
 
     ::SilverLining::Atmosphere* atmosphere = _SL->getAtmosphere();
@@ -159,5 +150,5 @@ SkyDrawable::computeBound() const
         atmosphereBox.set( atmMin, atmMax );
         skyBoundBox.expandBy( atmosphereBox );
     }
-    return skyBoundBox;
+    return skyBoundBox;*/
 }

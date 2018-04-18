@@ -21,7 +21,6 @@ SET(LIB_PUBLIC_HEADERS
     SilverLiningCloudsDrawable
     SilverLiningAPIWrapper
     SilverLiningCallback
-	SilverLiningContextNode
 )
 
 ADD_LIBRARY(${LIB_NAME} ${OSGEARTH_USER_DEFINED_DYNAMIC_OR_STATIC}
@@ -32,7 +31,6 @@ ADD_LIBRARY(${LIB_NAME} ${OSGEARTH_USER_DEFINED_DYNAMIC_OR_STATIC}
     SilverLiningSkyDrawable.cpp
     SilverLiningCloudsDrawable.cpp
     SilverLiningAPIWrapper.cpp
-	SilverLiningContextNode.cpp
 )
 
 INCLUDE_DIRECTORIES( 
