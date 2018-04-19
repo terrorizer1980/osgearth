@@ -145,18 +145,17 @@ void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
 
 	// convey the sky box size (far plane) to SL:
 	double fovy, ar, znear, zfar;
-	//setCamera(camera);
 	camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
 	//setSkyBoxSize(zfar < 100000.0 ? zfar : 100000.0);
 	setSkyBoxSize(zfar);
 
 	osg::Vec3d eye, center, up;
-	renderInfo.getCurrentCamera()->getViewMatrixAsLookAt(eye, center, up);
+	camera->getViewMatrixAsLookAt(eye, center, up);
 	updateLocation(eye);
 
 	//JH: moved here to avoid problems with Triton flickering, maybe one frame off... 
 	getAtmosphere()->SetProjectionMatrix(renderInfo.getState()->getProjectionMatrix().ptr());
-	getAtmosphere()->SetCameraMatrix(renderInfo.getCurrentCamera()->getViewMatrix().ptr());
+	getAtmosphere()->SetCameraMatrix(camera->getViewMatrix().ptr());
 
 	// invoke the user callback if it exists
 	if (_callback)
@@ -199,9 +198,8 @@ void SilverLiningContext::onDrawClouds(osg::RenderInfo& renderInfo)
 	adapters.apply(state);
 
 	renderInfo.getState()->disableAllVertexArrays();
-
 	
-	getAtmosphere()->CullObjects(true);
+	getAtmosphere()->CullObjects();
 
 	// invoke the user callback if it exists
 	if (getCallback())
