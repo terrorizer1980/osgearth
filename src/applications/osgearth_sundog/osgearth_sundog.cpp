@@ -104,7 +104,7 @@ public:
 #if 1// DISABLE_SILVERLINING
 		_silverLiningNode = _createSilverLining(mapNode);
 #endif
-#if 1// DISABLE_TRITON
+#if 0// DISABLE_TRITON
 		_tritonNode = _createTriton(mapNode);
 
 		if (_silverLiningNode)
@@ -468,7 +468,9 @@ main(int argc, char** argv)
 	osg::ArgumentParser arguments(&argc, argv);
 
 	osgViewer::CompositeViewer viewer(arguments);
-	viewer.setThreadingModel(osgViewer::CompositeViewer::SingleThreaded);
+	//viewer.setThreadingModel(osgViewer::CompositeViewer::SingleThreaded);
+	//viewer.setThreadingModel(osgViewer::CompositeViewer::CullDrawThreadPerContext);
+	viewer.setThreadingModel(osgViewer::CompositeViewer::CullThreadPerCameraDrawThreadPerContext);
 
 	// query the screen size.
 	osg::GraphicsContext::ScreenIdentifier si;
@@ -479,36 +481,29 @@ main(int argc, char** argv)
 	wsi->getScreenResolution(si, width, height);
 	unsigned b = 50;
 
+	//Setup main view
 	osgViewer::View* mainView = new osgViewer::View();
 	mainView->getCamera()->setNearFarRatio(0.00002);
 	EarthManipulator* em = new EarthManipulator();
 	em->getSettings()->setMinMaxPitch(-90, 0);
 	mainView->setCameraManipulator(em);
-	//mainView->setUpViewInWindow( 50, 50, 600, 600 );
-	//mainView->setUpViewInWindow( b, b, (width/2)-b*2, (height-b*4) );
-	mainView->setUpViewInWindow(b, b, (width)-b * 2, (height - b * 4));
-
-	//mainView->getCamera()->getGraphicsContext()->getState()->setUseModelViewAndProjectionUniforms(true);
-	//mainView->getCamera()->getGraphicsContext()->getState()->setUseVertexAttributeAliasing(true);
-
+	mainView->setUpViewInWindow( b, b, (width/2)-b*2, (height-b*4) );
+	//mainView->setUpViewInWindow(b, b, (width)-b * 2, (height - b * 4));
 	viewer.addView(mainView);
 
-	osgViewer::View* overlayView = new osgViewer::View();
-	overlayView->getCamera()->setNearFarRatio(0.00002);
-	overlayView->setCameraManipulator(new EarthManipulator());
-
-
-	//overlayView->setUpViewInWindow( 700, 50, 600, 600 );
-	//overlayView->setUpViewInWindow( (width/2), b, (width/2)-b*2, (height-b*4) );
-	overlayView->getCamera()->setViewport((width / 2), b, (width / 2) - b * 2, (height - b * 4));
-	overlayView->addEventHandler(new osgGA::StateSetManipulator(overlayView->getCamera()->getOrCreateStateSet()));
-	overlayView->getCamera()->setGraphicsContext(mainView->getCamera()->getGraphicsContext());
-
-	//overlayView->getCamera()->getGraphicsContext()->getState()->setUseModelViewAndProjectionUniforms(true);
-	//overlayView->getCamera()->getGraphicsContext()->getState()->setUseVertexAttributeAliasing(true);
-
-	viewer.addView(overlayView);
-
+	//setup second view
+	osgViewer::View* secondView = new osgViewer::View();
+	secondView->getCamera()->setNearFarRatio(0.00002);
+	secondView->setCameraManipulator(new EarthManipulator());
+#if 1
+	secondView->setUpViewInWindow((width / 2), b, (width / 2) - b * 2, (height - b * 4));
+#else
+	//
+	secondView->getCamera()->setViewport((width / 2), b, (width / 2) - b * 2, (height - b * 4));
+	secondView->addEventHandler(new osgGA::StateSetManipulator(secondView->getCamera()->getOrCreateStateSet()));
+	secondView->getCamera()->setGraphicsContext(mainView->getCamera()->getGraphicsContext());
+#endif
+	viewer.addView(secondView);
 	VBox* canvas = new VBox();
 	canvas->setBackColor(0, 0, 0, 0.5);
 
@@ -516,9 +511,7 @@ main(int argc, char** argv)
 
 	if (node)
 	{
-
 		MapNode* mapNode = MapNode::findMapNode(node);
-
 		SkyAndOceanIntegration* environment = new SkyAndOceanIntegration(mapNode);
 		environment->createUI(canvas);
 
@@ -530,21 +523,19 @@ main(int argc, char** argv)
 		// use the topmost node.
 		mainView->setSceneData(osgEarth::findTopOfGraph(node));
 
+
 		osg::Group* group = new osg::Group();
 
 		if (skyNode)
 		{
 			group->addChild(skyNode);
-			skyNode->attach(overlayView, 0);
+			skyNode->attach(secondView, 0);
 		}
 		else
 		{
 			group->addChild(MapNode::get(node));
 		}
-		overlayView->setSceneData(group);
-
-		// setupOverlayView( overlayView, group, MapNode::get(node) );
-
+		secondView->setSceneData(group);
 		return viewer.run();
 	}
 	else return -1;
