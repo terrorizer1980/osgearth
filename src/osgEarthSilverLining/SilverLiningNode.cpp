@@ -124,8 +124,7 @@ SilverLiningNode::onSetMinimumAmbient()
 osg::ref_ptr<SilverLiningContext> SilverLiningNode::getOrCreateContext(osg::RenderInfo& renderInfo)
 {
 	Threading::ScopedMutexLock excl(_contextMapMutex);
-	//osg::Camera* key = renderInfo.getCurrentCamera();
-	int key = renderInfo.getContextID();
+	ContextKey key = getKey(renderInfo);
 	ContextMap::iterator iter = _contextMap.find(key);
 	if (iter != _contextMap.end())
 	{
@@ -152,7 +151,12 @@ SilverLiningNode::traverse(osg::NodeVisitor& nv)
 		if (camera)
 		{
 			//osg::Camera* key = camera;
-			int key = camera->getGraphicsContext()->getState()->getContextID();
+#ifdef  SL_CONTEXT_PER_CAMERA
+			ContextKey key = camera;
+#else
+			ContextKey key = camera->getGraphicsContext()->getState()->getContextID();
+#endif
+
 			ContextMap::const_iterator iter = _contextMap.find(key);
 			if (iter != _contextMap.end())
 			{

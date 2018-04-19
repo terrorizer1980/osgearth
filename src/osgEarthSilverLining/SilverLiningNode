@@ -27,7 +27,7 @@
 #include <osgEarth/PhongLightingEffect>
 #include <osg/Light>
 #include <osg/LightSource>
-
+#define SL_CONTEXT_PER_CAMERA //use new SilverLining context for each camera
 namespace osgEarth { namespace SilverLining
 {
     class SilverLiningContext;
@@ -63,9 +63,15 @@ namespace osgEarth { namespace SilverLining
 		
     protected:
         virtual ~SilverLiningNode();
-
-		//typedef std::map < osg::Camera*, osg::ref_ptr<SilverLiningContext> > ContextMap;
+#ifdef SL_CONTEXT_PER_CAMERA
+		typedef std::map < osg::Camera*, osg::ref_ptr<SilverLiningContext> > ContextMap;
+		typedef osg::Camera* ContextKey;
+		ContextKey getKey(osg::RenderInfo &renderinfo) { return renderinfo.getCurrentCamera(); }
+#else
 		typedef std::map < int, osg::ref_ptr<SilverLiningContext> > ContextMap;
+		typedef int ContextKey;
+		ContextKey getKey(osg::RenderInfo &renderinfo) { return renderinfo.getContextID(); }
+#endif
 		ContextMap _contextMap;
         osg::ref_ptr<osg::LightSource> _lightSource;
         osg::ref_ptr<osg::Light> _light;
