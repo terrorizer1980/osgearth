@@ -171,6 +171,14 @@ void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
 		true,
 		camera);
 
+	getAtmosphere()->CullObjects();
+
+	// invoke the user callback if it exists
+	if (getCallback())
+		getCallback()->onDrawClouds(getAtmosphereWrapper(), renderInfo);
+
+	getAtmosphere()->DrawObjects(true, true, true, 0, false, renderInfo.getCurrentCamera());
+
 	// Dirty the state and the program tracking to prevent GL state conflicts.
 	renderInfo.getState()->dirtyAllVertexArrays();
 	renderInfo.getState()->dirtyAllAttributes();
@@ -191,6 +199,7 @@ void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
 
 void SilverLiningContext::onDrawClouds(osg::RenderInfo& renderInfo)
 {
+	return;
 	Threading::ScopedMutexLock excl(_drawMutex);
 	osg::State* state = renderInfo.getState();
 	// adapt the SL shaders so they can accept OSG uniforms:
@@ -219,8 +228,6 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 {
     if ( !_initAttempted && !_initFailed )
     {
-        // lock/double-check:
-        Threading::ScopedMutexLock excl(_initMutex);
         if ( !_initAttempted && !_initFailed )
         {
             _initAttempted = true;

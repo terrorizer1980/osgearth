@@ -43,27 +43,17 @@ namespace osgEarth { namespace SilverLining
     class SilverLiningContext : public osg::Referenced
     {
     public:
-        //SilverLiningContext(const SilverLiningOptions& options);
 		SilverLiningContext(const SilverLiningOptions& options,
 			const osgEarth::SpatialReference* srs,
 			Callback* cb);
-
-        /** Sets the light source that will represent the sun */
-        //void setLight(osg::Light* light);
-
-        /** Sets the spatial reference system of the map */
-        //void setSRS(const SpatialReference* srs);
 
         /** Sets the minimum ambient lighting value */
         void setMinimumAmbient(const osg::Vec4f& value);
 
         /** Installs a user callback for SL initialization */
-        //void setCallback(Callback*);
         Callback* getCallback() const { return _callback.get(); }
-
 		void onDrawSky(osg::RenderInfo& renderInfo);
 		void onDrawClouds(osg::RenderInfo& renderInfo);
-
     public: // accessors
 
         bool ready() const { return _initAttempted && !_initFailed; }
@@ -75,11 +65,7 @@ namespace osgEarth { namespace SilverLining
         /** Spatial reference of the map */
         const SpatialReference* getSRS() const { return _srs.get(); }
 		void updateLocation(const osg::Vec3d &camera_pos);
-
         void updateLight(osg::Light *light);
-
-      
-
     protected:
 
         virtual ~SilverLiningContext();
@@ -96,7 +82,6 @@ namespace osgEarth { namespace SilverLining
         osg::ref_ptr<const osgEarth::SpatialReference> _srs;
         bool                       _initAttempted;
         bool                       _initFailed;
-        osgEarth::Threading::Mutex _initMutex;
 
         double _maxAmbientLightingAlt;
         osg::Vec4f                     _minAmbient;

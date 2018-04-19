@@ -25,6 +25,7 @@
 
 #include <osg/Light>
 #include <osg/LightSource>
+#include <osg/Depth>
 
 #include <osgEarth/CullingUtils>
 #include <osgEarth/Lighting>
@@ -67,7 +68,10 @@ _callback(callback)
 
 	// Draws the sky before everything else
 	_skyDrawable = new SkyDrawable(this);
-	_skyDrawable->getOrCreateStateSet()->setRenderBinDetails(-99, "RenderBin");
+	//_skyDrawable->getOrCreateStateSet()->setRenderBinDetails(-99, "RenderBin");
+	_skyDrawable->getOrCreateStateSet()->setRenderBinDetails(99, "RenderBin");
+	_skyDrawable->getOrCreateStateSet()->setAttributeAndModes(new osg::Depth(osg::Depth::LEQUAL, 0.0, 1.0, false));
+	//_skyDrawable->getOrCreateStateSet()->setRenderBinDetails(-99, "RenderBin");
 	_geode->addDrawable(_skyDrawable.get());
 
 	// Clouds draw after everything else
