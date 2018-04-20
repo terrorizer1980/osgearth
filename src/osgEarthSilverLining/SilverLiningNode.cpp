@@ -68,15 +68,22 @@ _callback(callback)
 
 	// Draws the sky before everything else
 	_skyDrawable = new SkyDrawable(this);
-	//_skyDrawable->getOrCreateStateSet()->setRenderBinDetails(-99, "RenderBin");
+#ifdef SL_MT_DRAW //Multithreading...draw everything in onSkyDraw
 	_skyDrawable->getOrCreateStateSet()->setRenderBinDetails(99, "RenderBin");
 	_skyDrawable->getOrCreateStateSet()->setAttributeAndModes(new osg::Depth(osg::Depth::LEQUAL, 0.0, 1.0, false));
-	//_skyDrawable->getOrCreateStateSet()->setRenderBinDetails(-99, "RenderBin");
+#else	
+	_skyDrawable->getOrCreateStateSet()->setRenderBinDetails(-99, "RenderBin");
+#endif
+
 	_geode->addDrawable(_skyDrawable.get());
 
 	// Clouds draw after everything else
 	_cloudsDrawable = new CloudsDrawable(this);
 	_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails(99, "DepthSortedBin");
+
+	//_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails(99, "RenderBin");
+	//_cloudsDrawable->getOrCreateStateSet()->setAttributeAndModes(new osg::Depth(osg::Depth::LEQUAL, 0.0, 1.0, false));
+	
 	 _geode->addDrawable(_cloudsDrawable.get());
 
 

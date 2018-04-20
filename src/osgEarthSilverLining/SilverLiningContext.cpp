@@ -132,13 +132,14 @@ static osgEarth::Threading::Mutex _drawMutex;
 void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
 {
 	Threading::ScopedMutexLock excl(_drawMutex);
+
 	renderInfo.getState()->disableAllVertexArrays();
-	
+
+	const osg::State* state = renderInfo.getState();
+
 	initialize(renderInfo);
 
 	osg::Camera* camera = renderInfo.getCurrentCamera();
-
-	const osg::State* state = renderInfo.getState();
 
 	osgEarth::NativeProgramAdapterCollection& adapters = getOrCreateAdapters(renderInfo);
 	adapters.apply(state);
@@ -171,13 +172,13 @@ void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
 		true,
 		camera);
 
+#ifdef SL_MT_DRAW
+	//need to call we use multiple views
 	getAtmosphere()->CullObjects();
+	getAtmosphere()->DrawObjects(true, true, true, 0, false, camera);
+#endif
 
-	// invoke the user callback if it exists
-	if (getCallback())
-		getCallback()->onDrawClouds(getAtmosphereWrapper(), renderInfo);
 
-	getAtmosphere()->DrawObjects(true, true, true, 0, false, renderInfo.getCurrentCamera());
 
 	// Dirty the state and the program tracking to prevent GL state conflicts.
 	renderInfo.getState()->dirtyAllVertexArrays();
@@ -195,11 +196,17 @@ void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
 #endif
 
 	renderInfo.getState()->apply();
+#ifdef SL_MT_DRAW
+	//moved this here....we need to apply state if we want clouds in environment map
+	if (getCallback())
+		getCallback()->onDrawClouds(getAtmosphereWrapper(), renderInfo);
+#endif
 }
+	
 
 void SilverLiningContext::onDrawClouds(osg::RenderInfo& renderInfo)
 {
-	return;
+#ifndef SL_MT_DRAW
 	Threading::ScopedMutexLock excl(_drawMutex);
 	osg::State* state = renderInfo.getState();
 	// adapt the SL shaders so they can accept OSG uniforms:
@@ -219,8 +226,8 @@ void SilverLiningContext::onDrawClouds(osg::RenderInfo& renderInfo)
 	// Restore the GL state to where it was before.
 	state->dirtyAllVertexArrays();
 	state->dirtyAllAttributes();
-
 	state->apply();
+#endif
 }
 
 void
@@ -261,10 +268,11 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 
                 // Defaults for a projected terrain. ECEF terrain vectors are set
                 // in updateLocation().
-//#define TEST_FIX_LOCATION
+#define TEST_FIX_LOCATION
 #ifdef TEST_FIX_LOCATION       
 				osg::Vec3d worldpos;
-				osg::Vec3d fixedLocation(-122.3345, 37.558147,0);
+				//osg::Vec3d fixedLocation(-122.3345, 37.558147,0);
+				osg::Vec3d fixedLocation(18.4867, 57.4684, 0);
 				_srs->transformToWorld(fixedLocation, worldpos);
 				osg::Vec3d up = worldpos;
 				up.normalize();

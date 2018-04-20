@@ -104,7 +104,7 @@ public:
 #if 1// DISABLE_SILVERLINING
 		_silverLiningNode = _createSilverLining(mapNode);
 #endif
-#if 0// DISABLE_TRITON
+#if 1// DISABLE_TRITON
 		_tritonNode = _createTriton(mapNode);
 
 		if (_silverLiningNode)
@@ -220,9 +220,10 @@ public:
 			getSkyNode()->setMinimumAmbient(osg::Vec4(value, value, value, 1));
 			//_minimumAmbient.clear();
 		}
+	
 		//if(!cubeMapGenerationInProgress() && _updateEnvMapOnDraw.get())
 		//	requestEnvMapUpdate();
-		updateEnvMap(atmosphere, renderInfo);
+		
 	}
 
 	void onDrawClouds(osgEarth::SilverLining::Atmosphere& atmosphere, osg::RenderInfo& renderInfo)
@@ -237,6 +238,8 @@ public:
 			_drawCloudsInReflectionOption.clear();
 			requestEnvMapUpdate();
 		}
+		updateEnvMap(atmosphere, renderInfo);
+		
 	}
 
 	void onDrawOcean(osgEarth::Triton::Environment& env, osgEarth::Triton::Ocean& ocean, osg::RenderInfo& renderInfo)
@@ -468,9 +471,9 @@ main(int argc, char** argv)
 	osg::ArgumentParser arguments(&argc, argv);
 
 	osgViewer::CompositeViewer viewer(arguments);
-	//viewer.setThreadingModel(osgViewer::CompositeViewer::SingleThreaded);
+	viewer.setThreadingModel(osgViewer::CompositeViewer::SingleThreaded);
 	//viewer.setThreadingModel(osgViewer::CompositeViewer::CullDrawThreadPerContext);
-	viewer.setThreadingModel(osgViewer::CompositeViewer::CullThreadPerCameraDrawThreadPerContext);
+	//viewer.setThreadingModel(osgViewer::CompositeViewer::CullThreadPerCameraDrawThreadPerContext);
 
 	// query the screen size.
 	osg::GraphicsContext::ScreenIdentifier si;
@@ -491,19 +494,7 @@ main(int argc, char** argv)
 	//mainView->setUpViewInWindow(b, b, (width)-b * 2, (height - b * 4));
 	viewer.addView(mainView);
 
-	//setup second view
-	osgViewer::View* secondView = new osgViewer::View();
-	secondView->getCamera()->setNearFarRatio(0.00002);
-	secondView->setCameraManipulator(new EarthManipulator());
-#if 1
-	secondView->setUpViewInWindow((width / 2), b, (width / 2) - b * 2, (height - b * 4));
-#else
-	//
-	secondView->getCamera()->setViewport((width / 2), b, (width / 2) - b * 2, (height - b * 4));
-	secondView->addEventHandler(new osgGA::StateSetManipulator(secondView->getCamera()->getOrCreateStateSet()));
-	secondView->getCamera()->setGraphicsContext(mainView->getCamera()->getGraphicsContext());
-#endif
-	viewer.addView(secondView);
+
 	VBox* canvas = new VBox();
 	canvas->setBackColor(0, 0, 0, 0.5);
 
@@ -523,7 +514,21 @@ main(int argc, char** argv)
 		// use the topmost node.
 		mainView->setSceneData(osgEarth::findTopOfGraph(node));
 
-
+#if 1 //Second view
+		//setup second view
+		osgViewer::View* secondView = new osgViewer::View();
+		secondView->getCamera()->setNearFarRatio(0.00002);
+		secondView->setCameraManipulator(new EarthManipulator());
+#if 0
+		secondView->setUpViewInWindow((width / 2), b, (width / 2) - b * 2, (height - b * 4));
+#else
+		//
+		secondView->getCamera()->setViewport((width / 4), b, (width / 4), height / 2);
+		secondView->addEventHandler(new osgGA::StateSetManipulator(secondView->getCamera()->getOrCreateStateSet()));
+		secondView->getCamera()->setGraphicsContext(mainView->getCamera()->getGraphicsContext());
+#endif
+		viewer.addView(secondView);
+		
 		osg::Group* group = new osg::Group();
 
 		if (skyNode)
@@ -536,6 +541,7 @@ main(int argc, char** argv)
 			group->addChild(MapNode::get(node));
 		}
 		secondView->setSceneData(group);
+#endif
 		return viewer.run();
 	}
 	else return -1;
