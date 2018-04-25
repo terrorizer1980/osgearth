@@ -80,12 +80,8 @@ _callback(callback)
 	// Clouds draw after everything else
 	_cloudsDrawable = new CloudsDrawable(this);
 	_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails(99, "DepthSortedBin");
-
-	//_cloudsDrawable->getOrCreateStateSet()->setRenderBinDetails(99, "RenderBin");
 	//_cloudsDrawable->getOrCreateStateSet()->setAttributeAndModes(new osg::Depth(osg::Depth::LEQUAL, 0.0, 1.0, false));
-	
 	 _geode->addDrawable(_cloudsDrawable.get());
-
 
     // need update traversal.
     ADJUST_UPDATE_TRAV_COUNT(this, +1);
@@ -113,6 +109,7 @@ SilverLiningNode::onSetDateTime()
 	::SilverLining::LocalTime utcTime;
 	utcTime.SetFromEpochSeconds(getDateTime().asTimeStamp());
 
+	Threading::ScopedMutexLock excl(_contextMapMutex);
 	ContextMap::iterator iter = _contextMap.begin();
 	while(iter != _contextMap.end())
 	{
@@ -124,6 +121,7 @@ SilverLiningNode::onSetDateTime()
 void
 SilverLiningNode::onSetMinimumAmbient()
 {
+	Threading::ScopedMutexLock excl(_contextMapMutex);
 	ContextMap::iterator iter = _contextMap.begin();
 	while(iter != _contextMap.end())
 	{
@@ -143,8 +141,28 @@ osg::ref_ptr<SilverLiningContext> SilverLiningNode::getOrCreateContext(osg::Rend
 	}
 	//Create context
 	osg::ref_ptr<SilverLiningContext>  context = new SilverLiningContext(_options,  _mapSRS, _callback);
-	//context->setMinimumAmbient(getMinimumAmbient());
+	if (context->initialize(renderInfo))
+	{
+		//set min ambient
+		context->setMinimumAmbient(getMinimumAmbient());
+		//Set current time
+		::SilverLining::LocalTime utcTime;
+		utcTime.SetFromEpochSeconds(getDateTime().asTimeStamp());
+		context->getAtmosphere()->GetConditions()->SetTime(utcTime);
+	}
 	_contextMap[key] = context;
+	return context;
+}
+
+SilverLiningContext* SilverLiningNode::findContext(ContextKey key)
+{
+	Threading::ScopedMutexLock excl(_contextMapMutex);
+	ContextMap::const_iterator iter = _contextMap.find(key);
+	SilverLiningContext* context = NULL;
+	if (iter != _contextMap.end())
+	{
+		context = iter->second;
+	}
 	return context;
 }
 
@@ -152,8 +170,6 @@ osg::ref_ptr<SilverLiningContext> SilverLiningNode::getOrCreateContext(osg::Rend
 void
 SilverLiningNode::traverse(osg::NodeVisitor& nv)
 {
-    static Threading::Mutex s_mutex;
-
     if ( nv.getVisitorType() == nv.CULL_VISITOR )
     {
         osgUtil::CullVisitor* cv = Culling::asCullVisitor(nv);
@@ -161,19 +177,15 @@ SilverLiningNode::traverse(osg::NodeVisitor& nv)
 		osg::Camera* camera = cv->getCurrentCamera();
 		if (camera)
 		{
-			//osg::Camera* key = camera;
-#ifdef  SL_CONTEXT_PER_CAMERA
-			ContextKey key = camera;
-#else
-			ContextKey key = camera->getGraphicsContext()->getState()->getContextID();
-#endif
-
-			ContextMap::const_iterator iter = _contextMap.find(key);
-			if (iter != _contextMap.end())
+			//get matching SL-context if possible.
+			//Context's are created on first draw call so
+			//we don't expect to find a context in the first frame.
+			ContextKey key = cameraToKey(camera);
+			SilverLiningContext* context = findContext(key);
+			if(context)
 			{
-				SilverLiningContext* context = iter->second;
-				// TODO: make this multi-camera safe
 				osgUtil::CullVisitor* cv = Culling::asCullVisitor(nv);
+				//reflect SilverLining light conditions to our global scene lighting.
 				context->updateLight(_light);
 			}
 		}

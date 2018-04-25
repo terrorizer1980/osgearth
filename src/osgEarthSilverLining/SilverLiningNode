@@ -67,11 +67,14 @@ namespace osgEarth { namespace SilverLining
 		typedef std::map < osg::Camera*, osg::ref_ptr<SilverLiningContext> > ContextMap;
 		typedef osg::Camera* ContextKey;
 		ContextKey getKey(osg::RenderInfo &renderinfo) { return renderinfo.getCurrentCamera(); }
+		ContextKey cameraToKey(osg::Camera* camera) { return camera; }
 #else
 		typedef std::map < int, osg::ref_ptr<SilverLiningContext> > ContextMap;
 		typedef int ContextKey;
 		ContextKey getKey(osg::RenderInfo &renderinfo) { return renderinfo.getContextID(); }
+		ContextKey cameraToKey(osg::Camera* camera) { return camera->getGraphicsContext()->getState()->getContextID(); }
 #endif
+		SilverLiningContext* findContext(ContextKey key);
 		ContextMap _contextMap;
         osg::ref_ptr<osg::LightSource> _lightSource;
         osg::ref_ptr<osg::Light> _light;

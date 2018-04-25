@@ -75,8 +75,7 @@ SilverLiningContext::SilverLiningContext(const SilverLiningOptions& options,
 _options              ( options ),
 _srs                  ( srs ),
 _callback             ( cb ),
-_initAttempted        ( false ),
-_initFailed           ( false ),
+_initialized          ( false ),
 _maxAmbientLightingAlt( -1.0 ),
 _atmosphere           ( 0L ),
 _minAmbient           ( 0,0,0,0 )
@@ -131,13 +130,16 @@ static osgEarth::Threading::Mutex _drawMutex;
 
 void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
 {
+	if (!ready())
+		return;
+
 	Threading::ScopedMutexLock excl(_drawMutex);
 
 	renderInfo.getState()->disableAllVertexArrays();
 
 	const osg::State* state = renderInfo.getState();
 
-	initialize(renderInfo);
+	
 
 	osg::Camera* camera = renderInfo.getCurrentCamera();
 
@@ -206,6 +208,8 @@ void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
 
 void SilverLiningContext::onDrawClouds(osg::RenderInfo& renderInfo)
 {
+	if (!ready())
+		return;
 #ifndef SL_MT_DRAW
 	Threading::ScopedMutexLock excl(_drawMutex);
 	osg::State* state = renderInfo.getState();
@@ -230,91 +234,83 @@ void SilverLiningContext::onDrawClouds(osg::RenderInfo& renderInfo)
 #endif
 }
 
-void
+bool
 SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 {
-    if ( !_initAttempted && !_initFailed )
-    {
-        if ( !_initAttempted && !_initFailed )
-        {
-            _initAttempted = true;
+	 // constant random seed ensures consistent clouds across windows
+	  // TODO: replace this with something else since this is global! -gw
+	  //::srand(1234);
 
-			std::cout << "CONTEXT ID:" << renderInfo.getContextID() << "\n";
-            // constant random seed ensures consistent clouds across windows
-            // TODO: replace this with something else since this is global! -gw
-            //::srand(1234);
+	std::string resourcePath = _options.resourcePath().get();
+	if (resourcePath.empty() && ::getenv("SILVERLINING_PATH"))
+	{
+		resourcePath = osgDB::concatPaths(::getenv("SILVERLINING_PATH"), "Resources");
+	}
 
-            std::string resourcePath = _options.resourcePath().get();
-            if (resourcePath.empty() && ::getenv("SILVERLINING_PATH"))
-            {
-                resourcePath = osgDB::concatPaths(::getenv("SILVERLINING_PATH"), "Resources");
-            }
+	int result = _atmosphere->Initialize(
+		::SilverLining::Atmosphere::OPENGL,
+		resourcePath.c_str(),
+		true,
+		0);
+	_atmosphere->GetRandomNumberGenerator()->Seed(1234);
 
-            int result = _atmosphere->Initialize(
-                ::SilverLining::Atmosphere::OPENGL,
-                resourcePath.c_str(),
-                true,
-                0 );
-			_atmosphere->GetRandomNumberGenerator()->Seed(1234);
+	if (result != ::SilverLining::Atmosphere::E_NOERROR)
+	{
+		OE_WARN << LC << "SilverLining failed to initialize: " << result << std::endl;
+		return false;
+	}
+	else
+	{
+		OE_INFO << LC << "SilverLining initialized OK!" << std::endl;
 
-            if ( result != ::SilverLining::Atmosphere::E_NOERROR )
-            {
-                _initFailed = true;
-                OE_WARN << LC << "SilverLining failed to initialize: " << result << std::endl;
-            }
-            else
-            {
-                OE_INFO << LC << "SilverLining initialized OK!" << std::endl;
-
-                // Defaults for a projected terrain. ECEF terrain vectors are set
-                // in updateLocation().
+		// Defaults for a projected terrain. ECEF terrain vectors are set
+		// in updateLocation().
 #define TEST_FIX_LOCATION
 #ifdef TEST_FIX_LOCATION       
-				osg::Vec3d worldpos;
-				//osg::Vec3d fixedLocation(-122.3345, 37.558147,0);
-				osg::Vec3d fixedLocation(18.4867, 57.4684, 0);
-				_srs->transformToWorld(fixedLocation, worldpos);
-				osg::Vec3d up = worldpos;
-				up.normalize();
-				osg::Vec3d north = osg::Vec3d(0, 1, 0);
-				osg::Vec3d east = north ^ up;
+		osg::Vec3d worldpos;
+		//osg::Vec3d fixedLocation(-122.3345, 37.558147,0);
+		osg::Vec3d fixedLocation(18.4867, 57.4684, 0);
+		_srs->transformToWorld(fixedLocation, worldpos);
+		osg::Vec3d up = worldpos;
+		up.normalize();
+		osg::Vec3d north = osg::Vec3d(0, 1, 0);
+		osg::Vec3d east = north ^ up;
 
-				// Check for edge case of north or south pole
-				if (east.length2() == 0)
-				{
-					east = osg::Vec3d(1, 0, 0);
-				}
-				east.normalize();
+		// Check for edge case of north or south pole
+		if (east.length2() == 0)
+		{
+			east = osg::Vec3d(1, 0, 0);
+		}
+		east.normalize();
 
-				_atmosphere->SetUpVector(up.x(), up.y(), up.z());
-				_atmosphere->SetRightVector(east.x(), east.y(), east.z());
+		_atmosphere->SetUpVector(up.x(), up.y(), up.z());
+		_atmosphere->SetRightVector(east.x(), east.y(), east.z());
 #else
-				_atmosphere->SetUpVector(0.0, 0.0, 1.0);
-				_atmosphere->SetRightVector(1.0, 0.0, 0.0);
+		_atmosphere->SetUpVector(0.0, 0.0, 1.0);
+		_atmosphere->SetRightVector(1.0, 0.0, 0.0);
 
 #endif
-
-                // Configure the timer used for animations
-                _atmosphere->GetConditions()->SetMillisecondTimer(_msTimer);
+		// Configure the timer used for animations
+		_atmosphere->GetConditions()->SetMillisecondTimer(_msTimer);
 
 #if 0 // todo: review this
-                _maxAmbientLightingAlt =
-                    _atmosphere->GetConfigOptionDouble("atmosphere-height");
+		_maxAmbientLightingAlt =
+			_atmosphere->GetConfigOptionDouble("atmosphere-height");
 #endif
-                if ( _options.drawClouds() == true )
-                {
-                    OE_INFO << LC << "Initializing clouds\n";
-                    setupClouds();
-                }
+		if (_options.drawClouds() == true)
+		{
+			OE_INFO << LC << "Initializing clouds\n";
+			setupClouds();
+		}
 
-                // user callback for initialization
-                if (_callback.valid())
-                {
-                    _callback->onInitialize( *_atmosphereWrapper );
-                }
-            }
-        }
-    }
+		// user callback for initialization
+		if (_callback.valid())
+		{
+			_callback->onInitialize(*_atmosphereWrapper);
+		}
+		_initialized = true;
+	}
+	return _initialized;
 }
 
 void
