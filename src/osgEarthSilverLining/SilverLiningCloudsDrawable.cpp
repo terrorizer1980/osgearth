@@ -43,8 +43,8 @@ _contextNode(node)
 void
 CloudsDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 {
-	osg::ref_ptr<SilverLiningContext>  sl_context = _contextNode->getOrCreateContext(renderInfo);
-	sl_context->onDrawClouds(renderInfo);
+    osg::ref_ptr<SilverLiningContext>  sl_context = _contextNode->getOrCreateContext(renderInfo);
+    sl_context->onDrawClouds(renderInfo);
 }
 
 osg::BoundingBox

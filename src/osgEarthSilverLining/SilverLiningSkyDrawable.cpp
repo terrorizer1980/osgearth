@@ -42,8 +42,8 @@ _contextNode(node)
 void
 SkyDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 {
-	osg::ref_ptr<SilverLiningContext>  sl_context = _contextNode->getOrCreateContext(renderInfo);
-	sl_context->onDrawSky(renderInfo);
+    osg::ref_ptr<SilverLiningContext>  sl_context = _contextNode->getOrCreateContext(renderInfo);
+    sl_context->onDrawSky(renderInfo);
 }
 
 osg::BoundingBox
@@ -54,7 +54,7 @@ SkyDrawable::computeBound() const
 #endif
 {
     osg::BoundingBox skyBoundBox;
-	return skyBoundBox;
+    return skyBoundBox;
     /*if (_SL == NULL || !_SL->ready() )
         return skyBoundBox;
 

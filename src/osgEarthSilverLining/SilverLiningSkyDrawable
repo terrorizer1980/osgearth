@@ -24,7 +24,7 @@
 namespace osgEarth { namespace SilverLining
 {
     class SilverLiningContext;
-	class SilverLiningNode;
+    class SilverLiningNode;
     /**
      * Custom drawable for rendering the SilverLining effects
      */
@@ -50,7 +50,7 @@ namespace osgEarth { namespace SilverLining
         virtual ~SkyDrawable() { }
 
         SilverLiningNode* _contextNode;
-		mutable osg::buffered_object<osgEarth::NativeProgramAdapterCollection> _adapters;
+        mutable osg::buffered_object<osgEarth::NativeProgramAdapterCollection> _adapters;
         SkyDrawable(const SkyDrawable& copy, const osg::CopyOp& op=osg::CopyOp::SHALLOW_COPY) { }
     };
 

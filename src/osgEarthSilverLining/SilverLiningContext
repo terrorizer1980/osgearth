@@ -43,17 +43,17 @@ namespace osgEarth { namespace SilverLining
     class SilverLiningContext : public osg::Referenced
     {
     public:
-		SilverLiningContext(const SilverLiningOptions& options,
-			const osgEarth::SpatialReference* srs,
-			Callback* cb);
+        SilverLiningContext(const SilverLiningOptions& options,
+            const osgEarth::SpatialReference* srs,
+            Callback* cb);
 
         /** Sets the minimum ambient lighting value */
         void setMinimumAmbient(const osg::Vec4f& value);
 
         /** Installs a user callback for SL initialization */
         Callback* getCallback() const { return _callback.get(); }
-		void onDrawSky(osg::RenderInfo& renderInfo);
-		void onDrawClouds(osg::RenderInfo& renderInfo);
+        void onDrawSky(osg::RenderInfo& renderInfo);
+        void onDrawClouds(osg::RenderInfo& renderInfo);
     public: // accessors
 
         bool ready() const { return _initialized; }
@@ -64,31 +64,31 @@ namespace osgEarth { namespace SilverLining
 
         /** Spatial reference of the map */
         const SpatialReference* getSRS() const { return _srs.get(); }
-		void updateLocation(const osg::Vec3d &camera_pos);
+        void updateLocation(const osg::Vec3d &camera_pos);
         void updateLight(osg::Light *light);
-		bool initialize(osg::RenderInfo& renderInfo);
+        bool initialize(osg::RenderInfo& renderInfo);
     protected:
 
         virtual ~SilverLiningContext();
 
     private:
-		osgEarth::NativeProgramAdapterCollection& getOrCreateAdapters(osg::RenderInfo& renderInfo);
+        osgEarth::NativeProgramAdapterCollection& getOrCreateAdapters(osg::RenderInfo& renderInfo);
         void setupClouds();
-		void setSkyBoxSize(double size) { _skyBoxSize = size; }
-		double getSkyBoxSize() const { return _skyBoxSize; }
-		
+        void setSkyBoxSize(double size) { _skyBoxSize = size; }
+        double getSkyBoxSize() const { return _skyBoxSize; }
+        
     private:
         ::SilverLining::Atmosphere* _atmosphere;
         double _skyBoxSize;
         osg::ref_ptr<const osgEarth::SpatialReference> _srs;
-		bool _initialized;
+        bool _initialized;
         double _maxAmbientLightingAlt;
         osg::Vec4f                     _minAmbient;
         SilverLiningOptions _options;
         osg::ref_ptr<Callback> _callback;
         Atmosphere* _atmosphereWrapper;
         ::SilverLining::MillisecondTimer* _msTimer;
-		osg::buffered_object<osgEarth::NativeProgramAdapterCollection> _adapters;
+        osg::buffered_object<osgEarth::NativeProgramAdapterCollection> _adapters;
     };
 
 } } // namespace osgEarth::SilverLining

@@ -26,7 +26,7 @@
 namespace osgEarth { namespace SilverLining
 {
     class SilverLiningContext;
-	class SilverLiningNode;
+    class SilverLiningNode;
 
     /**
      * Custom drawable for rendering the SilverLining clouds
@@ -37,8 +37,8 @@ namespace osgEarth { namespace SilverLining
         CloudsDrawable(SilverLiningNode* node =0L);
         META_Object(SilverLining, CloudsDrawable);
 
-		/* Sets whether to draw this item */
-		void setDraw(bool draw);
+        /* Sets whether to draw this item */
+        void setDraw(bool draw);
      
     public: // osg::Drawable
 
@@ -56,7 +56,7 @@ namespace osgEarth { namespace SilverLining
         virtual ~CloudsDrawable() { }
 
         //osg::observer_ptr<SilverLiningContext> _SL;
-		SilverLiningNode* _contextNode;
+        SilverLiningNode* _contextNode;
 
         mutable osg::buffered_object<osgEarth::NativeProgramAdapterCollection> _adapters;
         
