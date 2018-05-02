@@ -36,6 +36,7 @@ const unsigned int TRITON_OCEAN_MASK = 0x4; // 0100
 
 namespace osgEarth { namespace Triton
 {
+	class TritonNode;
     class TritonContext;
 
     /**
@@ -44,7 +45,7 @@ namespace osgEarth { namespace Triton
     class OSGEARTHTRITON_EXPORT TritonDrawable : public osg::Drawable
     {
     public:
-        TritonDrawable(osgEarth::MapNode* mapNode=NULL, TritonContext* TRITON =0L);
+        TritonDrawable(TritonNode* tritonNode = NULL, osgEarth::MapNode* mapNode=NULL);
         META_Object(Triton, TritonDrawable);
 
         void setMaskLayer(const osgEarth::ImageLayer* maskLayer);
@@ -54,9 +55,9 @@ namespace osgEarth { namespace Triton
         // custom draw (called with an active GC)
         void drawImplementation(osg::RenderInfo& ri) const;
 
-        void setupHeightMap(osg::State& state);
+        void setupHeightMap(osg::State& state, TritonContext* tc);
 
-        void updateHeightMap(osg::RenderInfo& renderInfo) const;
+        void updateHeightMap(osg::RenderInfo& renderInfo, TritonContext* tc) const;
 
         void dirtyAllContexts();
 
@@ -74,8 +75,8 @@ namespace osgEarth { namespace Triton
 
     protected:
         virtual ~TritonDrawable();
-
-        osg::observer_ptr<TritonContext>  _TRITON;
+		osg::observer_ptr<TritonNode>  _tritonNode;
+       // osg::observer_ptr<TritonContext>  _TRITON;
         osg::observer_ptr<osgEarth::MapNode> _mapNode;
         osg::observer_ptr<const osgEarth::ImageLayer> _maskLayer;
         osg::ref_ptr<osg::TextureCubeMap> _cubeMap;

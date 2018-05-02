@@ -53,6 +53,10 @@ namespace osgEarth { namespace Triton
         /** Layer to use to mask the rendering of the ocean surface */
         void setMaskLayer(const osgEarth::ImageLayer* layer);
 
+		osg::ref_ptr<TritonContext> getOrCreateContext(osg::RenderInfo& renderInfo);
+		osgEarth::Threading::Mutex _contextMapMutex;
+		typedef std::map < int, osg::ref_ptr<TritonContext> > ContextMap;
+		ContextMap _contextMap;
     protected: // OceanNode
 
         void onSetSeaLevel();
@@ -68,7 +72,7 @@ namespace osgEarth { namespace Triton
     protected:
         virtual ~TritonNode();
 
-        osg::ref_ptr<TritonContext> _TRITON;
+        //osg::ref_ptr<TritonContext> _TRITON;
         TritonOptions               _options;
         osg::Drawable*              _drawable;
         osg::ref_ptr<osg::Uniform>  _alphaUniform;
@@ -76,7 +80,7 @@ namespace osgEarth { namespace Triton
         osg::observer_ptr<const ImageLayer> _maskLayer;
         osg::observer_ptr<MapNode> _mapNode;
         osg::ref_ptr<Callback> _callback;
-        bool _needsMapNode;
+	    bool _needsMapNode;
 
         void create();
     };

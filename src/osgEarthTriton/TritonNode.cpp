@@ -68,7 +68,11 @@ TritonNode::setMapNode(osgEarth::MapNode* mapNode)
     {
         this->removeChildren(0, this->getNumChildren());
         _drawable = 0L;
-        _TRITON = 0L;
+        //_TRITON = 0L;
+		{
+			Threading::ScopedMutexLock excl(_contextMapMutex);
+			_contextMap.clear();
+		}
         setSRS(0L);
         _needsMapNode = true;
     }
@@ -98,16 +102,16 @@ TritonNode::create()
     _releaser = mapNode->getResourceReleaser();
 
     // create an object to house Triton data and resources.
-    if (!_TRITON.valid())
-        _TRITON = new TritonContext(_options);
+    //if (!_TRITON.valid())
+    //    _TRITON = new TritonContext(_options);
 
-    if ( map )
-        _TRITON->setSRS( map->getSRS() );
+    //if ( map )
+    //    _TRITON->setSRS( map->getSRS() );
 
-    if ( _callback.valid() )
-        _TRITON->setCallback( _callback.get() );
+    //if ( _callback.valid() )
+    //    _TRITON->setCallback( _callback.get() );
 
-    TritonDrawable* drawable = new TritonDrawable(mapNode.get(), _TRITON.get());
+    TritonDrawable* drawable = new TritonDrawable(this,mapNode.get());
     _drawable = drawable;
     _alphaUniform = getOrCreateStateSet()->getOrCreateUniform("oe_ocean_alpha", osg::Uniform::FLOAT);
     _alphaUniform->set(getAlpha());
@@ -128,23 +132,55 @@ TritonNode::~TritonNode()
 {
     // submit the TRITON context to the releaser so it can shut down Triton
     // objects in a valid graphics context.
-    if (_TRITON.valid())
-    {
-        osg::ref_ptr<ResourceReleaser> releaser;
-        if (_releaser.lock(releaser))
-        {
-            releaser->push(_TRITON.get());
-        }
-    }
+	osg::ref_ptr<ResourceReleaser> releaser;
+	if (_releaser.lock(releaser))
+	{
+		Threading::ScopedMutexLock excl(_contextMapMutex);
+		ContextMap::iterator iter = _contextMap.begin();
+		while (iter != _contextMap.end())
+		{
+			releaser->push(iter->second);
+			iter++;
+		}
+	}
+}
+
+osg::ref_ptr<TritonContext> TritonNode::getOrCreateContext(osg::RenderInfo& renderInfo)
+{
+	Threading::ScopedMutexLock excl(_contextMapMutex);
+	ContextMap::iterator iter = _contextMap.find(renderInfo.getContextID());
+	if (iter != _contextMap.end())
+	{
+		return iter->second;
+	}
+	//Create context
+	osg::ref_ptr<TritonContext>  context = new TritonContext(_options);
+
+
+	osg::ref_ptr<MapNode> mapNode;
+	if (_mapNode.lock(mapNode))
+	{
+		const osgEarth::Map* map = mapNode->getMap();
+		context->setSRS(map->getSRS());
+	}
+	if (_callback.valid())
+		context->setCallback(_callback.get());
+
+	context->initialize(renderInfo);
+	_contextMap[renderInfo.getContextID()] = context;
+	return context;
 }
 
 void
 TritonNode::onSetSeaLevel()
 {
-    if ( _TRITON->ready() )
-    {
-        _TRITON->getEnvironment()->SetSeaLevel( getSeaLevel() );
-    }
+	Threading::ScopedMutexLock excl(_contextMapMutex);
+	ContextMap::iterator iter = _contextMap.begin();
+	while (iter != _contextMap.end())
+	{
+		iter->second->getEnvironment()->SetSeaLevel(getSeaLevel());
+		iter++;
+	}
     dirtyBound();
 }
 
@@ -176,12 +212,15 @@ TritonNode::traverse(osg::NodeVisitor& nv)
             }
         }
 
-        // Tick Triton each frame:
-        if (_TRITON->ready())
-        {
-            _TRITON->update(nv.getFrameStamp()->getSimulationTime());
-        }
-    }
 
+		// Tick Triton each frame :
+		Threading::ScopedMutexLock excl(_contextMapMutex);
+		ContextMap::iterator iter = _contextMap.begin();
+		while (iter != _contextMap.end())
+		{
+			iter->second->update(nv.getFrameStamp()->getSimulationTime());
+			iter++;
+		}
+    }
     osgEarth::Util::OceanNode::traverse(nv);
 }

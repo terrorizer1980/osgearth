@@ -18,6 +18,7 @@
  */
 #include "TritonContext"
 #include "TritonDrawable"
+#include "TritonNode"
 #include <osg/MatrixTransform>
 #include <osg/FrameBufferObject>
 
@@ -320,8 +321,8 @@ static const size_t NUM_CONTEXTS = 64;
 }
 
 
-TritonDrawable::TritonDrawable(osgEarth::MapNode* mapNode, TritonContext* TRITON) :
-_TRITON(TRITON),
+TritonDrawable::TritonDrawable(TritonNode* tritonNode, osgEarth::MapNode* mapNode) :
+	_tritonNode(tritonNode),
 _mapNode(mapNode),
 _heightCameraParent(0L)
 {
@@ -359,9 +360,10 @@ TritonDrawable::dirtyAllContexts()
 }
 
 void
-TritonDrawable::updateHeightMap(osg::RenderInfo& renderInfo) const
+TritonDrawable::updateHeightMap(osg::RenderInfo& renderInfo, TritonContext* tc) const
 {
-    if ( !_TRITON->ready() )
+	
+    if ( !tc->ready() )
         return;
 
     osg::ref_ptr<MapNode> mapNode;
@@ -451,28 +453,27 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
     osg::State* state = renderInfo.getState();
 
     state->disableAllVertexArrays();
-
-    _TRITON->initialize( renderInfo );
-    if ( !_TRITON->ready() )
+	TritonContext* tc = _tritonNode->getOrCreateContext(renderInfo);
+    if ( !tc->ready() )
         return;
 
-    if ( _TRITON->passHeightMapToTriton() && !_terrainChangedCallback.valid() )
+    if (tc->passHeightMapToTriton() && !_terrainChangedCallback.valid() )
     {
-        const_cast<TritonDrawable*>(this)->setupHeightMap(*state);
+        const_cast<TritonDrawable*>(this)->setupHeightMap(*state,tc);
     }
 
-    ::Triton::Environment* environment = _TRITON->getEnvironment();
+    ::Triton::Environment* environment = tc->getEnvironment();
 
     osgEarth::NativeProgramAdapterCollection& adapters = _adapters[ state->getContextID() ];
     if ( adapters.empty() )
     {
         const char* prefix = "oe_";
-        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::GOD_RAYS), prefix));
-        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::SPRAY_PARTICLES), prefix));
-        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WAKE_SPRAY_PARTICLES), prefix));
+        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)tc->getOcean()->GetShaderObject(::Triton::GOD_RAYS), prefix));
+        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)tc->getOcean()->GetShaderObject(::Triton::SPRAY_PARTICLES), prefix));
+        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)tc->getOcean()->GetShaderObject(::Triton::WAKE_SPRAY_PARTICLES), prefix));
 //        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_DECALS), prefix));
-        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE_PATCH), prefix));
-        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_SURFACE), prefix));
+        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)tc->getOcean()->GetShaderObject(::Triton::WATER_SURFACE_PATCH), prefix));
+        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)tc->getOcean()->GetShaderObject(::Triton::WATER_SURFACE), prefix));
     }
     adapters.apply( state );
 
@@ -484,7 +485,7 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         environment->SetProjectionMatrix( state->getProjectionMatrix().ptr() );
     }
 
-    if ( _TRITON->passHeightMapToTriton() )
+    if (tc->passHeightMapToTriton() )
     {
         unsigned cid = renderInfo.getContextID();
         const bool validCid = (cid < _contextDirty.size());
@@ -496,7 +497,7 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
 
         if ( dirty )
         {
-            updateHeightMap( renderInfo );
+            updateHeightMap( renderInfo,tc );
             if ( validCid )
                 _contextDirty[renderInfo.getContextID()] = 0;
             _viewMatrix = renderInfo.getView()->getCamera()->getViewMatrix();
@@ -510,11 +511,11 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
     if ( environment )
     {
         // User pre-draw callback:
-        if (_TRITON->getCallback())
+        if (tc->getCallback())
         {
-            _TRITON->getCallback()->onDrawOcean(
-                _TRITON->getEnvironmentWrapper(),
-                _TRITON->getOceanWrapper(),
+			tc->getCallback()->onDrawOcean(
+				tc->getEnvironmentWrapper(),
+				tc->getOceanWrapper(),
                 renderInfo);
         }
 
@@ -603,9 +604,9 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         }
 
         // Draw the ocean for the current time sample
-        if ( _TRITON->getOcean() )
+        if (tc->getOcean() )
         {
-            _TRITON->getOcean()->Draw( renderInfo.getView()->getFrameStamp()->getSimulationTime() );
+			tc->getOcean()->Draw( renderInfo.getView()->getFrameStamp()->getSimulationTime() );
         }
     }
 
@@ -694,14 +695,14 @@ namespace
     }
 }
 
-void TritonDrawable::setupHeightMap(osg::State& state)
+void TritonDrawable::setupHeightMap(osg::State& state,TritonContext* tc)
 {
     osg::ref_ptr<MapNode> mapNode;
     if (!_mapNode.lock(mapNode))
         return;
 
     int textureUnit = 0;
-    int textureSize = _TRITON->getHeightMapSize();
+    int textureSize = tc->getHeightMapSize();
 
     // Discover a suitable FBO format for floating point values:
     GLint internalFormat;
@@ -732,7 +733,7 @@ void TritonDrawable::setupHeightMap(osg::State& state)
     _heightCamera->attach(osg::Camera::COLOR_BUFFER, _heightMap.get());
     _heightCamera->setCullMask( ~TRITON_OCEAN_MASK );
     _heightCamera->setAllowEventFocus(false);
-    _heightCamera->setFinalDrawCallback(new PassHeightMapToTritonCallback(_TRITON.get()));
+    _heightCamera->setFinalDrawCallback(new PassHeightMapToTritonCallback(tc));
 
     // Install the shaders. We also bind osgEarth's elevation data attribute, which the
     // terrain engine automatically generates at the specified location. We need to set
@@ -749,12 +750,12 @@ void TritonDrawable::setupHeightMap(osg::State& state)
     osg::ref_ptr<const ImageLayer> maskLayer;
     _maskLayer.lock(maskLayer);
 
-    if (!maskLayer.valid() && !_TRITON->getMaskLayerName().empty())
+    if (!maskLayer.valid() && !tc->getMaskLayerName().empty())
     {
-        maskLayer = _mapNode->getMap()->getLayerByName<ImageLayer>(_TRITON->getMaskLayerName());
+        maskLayer = _mapNode->getMap()->getLayerByName<ImageLayer>(tc->getMaskLayerName());
         if (!maskLayer)
         {
-            OE_WARN << LC << "Mask Layer \"" << _TRITON->getMaskLayerName() << "\" not found in Map!\n";
+            OE_WARN << LC << "Mask Layer \"" << tc->getMaskLayerName() << "\" not found in Map!\n";
         }
     }
 
