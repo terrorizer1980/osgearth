@@ -471,7 +471,11 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
         adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)tc->getOcean()->GetShaderObject(::Triton::GOD_RAYS), prefix));
         adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)tc->getOcean()->GetShaderObject(::Triton::SPRAY_PARTICLES), prefix));
         adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)tc->getOcean()->GetShaderObject(::Triton::WAKE_SPRAY_PARTICLES), prefix));
-//        adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_DECALS), prefix));
+#if 0
+		// In older Triton (3.91), this line causes problems in Core profile and prevents the ocean from drawing.  In newer Triton (4.01),
+		// this line causes a crash because there is no context passed in to GetShaderObject(), resulting in multiple NULL references.
+		adapters.push_back(new osgEarth::NativeProgramAdapter(state, (GLint)_TRITON->getOcean()->GetShaderObject(::Triton::WATER_DECALS), prefix));
+#endif
         adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)tc->getOcean()->GetShaderObject(::Triton::WATER_SURFACE_PATCH), prefix));
         adapters.push_back( new osgEarth::NativeProgramAdapter(state, (GLint)tc->getOcean()->GetShaderObject(::Triton::WATER_SURFACE), prefix));
     }
@@ -614,6 +618,11 @@ TritonDrawable::drawImplementation(osg::RenderInfo& renderInfo) const
     state->dirtyAllVertexArrays();
     state->dirtyAllAttributes();
     state->dirtyAllModes();
+
+#ifndef OSG_GL_FIXED_FUNCTION_AVAILABLE
+     // Keep OSG from reapplying GL_LIGHTING on next state change after dirtyAllModes().
+     state->setModeValidity(GL_LIGHTING, false);
+#endif
     //osg::GL2Extensions* api = osg::GL2Extensions::Get(state->getContextID(), true);
     //api->glUseProgram((GLuint)0);
     //state->setLastAppliedProgramObject( 0L );

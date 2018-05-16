@@ -32,6 +32,7 @@
 #include <osgEarth/Registry>
 #include <osgEarth/ThreadingUtils>
 #include <osgEarth/Utils>
+#include <osgEarth/GLUtils>
 
 #include <osg/CullFace>
 #include <osg/PagedLOD>
@@ -321,6 +322,13 @@ FeatureModelGraph::ctor()
     // same, back into feature coords:
     _usableFeatureExtent = _usableMapExtent.transform( featureProfile->getSRS() );
 
+    // for projected data, contract the extent slightly to prevent precision errors
+    // when sampling edge vertices after cropping
+    if (_usableFeatureExtent.isValid() && _usableFeatureExtent.getSRS()->isProjected())
+    {
+        _usableFeatureExtent.expand(-0.001, -0.001);
+    }
+
     // world-space bounds of the feature layer
     _fullWorldBound = getBoundInWorldCoords( _usableMapExtent );
     
@@ -449,7 +457,7 @@ FeatureModelGraph::ctor()
 
     // Set up lighting, only if the option is set
     if ( _options.enableLighting().isSet() )
-        stateSet->setMode( GL_LIGHTING, *_options.enableLighting() ? 1 : 0 );
+        GLUtils::setLighting(stateSet, *_options.enableLighting() ? 1 : 0 );
 
     // If the user requests fade-in, install a post-merge operation that will set the 
     // proper fade time for paged nodes.

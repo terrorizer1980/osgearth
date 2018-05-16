@@ -175,12 +175,10 @@ void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
         camera);
 
 #ifdef SL_MT_DRAW
-    //need to call we use multiple views
+    //need to call CullObjects if we use multiple views
     getAtmosphere()->CullObjects();
     getAtmosphere()->DrawObjects(true, true, true, 0, false, camera);
 #endif
-
-
 
     // Dirty the state and the program tracking to prevent GL state conflicts.
     renderInfo.getState()->dirtyAllVertexArrays();
@@ -194,10 +192,13 @@ void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
     osg::GL2Extensions* api = osg::GL2Extensions::Get(renderInfo.getState()->getContextID(), true);
 #endif
     api->glUseProgram((GLuint)0);
-    renderInfo.getState()->setLastAppliedProgramObject(0L);
 #endif
-
+	// Reset the saved program.  SilverLining exits its functionality with a glUseProgram(0). Without this line,
+	// GL Core 3.3 rendering will attempt to load uniforms without an active program, which is an error.  This
+	// tells the state that there is currently no installed program, so if it needs one, to load one.
+	renderInfo.getState()->setLastAppliedProgramObject(0L);
     renderInfo.getState()->apply();
+
 #ifdef SL_MT_DRAW
     //moved this here....we need to apply state if we want clouds in environment map
     if (getCallback())
@@ -243,8 +244,13 @@ SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
         resourcePath = osgDB::concatPaths(::getenv("SILVERLINING_PATH"), "Resources");
     }
 
+	int renderer = ::SilverLining::Atmosphere::OPENGL;
+#ifndef OSG_GL_FIXED_FUNCTION_AVAILABLE
+	renderer = ::SilverLining::Atmosphere::OPENGL32CORE;
+#endif
+
     int result = _atmosphere->Initialize(
-        ::SilverLining::Atmosphere::OPENGL,
+		renderer,
         resourcePath.c_str(),
         true,
         0);
