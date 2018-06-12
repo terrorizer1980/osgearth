@@ -19,18 +19,19 @@
 #include <osg/Drawable>
 #include <osg/RenderInfo>
 #include <osg/Version>
+#include <osgEarth/NativeProgramAdapter>
 
 namespace osgEarth { namespace SilverLining
 {
     class SilverLiningContext;
-	class SilverLiningContextNode;
+    class SilverLiningNode;
     /**
      * Custom drawable for rendering the SilverLining effects
      */
     class SkyDrawable : public osg::Drawable
     {
     public:
-        SkyDrawable(SilverLiningContextNode* contextNode =0L);
+        SkyDrawable(SilverLiningNode* node =0L);
         META_Object(SilverLining, SkyDrawable);
      
     public: // osg::Drawable
@@ -44,13 +45,12 @@ namespace osgEarth { namespace SilverLining
 #else
         osg::BoundingBox computeBound() const;
 #endif
-
+        void updateBounds(osg::Camera* camera, SilverLiningContext* sl_context);
     protected:
         virtual ~SkyDrawable() { }
 
-        osg::observer_ptr<SilverLiningContext> _SL;
-		SilverLiningContextNode* _contextNode;
-        
+        SilverLiningNode* _SLNode;
+        osg::BoundingBox _skyBoundBox;
         SkyDrawable(const SkyDrawable& copy, const osg::CopyOp& op=osg::CopyOp::SHALLOW_COPY) { }
     };
 

@@ -69,10 +69,13 @@ private:
     ::SilverLining::MillisecondTimer* _defaultTimer;
 };
 
-SilverLiningContext::SilverLiningContext(const SilverLiningOptions& options) :
+SilverLiningContext::SilverLiningContext(const SilverLiningOptions& options,
+    const osgEarth::SpatialReference* srs,
+    Callback* cb) :
 _options              ( options ),
-_initAttempted        ( false ),
-_initFailed           ( false ),
+_srs                  ( srs ),
+_callback             ( cb ),
+_initialized          ( false ),
 _maxAmbientLightingAlt( -1.0 ),
 _atmosphere           ( 0L ),
 _minAmbient           ( 0,0,0,0 )
@@ -98,95 +101,224 @@ SilverLiningContext::~SilverLiningContext()
 }
 
 void
-SilverLiningContext::setCallback(Callback* cb)
-{
-    _callback = cb;
-}
-
-void
-SilverLiningContext::setLight(osg::Light* light)
-{
-    _light = light;
-}
-
-void
-SilverLiningContext::setSRS(const osgEarth::SpatialReference* srs)
-{
-    _srs = srs;
-}
-
-void
 SilverLiningContext::setMinimumAmbient(const osg::Vec4f& value)
 {
     _minAmbient = value;
 }
 
-void
+osgEarth::NativeProgramAdapterCollection& SilverLiningContext::getOrCreateAdapters(osg::RenderInfo& renderInfo)
+{
+    osg::State* state = renderInfo.getState();
+
+    // adapt the SL shaders so they can accept OSG uniforms:
+    osgEarth::NativeProgramAdapterCollection& adapters = _adapters[state->getContextID()]; // thread safe.
+    if (adapters.empty())
+    {
+        adapters.push_back(new osgEarth::NativeProgramAdapter(state, getAtmosphere()->GetSkyShader()));
+        adapters.push_back(new osgEarth::NativeProgramAdapter(state, getAtmosphere()->GetBillboardShader()));
+        adapters.push_back(new osgEarth::NativeProgramAdapter(state, getAtmosphere()->GetStarShader()));
+        adapters.push_back(new osgEarth::NativeProgramAdapter(state, getAtmosphere()->GetPrecipitationShader()));
+        //adapters.push_back(new osgEarth::NativeProgramAdapter(state, _SL->getAtmosphere()->GetAtmosphericLimbShader()) );
+
+        SL_VECTOR(unsigned) handles = getAtmosphere()->GetActivePlanarCloudShaders();
+        for (int i = 0; i<handles.size(); ++i)
+            adapters.push_back(new osgEarth::NativeProgramAdapter(state, handles[i]));
+    }
+    return adapters;
+}
+static osgEarth::Threading::Mutex _drawMutex;
+
+void SilverLiningContext::onDrawSky(osg::RenderInfo& renderInfo)
+{
+    if (!ready())
+        return;
+
+    Threading::ScopedMutexLock excl(_drawMutex);
+
+    renderInfo.getState()->disableAllVertexArrays();
+
+    const osg::State* state = renderInfo.getState();
+
+    osg::Camera* camera = renderInfo.getCurrentCamera();
+
+    osgEarth::NativeProgramAdapterCollection& adapters = getOrCreateAdapters(renderInfo);
+    adapters.apply(state);
+
+    // convey the sky box size (far plane) to SL:
+    double fovy, ar, znear, zfar;
+    camera->getProjectionMatrixAsPerspective(fovy, ar, znear, zfar);
+	if (zfar < 10000.0)
+		zfar = 10000.0;
+    setSkyBoxSize(zfar*0.5);
+
+    osg::Vec3d eye, center, up;
+    camera->getViewMatrixAsLookAt(eye, center, up);
+    updateLocation(eye);
+
+    getAtmosphere()->SetProjectionMatrix(renderInfo.getState()->getProjectionMatrix().ptr());
+    getAtmosphere()->SetCameraMatrix(camera->getViewMatrix().ptr());
+
+    // invoke the user callback if it exists
+    if (_callback)
+        _callback->onDrawSky(getAtmosphereWrapper());
+
+    // draw the sky.
+    getAtmosphere()->DrawSky(
+        true,
+        getSRS()->isGeographic(),
+        getSkyBoxSize(),
+        true,
+        false,
+        true,
+        camera);
+
+    // Dirty the state and the program tracking to prevent GL state conflicts.
+    renderInfo.getState()->dirtyAllVertexArrays();
+    renderInfo.getState()->dirtyAllAttributes();
+    renderInfo.getState()->dirtyAllModes();
+
+#if 0
+#if OSG_VERSION_GREATER_OR_EQUAL(3,4,0)
+    osg::GLExtensions* api = renderInfo.getState()->get<osg::GLExtensions>();
+#else
+    osg::GL2Extensions* api = osg::GL2Extensions::Get(renderInfo.getState()->getContextID(), true);
+#endif
+    api->glUseProgram((GLuint)0);
+#endif
+    // Reset the saved program.  SilverLining exits its functionality with a glUseProgram(0). Without this line,
+    // GL Core 3.3 rendering will attempt to load uniforms without an active program, which is an error.  This
+    // tells the state that there is currently no installed program, so if it needs one, to load one.
+    renderInfo.getState()->setLastAppliedProgramObject(0L);
+    renderInfo.getState()->apply();
+}
+
+void SilverLiningContext::onDrawClouds(osg::RenderInfo& renderInfo)
+{
+    if (!ready())
+        return;
+
+    osg::Camera* camera = renderInfo.getCurrentCamera();
+    osg::Vec3d eye, center, up;
+    camera->getViewMatrixAsLookAt(eye, center, up);
+
+    double cam_altitude = getSRS()->isGeographic() ?
+        eye.length() - getSRS()->getEllipsoid()->getRadiusEquator() :
+        eye.z();
+    
+    if (cam_altitude > *_options.cloudsMaxAltitude())
+        return;
+
+    Threading::ScopedMutexLock excl(_drawMutex);
+
+    osg::State* state = renderInfo.getState();
+    // adapt the SL shaders so they can accept OSG uniforms:
+    osgEarth::NativeProgramAdapterCollection& adapters = getOrCreateAdapters(renderInfo);
+    adapters.apply(state);
+
+    renderInfo.getState()->disableAllVertexArrays();
+
+    //Workaround to get clouds to work with multiple views in CullDrawThreadPerContext
+    //and CullThreadPerCameraDrawThreadPerContext threading model.
+    //Although each camera/view have its own atmosphere object the call to DrawObjects 
+    //need to be preceded by a call to DrawSky for the same atmosphere object.
+    //If we don't call DrawSky clouds will begin to flicker, probably because
+    //another thread/view has called DrawSky in between and DrawObjects rely
+    //on shader uniforms (or some other global state) that is handled in DrawSky.
+    //Note however that the call to DrawSky below don't do any rendering, ie drawSky=false, 
+    //drawStars=false, drawSunAndMoon=false.
+#if 1 
+    updateLocation(eye);
+
+    getAtmosphere()->SetProjectionMatrix(renderInfo.getState()->getProjectionMatrix().ptr());
+    getAtmosphere()->SetCameraMatrix(camera->getViewMatrix().ptr());
+
+    getAtmosphere()->DrawSky(
+        false,
+        getSRS()->isGeographic(),
+        getSkyBoxSize(),
+        false,
+        false,
+        false,
+        camera);
+#endif
+
+    getAtmosphere()->CullObjects();
+
+    // invoke the user callback if it exists
+    if (getCallback())
+        getCallback()->onDrawClouds(getAtmosphereWrapper());
+
+    getAtmosphere()->DrawObjects(true, true, true, 0, false, camera);
+
+    // Restore the GL state to where it was before.
+    state->dirtyAllVertexArrays();
+    state->dirtyAllAttributes();
+
+    // Reset the saved program.  SilverLining exits its functionality with a glUseProgram(0). Without this line,
+    // GL Core 3.3 rendering will attempt to load uniforms without an active program, which is an error.  This
+    // tells the state that there is currently no installed program, so if it needs one, to load one.
+    state->setLastAppliedProgramObject(0L);
+    state->apply();
+}
+
+bool
 SilverLiningContext::initialize(osg::RenderInfo& renderInfo)
 {
-    if ( !_initAttempted && !_initFailed )
+    std::string resourcePath = _options.resourcePath().get();
+    if (resourcePath.empty() && ::getenv("SILVERLINING_PATH"))
     {
-        // lock/double-check:
-        Threading::ScopedMutexLock excl(_initMutex);
-        if ( !_initAttempted && !_initFailed )
-        {
-            _initAttempted = true;
+        resourcePath = osgDB::concatPaths(::getenv("SILVERLINING_PATH"), "Resources");
+    }
 
-            // constant random seed ensures consistent clouds across windows
-            // TODO: replace this with something else since this is global! -gw
-            ::srand(1234);
-
-            std::string resourcePath = _options.resourcePath().get();
-            if (resourcePath.empty() && ::getenv("SILVERLINING_PATH"))
-            {
-                resourcePath = osgDB::concatPaths(::getenv("SILVERLINING_PATH"), "Resources");
-            }
-
-            int renderer = ::SilverLining::Atmosphere::OPENGL;
+    int renderer = ::SilverLining::Atmosphere::OPENGL;
 #ifndef OSG_GL_FIXED_FUNCTION_AVAILABLE
-            renderer = ::SilverLining::Atmosphere::OPENGL32CORE;
+    renderer = ::SilverLining::Atmosphere::OPENGL32CORE;
 #endif
-            int result = _atmosphere->Initialize(
-                renderer,
-                resourcePath.c_str(),
-                true,
-                0 );
 
-            if ( result != ::SilverLining::Atmosphere::E_NOERROR )
-            {
-                _initFailed = true;
-                OE_WARN << LC << "SilverLining failed to initialize: " << result << std::endl;
-            }
-            else
-            {
-                OE_INFO << LC << "SilverLining initialized OK!" << std::endl;
+    int result = _atmosphere->Initialize(
+        renderer,
+        resourcePath.c_str(),
+        true,
+        0);
 
-                // Defaults for a projected terrain. ECEF terrain vectors are set
-                // in updateLocation().
-                _atmosphere->SetUpVector( 0.0, 0.0, 1.0 );
-                _atmosphere->SetRightVector( 1.0, 0.0, 0.0 );
+    // constant random seed ensures consistent clouds across windows
+    _atmosphere->GetRandomNumberGenerator()->Seed(1234);
 
-                // Configure the timer used for animations
-                _atmosphere->GetConditions()->SetMillisecondTimer(_msTimer);
+    if (result != ::SilverLining::Atmosphere::E_NOERROR)
+    {
+        OE_WARN << LC << "SilverLining failed to initialize: " << result << std::endl;
+        return false;
+    }
+    else
+    {
+        OE_INFO << LC << "SilverLining initialized OK!" << std::endl;
+
+        // Defaults for a projected terrain. ECEF terrain vectors are set
+        // in updateLocation().
+        _atmosphere->SetUpVector(0.0, 0.0, 1.0);
+        _atmosphere->SetRightVector(1.0, 0.0, 0.0);
+
+        // Configure the timer used for animations
+        _atmosphere->GetConditions()->SetMillisecondTimer(_msTimer);
 
 #if 0 // todo: review this
-                _maxAmbientLightingAlt =
-                    _atmosphere->GetConfigOptionDouble("atmosphere-height");
+        _maxAmbientLightingAlt =
+            _atmosphere->GetConfigOptionDouble("atmosphere-height");
 #endif
-                if ( _options.drawClouds() == true )
-                {
-                    OE_INFO << LC << "Initializing clouds\n";
-                    setupClouds();
-                }
-
-                // user callback for initialization
-                if (_callback.valid())
-                {
-                    _callback->onInitialize( *_atmosphereWrapper );
-                }
-            }
+        if (_options.drawClouds() == true)
+        {
+            OE_INFO << LC << "Initializing clouds\n";
+            setupClouds();
         }
+
+        // user callback for initialization
+        if (_callback.valid())
+        {
+            _callback->onInitialize(*_atmosphereWrapper);
+        }
+        _initialized = true;
     }
+    return _initialized;
 }
 
 void
@@ -211,9 +343,10 @@ SilverLiningContext::setupClouds()
 }
 
 void
-SilverLiningContext::updateLight()
+SilverLiningContext::updateLight(osg::Light *light)
 {
-    if ( !ready() || !_light.valid() || !_srs.valid() )
+    Threading::ScopedMutexLock excl(_drawMutex);
+    if ( !ready() || light == NULL || !_srs.valid() )
         return;
 
     float ra, ga, ba, rd, gd, bd, x, y, z;
@@ -255,13 +388,13 @@ SilverLiningContext::updateLight()
         osg::clampAbove(ga, _minAmbient.b()),
         1.0);
 
-    _light->setAmbient( ambient );
-    _light->setDiffuse( osg::Vec4(rd, gd, bd, 1.0f) );
-    _light->setPosition( osg::Vec4(direction, 0.0f) ); //w=0 means "at infinity"
+    light->setAmbient( ambient );
+    light->setDiffuse( osg::Vec4(rd, gd, bd, 1.0f) );
+    light->setPosition( osg::Vec4(direction, 0.0f) ); //w=0 means "at infinity"
 }
 
 void
-SilverLiningContext::updateLocation()
+SilverLiningContext::updateLocation(const osg::Vec3d &camera_pos)
 {
     if ( !ready() || !_srs.valid() )
         return;
@@ -269,7 +402,7 @@ SilverLiningContext::updateLocation()
     if ( _srs->isGeographic() )
     {
         // Get new local orientation
-        osg::Vec3d up = _cameraPos;
+        osg::Vec3d up = camera_pos;
         up.normalize();
         osg::Vec3d north = osg::Vec3d(0, 1, 0);
         osg::Vec3d east = north ^ up;
@@ -287,7 +420,7 @@ SilverLiningContext::updateLocation()
 
         // Get new lat / lon / altitude
         osg::Vec3d latLonAlt;
-        _srs->transformFromWorld(_cameraPos, latLonAlt);
+        _srs->transformFromWorld(camera_pos, latLonAlt);
 
         ::SilverLining::Location loc;
         loc.SetAltitude ( latLonAlt.z() );

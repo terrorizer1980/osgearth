@@ -31,7 +31,7 @@
 namespace osgEarth { namespace SilverLining
 {
     class SilverLiningContext;
-	class SilverLiningContextNode;
+    class SilverLiningContextNode;
 
     /**
      * Node that roots the silverlining adapter.
@@ -51,15 +51,8 @@ namespace osgEarth { namespace SilverLining
 
         /** Attach to a view so that this node controls its light. */
         void attach(osg::View* view, int lightNum);
-
-        /** Number of contexts (each context is tied to a camera/viewport) */
-        unsigned getNumContexts() const;
-
-        /** Access the clouds stateset for context "index" so you can modify its render bin details, etc. */
-        osg::StateSet* getCloudsStateSet(unsigned contextIndex) const;
-
-        /** Access the sky stateset for context "index" */
-        osg::StateSet* getSkyStateSet(unsigned contextIndex) const;
+        /** Get or create SilverLining context for current camera*/
+        osg::ref_ptr<SilverLiningContext> getOrCreateContext(osg::RenderInfo& renderInfo);
 
     public:
         // callbacks from base class.
@@ -69,23 +62,23 @@ namespace osgEarth { namespace SilverLining
     public: // osg::Node
 
         void traverse(osg::NodeVisitor&);
-
     protected:
         virtual ~SilverLiningNode();
-
+        typedef osg::Camera* ContextKey;
+        typedef std::map <ContextKey, osg::ref_ptr<SilverLiningContext> > ContextMap;
+        SilverLiningContext* findContext(ContextKey key);
+        ContextMap _contextMap;
         osg::ref_ptr<osg::LightSource> _lightSource;
         osg::ref_ptr<osg::Light> _light;
         const SilverLiningOptions _options;
         osg::ref_ptr<osgEarth::PhongLightingEffect> _lighting;
         const osgEarth::SpatialReference* _mapSRS;
         osg::ref_ptr<Callback> _callback;
-
-        typedef std::map<osg::Camera*, osg::ref_ptr<osg::Node> > CameraContextMap;
-        CameraContextMap _contexts;
-        osg::NodeList _contextList;
-
-        typedef std::set<osg::ref_ptr<osg::Camera> > CameraSet;
-        CameraSet _camerasToAdd;
+        osg::ref_ptr<osg::Geode> _geode;
+        osg::ref_ptr<osg::Drawable> _skyDrawable;
+        osg::ref_ptr<osg::Drawable> _cloudsDrawable;
+        osgEarth::Threading::Mutex _contextMapMutex;
+        osgEarth::Threading::Mutex _travereMutex;
     };
 
 } } // namespace osgEarth::SilverLining

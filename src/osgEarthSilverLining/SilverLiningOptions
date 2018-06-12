@@ -58,9 +58,9 @@ namespace osgEarth { namespace SilverLining
         optional<bool>& drawClouds() { return _drawClouds; }
         const optional<bool>& drawClouds() const { return _drawClouds; }
 
-		/* Max altitude at which to draw/update clouds */
-		optional<double>& cloudsMaxAltitude() { return _cloudsMaxAltitude; }
-		const optional<double>& cloudsMaxAltitude() const { return _cloudsMaxAltitude; }
+        /* Max altitude at which to draw/update clouds */
+        optional<double>& cloudsMaxAltitude() { return _cloudsMaxAltitude; }
+        const optional<double>& cloudsMaxAltitude() const { return _cloudsMaxAltitude; }
 
     public:
         osgEarth::Config getConfig() const {
@@ -69,7 +69,7 @@ namespace osgEarth { namespace SilverLining
             conf.addIfSet("license_code", _licenseCode);
             conf.addIfSet("resource_path", _resourcePath);
             conf.addIfSet("clouds", _drawClouds);
-			conf.addIfSet("clouds_max_altitude", _cloudsMaxAltitude);
+            conf.addIfSet("clouds_max_altitude", _cloudsMaxAltitude);
             return conf;
         }
 
@@ -85,15 +85,15 @@ namespace osgEarth { namespace SilverLining
             conf.getIfSet("license_code", _licenseCode);
             conf.getIfSet("resource_path", _resourcePath);
             conf.getIfSet("clouds", _drawClouds);
-			conf.getIfSet("clouds_max_altitude", _cloudsMaxAltitude);
+            conf.getIfSet("clouds_max_altitude", _cloudsMaxAltitude);
         }
 
         osgEarth::optional<std::string> _user;
         osgEarth::optional<std::string> _licenseCode;
         osgEarth::optional<std::string> _resourcePath;
         osgEarth::optional<bool>        _drawClouds;
-		osgEarth::optional<double>      _cloudsMaxAltitude;
-		int                             _lastCullFrameNumber;
+        osgEarth::optional<double>      _cloudsMaxAltitude;
+        int                             _lastCullFrameNumber;
     };
 
 } } // namespace osgEarth::SilverLiningPlugin
