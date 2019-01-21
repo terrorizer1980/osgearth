@@ -1341,8 +1341,11 @@ EarthManipulator::intersect(const osg::Vec3d& start, const osg::Vec3d& end, osg:
 
         osgUtil::IntersectionVisitor iv(lsi.get());
         iv.setTraversalMask(_intersectTraversalMask);
-
-        mapNode->getTerrainEngine()->accept(iv);
+#ifdef USE_TERRAIN_INTERSECTION
+		mapNode->getTerrainEngine()->accept(iv);
+#else 
+		_node->accept(iv);
+#endif
 
         if (lsi->containsIntersections())
         {
@@ -1377,7 +1380,11 @@ EarthManipulator::intersectLookVector(osg::Vec3d& out_eye,
         osgUtil::IntersectionVisitor iv(lsi.get());
         iv.setTraversalMask(_intersectTraversalMask);
 
-        mapNode->getTerrainEngine()->accept(iv);
+#ifdef USE_TERRAIN_INTERSECTION
+		mapNode->getTerrainEngine()->accept(iv);
+#else 
+		_node->accept(iv);
+#endif
 
         if (lsi->containsIntersections())
         {
@@ -1991,9 +1998,7 @@ EarthManipulator::updateTether(double t)
             // Track all rotations
             else if (_settings->getTetherMode() == TETHER_CENTER_AND_ROTATION)
             {
-                osg::Quat finalTetherRotation;
-                finalTetherRotation = L2W.getRotate() * _centerRotation.inverse();
-                _tetherRotation.slerp(t, _tetherRotationVP0, finalTetherRotation);
+                _tetherRotation = L2W.getRotate() * _centerRotation.inverse();
             }
         }
 
@@ -2315,7 +2320,7 @@ EarthManipulator::updateCamera(osg::Camera& camera)
     double now = osg::Timer::instance()->time_s();
 
     // interpolation through a setViewpoint, if applicable
-    double t = 1.0;
+    double t = 0.0;
 
     // Update a viewpoint transition:
     if (isSettingViewpoint())
