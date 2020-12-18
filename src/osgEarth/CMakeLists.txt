@@ -77,6 +77,7 @@ set(TARGET_GLSL
     SimpleOceanLayer.glsl
     RTTPicker.glsl
     WindLayer.CS.glsl
+	Fog.glsl
 )
 
 set(SHADERS_CPP "${CMAKE_CURRENT_BINARY_DIR}/AutoGenShaders.cpp")
@@ -139,6 +140,7 @@ SET(LIB_PUBLIC_HEADERS
     Extension
     FadeEffect
     FileUtils
+    Fog
     GDAL
     GDALDEM
     GeoCommon
@@ -517,6 +519,7 @@ set(TARGET_SRC
     Extension.cpp
     FadeEffect.cpp
     FileUtils.cpp
+    Fog.cpp
     GDAL.cpp
     GDALDEM.cpp
     GeoData.cpp

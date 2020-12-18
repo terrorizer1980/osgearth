@@ -1,4 +1,4 @@
-#version 430
+#version 430 compatibility
 $GLSL_DEFAULT_PRECISION_FLOAT
 
 #pragma vp_name       GroundCover vertex shader
@@ -229,6 +229,7 @@ $GLSL_DEFAULT_PRECISION_FLOAT
 uniform sampler2D OE_GROUNDCOVER_COLOR_SAMPLER ;
 uniform mat4 OE_GROUNDCOVER_COLOR_MATRIX ;
 in vec4 oe_layer_tilec;
+uniform float oe_grass_color_modulation;
 #endif
 
 uniform sampler2DArray oe_GroundCover_billboardTex;
@@ -262,7 +263,7 @@ void oe_Grass_FS(inout vec4 color)
     }
 
 #ifdef OE_GROUNDCOVER_COLOR_SAMPLER
-    const float modulation = 0.75;
+    float modulation = 0.8;//oe_grass_color_modulation;
     float mono = (color.r*0.2126 + color.g*0.7152 + color.b*0.0722);
     vec4 mod_color = texture(OE_GROUNDCOVER_COLOR_SAMPLER, (OE_GROUNDCOVER_COLOR_MATRIX*oe_layer_tilec).st);
     color.rgb = mix(color.rgb, mod_color.rgb*vec3(mono)*2.0, modulation);

@@ -535,6 +535,8 @@ GroundCoverLayer::buildStateSets()
 
     if (osg::DisplaySettings::instance()->getNumMultiSamples() > 1)
     {
+        //disable Range opacity, not working as intendende 
+        stateset->setDefine("OE_DISABLE_RANGE_OPACITY");
         stateset->setMode(GL_MULTISAMPLE, 1);
     }
 

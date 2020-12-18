@@ -83,5 +83,8 @@ namespace osgEarth { namespace Util
         
         WindComputer = "WindLayer.CS.glsl";
         _sources[WindComputer] = "@WindLayer.CS.glsl@";
+		
+		 Fog = "Fog.glsl";
+        _sources[Fog] = "@Fog.glsl@";
     }
 } }
