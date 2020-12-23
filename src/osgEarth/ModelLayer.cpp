@@ -298,7 +298,11 @@ ModelLayer::openImplementation()
                 modelNodeParent = geo;
         }
 
-        result = modelNodeParent.get();
+        if(geo)
+            result = geo;
+        else
+            result = modelNodeParent;
+
         
         if ( options().minVisibleRange().isSet() || options().maxVisibleRange().isSet() )
         {                
