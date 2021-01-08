@@ -69,6 +69,7 @@ GroundCoverLayer::Options::getConfig() const
     Config conf = PatchLayer::Options::getConfig();
     maskLayer().set(conf, "mask_layer");
     colorLayer().set(conf, "color_layer");
+    heightLayer().set(conf, "height_layer");
     conf.set("color_min_saturation", colorMinSaturation());
     conf.set("lod", _lod);
     conf.set("cast_shadows", _castShadows);
@@ -99,6 +100,8 @@ GroundCoverLayer::Options::fromConfig(const Config& conf)
 
     maskLayer().get(conf, "mask_layer");
     colorLayer().get(conf, "color_layer");
+    heightLayer().get(conf, "height_layer");
+    
     conf.get("color_min_saturation", colorMinSaturation());
     conf.get("lod", _lod);
     conf.get("cast_shadows", _castShadows);
@@ -359,6 +362,22 @@ GroundCoverLayer::getColorLayer() const
 }
 
 void
+GroundCoverLayer::setHeightLayer(ImageLayer* value)
+{
+    options().heightLayer().setLayer(value);
+    if (value)
+    {
+        buildStateSets();
+    }
+}
+
+ImageLayer*
+GroundCoverLayer::getHeightLayer() const
+{
+    return options().heightLayer().getLayer();
+}
+
+void
 GroundCoverLayer::setMaxAlpha(float value)
 {
     options().maxAlpha() = value;
@@ -395,6 +414,7 @@ GroundCoverLayer::addedToMap(const Map* map)
 
     options().maskLayer().addedToMap(map);
     options().colorLayer().addedToMap(map);
+    options().heightLayer().addedToMap(map);
 
     if (getMaskLayer())
     {
@@ -408,6 +428,16 @@ GroundCoverLayer::addedToMap(const Map* map)
         {
             OE_WARN << LC << "Color modulation is not shared and is therefore being disabled." << std::endl;
             options().colorLayer().removedFromMap(map);
+        }
+    }
+
+    if (getHeightLayer())
+    {
+        OE_INFO << LC << "Height layer is \"" << getHeightLayer()->getName() << "\"" << std::endl;
+        if (getHeightLayer()->isShared() == false)
+        {
+            OE_WARN << LC << "Height is not shared and is therefore being disabled." << std::endl;
+            options().heightLayer().removedFromMap(map);
         }
     }
 
@@ -433,6 +463,7 @@ GroundCoverLayer::removedFromMap(const Map* map)
 
     options().maskLayer().removedFromMap(map);
     options().colorLayer().removedFromMap(map);
+    options().heightLayer().removedFromMap(map);
 }
 
 void
@@ -525,6 +556,12 @@ GroundCoverLayer::buildStateSets()
         stateset->setDefine("OE_GROUNDCOVER_COLOR_SAMPLER", getColorLayer()->getSharedTextureUniformName());
         stateset->setDefine("OE_GROUNDCOVER_COLOR_MATRIX", getColorLayer()->getSharedTextureMatrixUniformName());
         stateset->addUniform(new osg::Uniform("oe_GroundCover_colorMinSaturation", options().colorMinSaturation().get()));
+    }
+
+    if (getHeightLayer())
+    {
+        stateset->setDefine("OE_GROUNDCOVER_HEIGHT_SAMPLER", getHeightLayer()->getSharedTextureUniformName());
+        stateset->setDefine("OE_GROUNDCOVER_HEIGHT_MATRIX", getHeightLayer()->getSharedTextureMatrixUniformName());
     }
 
     // disable backface culling to support shadow/depth cameras,

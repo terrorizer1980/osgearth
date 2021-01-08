@@ -10,7 +10,13 @@ $GLSL_DEFAULT_PRECISION_FLOAT
 #pragma import_defines(OE_GROUNDCOVER_WIND_SCALE)
 #pragma import_defines(OE_IS_SHADOW_CAMERA)
 
-
+#pragma import_defines(OE_GROUNDCOVER_HEIGHT_SAMPLER)
+#pragma import_defines(OE_GROUNDCOVER_HEIGHT_MATRIX)
+#ifdef OE_GROUNDCOVER_HEIGHT_SAMPLER
+ // in vec4 oe_layer_tilec;
+  uniform sampler2D OE_GROUNDCOVER_HEIGHT_SAMPLER;
+  uniform mat4 OE_GROUNDCOVER_HEIGHT_MATRIX;
+#endif
 
 // Instance data from compute shader
 struct RenderData
@@ -120,9 +126,18 @@ void oe_GroundCover_VS(inout vec4 vertex_view)
 
     // push the falloff closer to the max distance.
     float falloff = 1.0 - (nRange*nRange*nRange);
-    float width = render[gl_InstanceID].width * falloff;
-    float height = render[gl_InstanceID].height * falloff;
+    
 
+#ifdef OE_GROUNDCOVER_HEIGHT_SAMPLER
+    float wh_ratio = render[gl_InstanceID].width / render[gl_InstanceID].height;
+    float height = texture(OE_GROUNDCOVER_HEIGHT_SAMPLER, (OE_GROUNDCOVER_HEIGHT_MATRIX*oe_layer_tilec).st).r * 255.0* 0.1 * falloff;
+    if(2.0 * height < render[gl_InstanceID].height)
+        return;
+    float width = wh_ratio * height;
+#else
+    float height = render[gl_InstanceID].height * falloff;
+    float width = render[gl_InstanceID].width * falloff;
+#endif
     int which = gl_VertexID & 7; // mod8 - there are 8 verts per instance
 
 #ifdef OE_IS_SHADOW_CAMERA
