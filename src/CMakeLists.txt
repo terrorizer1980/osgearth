@@ -8,6 +8,8 @@ if(OSGEARTH_BUILD_PROCEDURAL_NODEKIT)
     add_subdirectory(osgEarthSplat)
 endif()
 
+add_subdirectory(osgEarthBuildings)
+
 if(OSGEARTH_BUILD_TRITON_NODEKIT)
     add_subdirectory(osgEarthTriton)
 endif()
