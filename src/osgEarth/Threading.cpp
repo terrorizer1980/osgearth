@@ -518,7 +518,7 @@ osgEarth::Threading::setThreadName(const std::string& name)
 
     wchar_t buf[256];
     mbstowcs(buf, name.c_str(), 256);
-    ::SetThreadDescription(::GetCurrentThread(), buf);
+    //SetThreadDescription(::GetCurrentThread(), buf);
 
 #elif defined _GNU_SOURCE && !defined __EMSCRIPTEN__ && !defined __CYGWIN__
 
