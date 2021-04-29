@@ -196,6 +196,8 @@ osg::BoundingSphere SimplePager::getBounds(const TileKey& key) const
     double xSample = extent.width() / (double)samples;
     double ySample = extent.height() / (double)samples;
 
+    const bool is_map_geocentric = !key.getProfile()->getSRS()->isProjected();
+
     osg::BoundingSphere bs;
     for (int c = 0; c < samples+1; c++)
     {
@@ -204,11 +206,14 @@ osg::BoundingSphere SimplePager::getBounds(const TileKey& key) const
         {
             double y = extent.yMin() + (double)r * ySample;
             osg::Vec3d world;
-
             GeoPoint samplePoint(extent.getSRS(), x, y, 0, ALTMODE_ABSOLUTE);
 
-            GeoPoint wgs84 = samplePoint.transform(osgEarth::SpatialReference::create("epsg:4326"));
-            wgs84.toWorld(world);
+            if (is_map_geocentric)
+            {
+                GeoPoint wgs84 = samplePoint.transform(osgEarth::SpatialReference::create("epsg:4326"));
+                wgs84.toWorld(world);
+            }
+            samplePoint.toWorld(world);
             bs.expandBy(world);
         }
     }
@@ -247,6 +252,8 @@ osg::ref_ptr<osg::Node> SimplePager::createNode(const TileKey& key, ProgressCall
 
 osg::ref_ptr<osg::Node> SimplePager::createPagedNode(const TileKey& key, ProgressCallback* progress)
 {
+    const bool is_map_geocentric = !key.getProfile()->getSRS()->isProjected();
+
     osg::BoundingSphere tileBounds = getBounds( key );
     float tileRadius = tileBounds.radius();
 
@@ -292,7 +299,7 @@ osg::ref_ptr<osg::Node> SimplePager::createPagedNode(const TileKey& key, Progres
     plod->addChild( node.get() );
     
     // Assume geocentric for now.
-    if (true)
+    if (is_map_geocentric)
     {
         const GeoExtent& ccExtent = key.getExtent();
         if (ccExtent.isValid())
