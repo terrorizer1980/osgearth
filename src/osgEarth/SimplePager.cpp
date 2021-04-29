@@ -187,6 +187,22 @@ void SimplePager::shutdown()
     static_cast<ProgressMaster*>(_progressMaster.get())->_done = true;
 }
 
+
+bool isKeyProfileGeocentric(const TileKey& key)
+{
+    bool is_key_geocentric = true;
+    if (key.getProfile() && key.getProfile()->getSRS())
+    {
+        is_key_geocentric = !key.getProfile()->getSRS()->isProjected();
+    }
+    else
+    {
+        OE_WARN << LC << "SimplePager : Failed to resolve projection type from key, assume geocentric profile";
+    }
+        
+    return is_key_geocentric;
+}
+
 osg::BoundingSphere SimplePager::getBounds(const TileKey& key) const
 {
     int samples = 6;
@@ -196,7 +212,8 @@ osg::BoundingSphere SimplePager::getBounds(const TileKey& key) const
     double xSample = extent.width() / (double)samples;
     double ySample = extent.height() / (double)samples;
 
-    const bool is_map_geocentric = !key.getProfile()->getSRS()->isProjected();
+    //workaround to get map type, (Map not accessible within this class)
+    const bool geocentric = isKeyProfileGeocentric(key);
 
     osg::BoundingSphere bs;
     for (int c = 0; c < samples+1; c++)
@@ -208,7 +225,7 @@ osg::BoundingSphere SimplePager::getBounds(const TileKey& key) const
             osg::Vec3d world;
             GeoPoint samplePoint(extent.getSRS(), x, y, 0, ALTMODE_ABSOLUTE);
 
-            if (is_map_geocentric)
+            if (geocentric)
             {
                 GeoPoint wgs84 = samplePoint.transform(osgEarth::SpatialReference::create("epsg:4326"));
                 wgs84.toWorld(world);
@@ -252,7 +269,9 @@ osg::ref_ptr<osg::Node> SimplePager::createNode(const TileKey& key, ProgressCall
 
 osg::ref_ptr<osg::Node> SimplePager::createPagedNode(const TileKey& key, ProgressCallback* progress)
 {
-    const bool is_map_geocentric = !key.getProfile()->getSRS()->isProjected();
+   
+    //workaround to get map type, (Map not accessible within this class)
+    const bool geocentric = isKeyProfileGeocentric(key);
 
     osg::BoundingSphere tileBounds = getBounds( key );
     float tileRadius = tileBounds.radius();
@@ -299,7 +318,7 @@ osg::ref_ptr<osg::Node> SimplePager::createPagedNode(const TileKey& key, Progres
     plod->addChild( node.get() );
     
     // Assume geocentric for now.
-    if (is_map_geocentric)
+    if (geocentric)
     {
         const GeoExtent& ccExtent = key.getExtent();
         if (ccExtent.isValid())
