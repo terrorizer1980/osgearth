@@ -648,7 +648,7 @@ ElevationPool::sampleMapCoords(
     int tx, ty;
     int tx_prev = INT_MAX, ty_prev = INT_MAX;
     float lastRes = -1.0f;
-    unsigned lod;
+    int lod;
     unsigned lod_prev = INT_MAX;
     const Units& units = map->getSRS()->getUnits();
     Distance pointRes(0.0, units);
