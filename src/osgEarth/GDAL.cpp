@@ -2224,6 +2224,7 @@ namespace
         int numBands =
             image->getPixelFormat() == GL_RGBA ? 4 :
             image->getPixelFormat() == GL_RGB ? 3 :
+            image->getPixelFormat() == GL_RED ? 1 :
             image->getPixelFormat() == GL_LUMINANCE ? 1 : 0;
 
 
