@@ -221,7 +221,7 @@ WMS::CapabilitiesReader::readLayers(XmlElement* e, WMS::Layer* parentLayer, WMS:
         for (XmlNodeList::const_iterator srsitr = spatialReferences.begin(); srsitr != spatialReferences.end(); ++srsitr)
         {
             std::string srs = static_cast<XmlElement*>(srsitr->get())->getText();
-            layer->getSpatialReferences().push_back(srs);
+            layer->getSpatialReferences().insert(srs);
         }
 
         //Read all the supported CRS's
@@ -229,21 +229,13 @@ WMS::CapabilitiesReader::readLayers(XmlElement* e, WMS::Layer* parentLayer, WMS:
         for (XmlNodeList::const_iterator srsitr = spatialReferences.begin(); srsitr != spatialReferences.end(); ++srsitr)
         {
             std::string crs = static_cast<XmlElement*>(srsitr->get())->getText();
-            layer->getSpatialReferences().push_back(crs);
+            layer->getSpatialReferences().insert(crs);
         }
 
         if (parentLayer)
         {
             // Also add in any SRS that is defined in the parent layer.  Some servers, like GeoExpress from LizardTech will publish top level SRS's that also apply to the child layers
-            for (WMS::Layer::SRSList::iterator itr = parentLayer->getSpatialReferences().begin(); itr != parentLayer->getSpatialReferences().end(); itr++)
-            {
-                std::string parentSRS = *itr;
-                // Only add the SRS if it's not already present in the SRS list.
-                if (std::find(layer->getSpatialReferences().begin(), layer->getSpatialReferences().end(), parentSRS) == layer->getSpatialReferences().end())
-                {
-                    layer->getSpatialReferences().push_back(parentSRS);
-                }
-            }
+            layer->getSpatialReferences().insert(parentLayer->getSpatialReferences().begin(), parentLayer->getSpatialReferences().end());
         }
 
         osg::ref_ptr<XmlElement> e_bb = e_layer->getSubElement(ELEM_LATLONBOUNDINGBOX);
@@ -538,13 +530,13 @@ WMS::Driver::open(osg::ref_ptr<const Profile>& profile,
     osg::ref_ptr<SpatialReference> wms_srs = SpatialReference::create(_srsToUse);
 
     // check for spherical mercator:
-    if (wms_srs.valid() && wms_srs->isEquivalentTo(osgEarth::Registry::instance()->getSphericalMercatorProfile()->getSRS()))
+    if (wms_srs.valid() && wms_srs->isSphericalMercator())
     {
-        result = osgEarth::Registry::instance()->getSphericalMercatorProfile();
+        result = Profile::create(Profile::SPHERICAL_MERCATOR);
     }
-    else if (wms_srs.valid() && wms_srs->isEquivalentTo(osgEarth::Registry::instance()->getGlobalGeodeticProfile()->getSRS()))
+    else if (wms_srs.valid() && wms_srs->isEquivalentTo(SpatialReference::get("wgs84")))
     {
-        result = osgEarth::Registry::instance()->getGlobalGeodeticProfile();
+        result = Profile::create(Profile::GLOBAL_GEODETIC);
     }
 
     // Next, try to glean the extents from the layer list
@@ -573,22 +565,25 @@ WMS::Driver::open(osg::ref_ptr<const Profile>& profile,
         if (!result.valid())
         {
             const SpatialReference* srs = SpatialReference::create(_srsToUse);
-            GeoExtent totalExtent(srs);
-            for (DataExtentList::const_iterator itr = dataExtents.begin(); itr != dataExtents.end(); ++itr)
+            if (srs)
             {
-                GeoExtent dataExtent = *itr;
-                GeoExtent nativeExtent;
-                dataExtent.transform(srs, nativeExtent);
-                totalExtent.expandToInclude(nativeExtent);
+                GeoExtent totalExtent(srs);
+                for (DataExtentList::const_iterator itr = dataExtents.begin(); itr != dataExtents.end(); ++itr)
+                {
+                    GeoExtent dataExtent = *itr;
+                    GeoExtent nativeExtent;
+                    dataExtent.transform(srs, nativeExtent);
+                    totalExtent.expandToInclude(nativeExtent);
+                }
+                result = Profile::create(srs, totalExtent.xMin(), totalExtent.yMin(), totalExtent.xMax(), totalExtent.yMax());
             }
-            result = Profile::create(srs, totalExtent.xMin(), totalExtent.yMin(), totalExtent.xMax(), totalExtent.yMax());
         }
     }
 
     // Last resort: create a global extent profile (only valid for global maps)
-    if (!result.valid() && wms_srs->isGeographic())
+    if (!result.valid() && wms_srs.valid() && wms_srs->isGeographic())
     {
-        result = osgEarth::Registry::instance()->getGlobalGeodeticProfile();
+        result = Profile::create(Profile::GLOBAL_GEODETIC);
     }
 
 
@@ -632,6 +627,15 @@ WMS::Driver::fetchTileImage(const TileKey&     key,
     if (out_response.succeeded())
     {
         image = out_response.getImage();
+    }
+    else if (out_response.errorDetail().empty() == false)
+    {
+        Config conf;
+        std::istringstream errorDetailStream(out_response.errorDetail());
+        conf.fromXML(errorDetailStream);
+        const Config* serviceEx = conf.find("serviceexception");
+        std::string msg = serviceEx ? serviceEx->value() : out_response.errorDetail();
+        OE_WARN << LC << _options->name().get() << ": Service Exception: " << msg << " (URI=" << uri << ")" << std::endl;
     }
 
     return image.release();
@@ -705,7 +709,7 @@ WMS::Driver::createURI(const TileKey& key) const
 
     std::ostringstream buf;
     buf.imbue(std::locale::classic());
-    buf << _prototype
+    buf << _prototype << std::fixed
         << "&BBOX=" << minx << "," << miny << "," << maxx << "," << maxy;
 
     std::string uri(buf.str());

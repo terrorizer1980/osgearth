@@ -1,0 +1,271 @@
+/* -*-c++-*- */
+/* osgEarth - Geospatial SDK for OpenSceneGraph
+* Copyright 2020 Pelican Mapping
+* http://osgearth.org
+*
+* osgEarth is free software; you can redistribute it and/or modify
+* it under the terms of the GNU Lesser General Public License as published by
+* the Free Software Foundation; either version 2 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU Lesser General Public License for more details.
+*
+* You should have received a copy of the GNU Lesser General Public License
+* along with this program.  If not, see <http://www.gnu.org/licenses/>
+*/
+#ifndef OSGEARTH_PROCEDURAL_BIOME
+#define OSGEARTH_PROCEDURAL_BIOME 1
+
+#include "Export"
+#include <osgEarth/Config>
+#include <osgEarth/URI>
+#include <osgEarth/Units>
+#include <osgEarth/GeoData>
+#include <osgEarth/LandCover>
+#include <osgEarth/GLUtils>
+#include <osg/BoundingBox>
+
+namespace osgEarth
+{
+    namespace Procedural
+    {
+        using namespace osgEarth;
+
+        #define NUM_ASSET_GROUPS 2
+
+        struct OSGEARTHPROCEDURAL_EXPORT AssetGroup
+        {
+            enum Type {
+                UNDEFINED = -1,
+                TREES = 0,
+                UNDERGROWTH = 1
+            };
+
+            static std::string name(Type type);
+
+            static Type type(const std::string& name);
+        };
+
+        /**
+         * Individual artwork asset withing the asset catalog.
+         */
+        class OSGEARTHPROCEDURAL_EXPORT ModelAsset
+        {
+        public:
+            OE_OPTION(std::string, name);
+            OE_OPTION(URI, modelURI);
+            OE_OPTION(URI, sideBillboardURI);
+            OE_OPTION(URI, topBillboardURI);
+            OE_OPTION(float, width);
+            OE_OPTION(float, height);
+            OE_OPTION(float, sizeVariation);
+
+            ModelAsset() { }
+            ModelAsset(const Config& conf);
+
+            Config getConfig() const;
+
+            //! Get Config from which this asset was originally loaded,
+            //! which will give the caller access to user-defined values
+            //! if they exist.
+            const Config& getSourceConfig() const {
+                return _sourceConfig;
+            }
+
+            AssetGroup::Type _group;
+
+        private:
+            Config _sourceConfig;
+        };
+
+        /**
+         * Individual artwork asset reference within a biome
+         */
+        class OSGEARTHPROCEDURAL_EXPORT LifeMapTextureAsset
+        {
+        public:
+            OE_OPTION(std::string, name);
+            OE_OPTION(URI, uri);
+            OE_OPTION(float, width);
+            OE_OPTION(float, height);
+            OE_OPTION(int, code);
+
+        public:
+            LifeMapTextureAsset() { }
+            LifeMapTextureAsset(const Config& conf);
+            Config getConfig() const;
+        };
+
+        /**
+         * Contains all assets.
+         */
+        class OSGEARTHPROCEDURAL_EXPORT AssetCatalog
+        {
+        public:
+            using Dimensions = std::array<unsigned, 2>;
+
+            AssetCatalog() { }
+            AssetCatalog(const Config& conf);
+
+            //! Model asset associated with given name
+            //! @param name Name of model asset to return
+            //! @return ModelAsset or nullptr if no match
+            const ModelAsset* getModel(const std::string& name) const;
+
+            //! Dimensions of the lifemap texture matrix (x,y)
+            unsigned getLifeMapMatrixWidth() const;
+            unsigned getLifeMapMatrixHeight() const;
+
+            //! Collection of ground textures in the lifemap matrix
+            const std::vector<LifeMapTextureAsset>& getLifeMapTextures() const;
+
+            //! Collection of special ground textures
+            const std::vector<LifeMapTextureAsset>& getSpecialTextures() const;
+
+            //! Is the catalog empty?
+            bool empty() const;
+
+        public:
+            Config getConfig() const;
+
+        protected:
+            unsigned _lifemapMatrixWidth, _lifemapMatrixHeight;
+            std::vector<LifeMapTextureAsset> _textures;
+            std::vector<LifeMapTextureAsset> _specialTextures;
+            std::unordered_map<std::string, ModelAsset> _models;
+        };
+
+        /** 
+         * A subset of graphical assets that will be used
+         * in a particular geographic region.
+         * A biome may have a "parent" biome. This means that if the Biome
+         * defines ZERO assets, it will use the parent biome's assets.
+         */
+        class OSGEARTHPROCEDURAL_EXPORT Biome
+        {
+        public:
+            Biome() { }
+            Biome(const Config& conf, AssetCatalog* assets);
+            Config getConfig() const;
+
+            OE_OPTION(std::string, id);
+            OE_OPTION(std::string, name);
+            OE_OPTION(std::string, parentName);
+
+            // points to an asset, adding in some custom parameters.
+            struct ModelAssetPointer
+            {
+                // points to the base asset in the catalog
+                const ModelAsset* asset;
+
+                // selection weight compared to other assets (default = 1.0)
+                float weight;
+
+                // coverage percentage when this asset it selected (default = 1.0)
+                float fill;
+            };
+
+            using ModelAssetPointers = std::vector<ModelAssetPointer>;
+
+            using ModelAssetGroups = ModelAssetPointers[NUM_ASSET_GROUPS];
+            ModelAssetGroups _modelgroups;
+
+            //! The assets groups represented by this biome.
+            ModelAssetGroups& assetGroups() { return _modelgroups; }
+
+            //! Collection of this biome's asset pointers for the specified asset
+            //! group, or the assets from the parent biome if this biome's asset
+            //! list is empty.
+            const ModelAssetPointers& assetPointers(int type) const;
+
+            //! The sequential biome index uses in encoded raster data
+            int index() const { return _index; }
+            
+        private:
+            int _index;
+            const Biome* _parentBiome;
+            friend class BiomeCatalog;
+        };
+
+
+        /**
+         * Mappings from land use classification types to lifemap parameters.
+         */
+        class OSGEARTHPROCEDURAL_EXPORT LifeMapValue
+        {
+        public:
+            LifeMapValue() { }
+            LifeMapValue(const Config& conf);
+            Config getConfig() const;
+
+            OE_OPTION(std::string, id);
+            OE_OPTION(float, dense);
+            OE_OPTION(float, lush);
+            OE_OPTION(float, rugged);
+            OE_OPTION(std::string, special);
+        };
+
+
+        /**
+         * Mappings from IDs to lifemap parameters.
+         */
+        class OSGEARTHPROCEDURAL_EXPORT LifeMapValueTable
+        {
+        public:
+            LifeMapValueTable() { }
+            LifeMapValueTable(const Config& conf);
+            Config getConfig() const;
+
+            OE_OPTION_VECTOR(LifeMapValue, values);
+
+            const LifeMapValue* getValue(const std::string& id) const;
+
+        private:
+            std::unordered_map<std::string, LifeMapValue> _lut;
+        };
+
+        /**
+         * Defines all biomes, assets, and land use mappings used
+         * by the procedural system.
+         */
+        class OSGEARTHPROCEDURAL_EXPORT BiomeCatalog
+        {
+        public:
+            BiomeCatalog() { }
+            BiomeCatalog(const Config& conf);
+
+            //! Fetch a biome by its sequential index (as used in raster data)
+            //! @return nullptr if no match
+            const Biome* getBiomeByIndex(int index) const;
+
+            //! Fetch a biome by its ID string
+            const Biome* getBiome(const std::string& id) const;
+
+            //! Vector of all biomes in the catalog
+            std::vector<const Biome*> getBiomes() const;
+
+            //! Asset catalog
+            const AssetCatalog& getAssets() const;
+
+            //! Table that maps land use classes to lifemap values.
+            const LifeMapValueTable* getLandUseTable() const;
+
+            //! Talbe that maps land cover classes to lifemap values.
+            const LifeMapValueTable* getLandCoverTable() const;
+
+        public:
+            Config getConfig() const;
+
+            std::atomic_int _biomeIndexGenerator;
+            AssetCatalog _assets;
+            std::shared_ptr<LifeMapValueTable> _landUseTable;
+            std::shared_ptr<LifeMapValueTable> _landCoverTable;
+            std::unordered_map<int, Biome> _biomes_by_index;
+        };
+
+} } // namespace osgEarth::Procedural
+
+#endif

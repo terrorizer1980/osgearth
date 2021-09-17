@@ -31,66 +31,6 @@
 
 using namespace osgEarth;
 
-class FutureImage : public osg::Image
-{
-public:
-
-    FutureImage(ImageLayer* layer, const TileKey& key) : osg::Image()
-    {
-        _layer = layer;
-        _key = key;
-
-        osg::observer_ptr<ImageLayer> layer_ptr(_layer);
-
-        Job<const osg::Image> job([layer_ptr, key](Cancelable* progress) mutable {
-            osg::ref_ptr<ImageLayer> safe(layer_ptr);
-            if (safe.valid()) {
-                GeoImage result = safe->createImage(key, nullptr); // progress TODO
-                return result.takeImage();
-            }
-            else return static_cast<const osg::Image*>(nullptr);
-        });
-
-        _result = job.schedule("ASYNC_LAYER");
-    }
-
-    virtual bool requiresUpdateCall() const override
-    {
-        // tricky, because if we return false here, it will
-        // never get called again.
-        return _result.isAvailable() || !_result.isAbandoned();
-    }
-
-    virtual void update(osg::NodeVisitor* nv) override
-    {
-        if (_result.isAvailable())
-        {
-            // no refptr here because we are going to steal the data.
-            osg::ref_ptr<osg::Image> i = const_cast<osg::Image*>(_result.release());
-
-            if (i.valid())
-            {
-                this->setImage(
-                    i->s(), i->t(), i->r(),
-                    i->getInternalTextureFormat(), i->getPixelFormat(), i->getDataType(),
-                    i->data(), i->getAllocationMode(),
-                    i->getPacking(),
-                    i->getRowLength());
-
-                // since we stole the data, make sure we don't double-delete it
-                i->setAllocationMode(osg::Image::NO_DELETE);
-
-                // trigger texture(s) that own this image to reapply
-                this->dirty();
-            }
-        }
-    }
-
-    osg::ref_ptr<ImageLayer> _layer;
-    TileKey _key;
-    Job<const osg::Image>::Result _result;
-};
-
 //.........................................................................
 
 CreateTileManifest::CreateTileManifest()
@@ -268,8 +208,6 @@ TerrainTileModelFactory::createStandaloneTileModel(
 
     addStandaloneLandCover(model.get(), map, key, requirements, manifest, progress);
 
-    //addPatchLayers(model.get(), map, key, filter, progress, true);
-
     // done.
     return model.release();
 }
@@ -289,7 +227,7 @@ TerrainTileModelFactory::addImageLayer(
     osg::Texture* tex = 0L;
     TextureWindow window;
     osg::Matrix scaleBiasMatrix;
-        
+
     if (imageLayer->isKeyInLegalRange(key) && imageLayer->mayHaveData(key))
     {
         if (imageLayer->useCreateTexture())
@@ -313,6 +251,9 @@ TerrainTileModelFactory::addImageLayer(
             tex->setFilter(osg::Texture::MIN_FILTER, minFilter);
             tex->setMaxAnisotropy(4.0f);
             tex->setUnRefImageDataAfterApply(false);
+
+            // prevent issues with replacing the texture in the middle of a render
+            tex->setDataVariance(osg::Object::DYNAMIC);
         }
 
         else
@@ -325,6 +266,13 @@ TerrainTileModelFactory::addImageLayer(
                     tex = createCoverageTexture(geoImage.getImage());
                 else
                     tex = createImageTexture(geoImage.getImage(), imageLayer);
+
+                // Propagate the tracking token to the texture if there is one:
+                if (tex && geoImage.getTrackingToken())
+                {
+                    tex->getOrCreateUserDataContainer()->addUserObject(
+                        geoImage.getTrackingToken());
+                }
             }
         }
     }
@@ -452,46 +400,6 @@ TerrainTileModelFactory::addColorLayers(
     }
 }
 
-#if 0
-void
-TerrainTileModelFactory::addPatchLayers(
-    TerrainTileModel* model,
-    const Map* map,
-    const TileKey&    key,
-    const CreateTileManifest& manifest,
-    ProgressCallback* progress,
-    bool fallback)
-{
-    PatchLayerVector patchLayers;
-    map->getLayers(patchLayers);
-
-    for(PatchLayerVector::const_iterator i = patchLayers.begin();
-        i != patchLayers.end();
-        ++i )
-    {
-        PatchLayer* layer = i->get();
-
-        if (!layer->isOpen())
-            continue;
-
-        if (manifest.excludes(layer))
-            continue;
-
-        if (layer->getAcceptCallback() == 0L || layer->getAcceptCallback()->acceptKey(key))
-        {
-            GeoNode node = layer->createNode(key, progress);
-            if (node.valid())
-            {
-                TerrainTilePatchLayerModel* patchModel = new TerrainTilePatchLayerModel();
-                patchModel->setPatchLayer(layer);
-                patchModel->setRevision(layer->getRevision());
-                patchModel->setNode(node.getNode());
-            }
-        }
-    }
-}
-#endif
-
 void
 TerrainTileModelFactory::addElevation(
     TerrainTileModel*            model,
@@ -553,8 +461,6 @@ TerrainTileModelFactory::addElevation(
 
     osg::ref_ptr<ElevationTexture> elevTex;
 
-    bool getNormalMap = (_options.normalMaps() == true);
-
     const bool acceptLowerRes = false;
 
     if (map->getElevationPool()->getTile(key, acceptLowerRes, elevTex, &_workingSet, progress))
@@ -565,11 +471,14 @@ TerrainTileModelFactory::addElevation(
 
         if ( elevTex.valid() )
         {
-            // Make a normal map if it doesn't already exist
-            elevTex->generateNormalMap(map, &_workingSet, progress);
+            if (_options.normalMaps() == true)
+            {
+                // Make a normal map if it doesn't already exist
+                elevTex->generateNormalMap(map, &_workingSet, progress);
 
-            if (elevTex->getNormalMapTexture())
-                elevTex->getNormalMapTexture()->setName(key.str() + ":normalmap");
+                if (elevTex->getNormalMapTexture())
+                    elevTex->getNormalMapTexture()->setName(key.str() + ":normalmap");
+            }
 
             // Made an image, so store this as a texture with no matrix.
             layerModel->setTexture( elevTex.get() );
@@ -722,75 +631,90 @@ osg::Texture*
 TerrainTileModelFactory::createImageTexture(const osg::Image* image,
                                             const ImageLayer* layer) const
 {
+    if (image == nullptr || layer == nullptr)
+        return nullptr;
+
     osg::Texture* tex = nullptr;
     bool hasMipMaps = false;
     bool isCompressed = false;
 
-    // figure out the texture compression method to use (if any)
-    std::string compressionMethod = layer->getCompressionMethod();
-    if (compressionMethod.empty())
-        compressionMethod = _options.textureCompression().get();
-
-    GLenum pixelFormat = image->getPixelFormat();
-    GLenum internalFormat = image->getInternalTextureFormat();
-
-    // Fix incorrect internal format if necessary
-    if (internalFormat == pixelFormat)
+    if (image->requiresUpdateCall())
     {
-        if (pixelFormat == GL_RGB) internalFormat = GL_RGB8;
-        else if (pixelFormat == GL_RGBA) internalFormat = GL_RGBA8;
-        else if (pixelFormat == GL_RG) internalFormat = GL_RG8;
-        else if (pixelFormat == GL_RED) internalFormat = GL_R8;
+        // image sequences and other data that updates itself
+        // shall not be mipmapped/compressed here
+        tex = new osg::Texture2D(const_cast<osg::Image*>(image));
     }
-
-    if (image->r() == 1)
+    else
     {
-        osg::ref_ptr<const osg::Image> compressed = ImageUtils::compressImage(image, compressionMethod);
-        const osg::Image* mipmapped = ImageUtils::mipmapImage(compressed.get());
-        tex = new osg::Texture2D(const_cast<osg::Image*>(mipmapped));
-        hasMipMaps = mipmapped->isMipmap();
-        isCompressed = mipmapped->isCompressed();
+        // figure out the texture compression method to use (if any)
+        std::string compressionMethod = layer->getCompressionMethod();
+        if (compressionMethod.empty())
+            compressionMethod = _options.textureCompression().get();
 
-        if (layer->getCompressionMethod() == "gpu" && !mipmapped->isCompressed())
-            tex->setInternalFormatMode(tex->USE_S3TC_DXT5_COMPRESSION);
-    }
+        GLenum pixelFormat = image->getPixelFormat();
+        GLenum internalFormat = image->getInternalTextureFormat();
+        GLenum dataType = image->getDataType();
 
-    else // if (image->r() > 1)
-    {
-        std::vector< osg::ref_ptr<osg::Image> > images;
-        ImageUtils::flattenImage(image, images);
-
-        // Make sure we are using a proper sized internal format
-        for(int i=0; i<images.size(); ++i)
+        // Fix incorrect internal format if necessary
+        if (internalFormat == pixelFormat)
         {
-            images[i]->setInternalTextureFormat(internalFormat);
+            int bits = dataType == GL_UNSIGNED_BYTE ? 8 : 16;
+            if (pixelFormat == GL_RGB) internalFormat = bits == 8 ? GL_RGB8 : GL_RGB16;
+            else if (pixelFormat == GL_RGBA) internalFormat = bits == 8 ? GL_RGBA8 : GL_RGBA16;
+            else if (pixelFormat == GL_RG) internalFormat = bits == 8 ? GL_RG8 : GL_RG16;
+            else if (pixelFormat == GL_RED) internalFormat = bits == 8 ? GL_R8 : GL_R16;
         }
-        
-        osg::ref_ptr<const osg::Image> compressed;
-        for(auto& ref : images)
-        {
-            compressed = ImageUtils::compressImage(ref.get(), compressionMethod);
-            ref = const_cast<osg::Image*>(ImageUtils::mipmapImage(compressed.get()));
 
-            if (layer->getCompressionMethod() == "gpu" && !compressed->isCompressed())
+        if (image->r() == 1)
+        {
+            osg::ref_ptr<const osg::Image> compressed = ImageUtils::compressImage(image, compressionMethod);
+            const osg::Image* mipmapped = ImageUtils::mipmapImage(compressed.get());
+            tex = new osg::Texture2D(const_cast<osg::Image*>(mipmapped));
+            hasMipMaps = mipmapped->isMipmap();
+            isCompressed = mipmapped->isCompressed();
+
+            if (layer->getCompressionMethod() == "gpu" && !mipmapped->isCompressed())
                 tex->setInternalFormatMode(tex->USE_S3TC_DXT5_COMPRESSION);
-
-            hasMipMaps = compressed->isMipmap();
-            isCompressed = compressed->isCompressed();
         }
 
-        osg::Texture2DArray* tex2dArray = new osg::Texture2DArray();
+        else // if (image->r() > 1)
+        {
+            std::vector< osg::ref_ptr<osg::Image> > images;
+            ImageUtils::flattenImage(image, images);
 
-        tex2dArray->setTextureSize(image[0].s(), image[0].t(), images.size());
-        tex2dArray->setInternalFormat(images[0]->getInternalTextureFormat());
-        tex2dArray->setSourceFormat(images[0]->getPixelFormat());
-        for (int i = 0; i < (int)images.size(); ++i)
-            tex2dArray->setImage(i, const_cast<osg::Image*>(images[i].get()));
+            // Make sure we are using a proper sized internal format
+            for (int i = 0; i < images.size(); ++i)
+            {
+                images[i]->setInternalTextureFormat(internalFormat);
+            }
 
-        tex = tex2dArray;
+            osg::ref_ptr<const osg::Image> compressed;
+            for (auto& ref : images)
+            {
+                compressed = ImageUtils::compressImage(ref.get(), compressionMethod);
+                ref = const_cast<osg::Image*>(ImageUtils::mipmapImage(compressed.get()));
+
+                hasMipMaps = compressed->isMipmap();
+                isCompressed = compressed->isCompressed();
+            }
+
+            osg::Texture2DArray* tex2dArray = new osg::Texture2DArray();
+
+            tex2dArray->setTextureSize(image[0].s(), image[0].t(), images.size());
+            tex2dArray->setInternalFormat(images[0]->getInternalTextureFormat());
+            tex2dArray->setSourceFormat(images[0]->getPixelFormat());
+            for (int i = 0; i < (int)images.size(); ++i)
+                tex2dArray->setImage(i, const_cast<osg::Image*>(images[i].get()));
+
+            tex = tex2dArray;
+
+            if (layer->getCompressionMethod() == "gpu" && !isCompressed)
+                tex->setInternalFormatMode(tex->USE_S3TC_DXT5_COMPRESSION);
+        }
+
+        tex->setDataVariance(osg::Object::STATIC);
     }
 
-    tex->setDataVariance(osg::Object::STATIC);
     tex->setWrap( osg::Texture::WRAP_S, osg::Texture::CLAMP_TO_EDGE );
     tex->setWrap( osg::Texture::WRAP_T, osg::Texture::CLAMP_TO_EDGE );
     tex->setResizeNonPowerOfTwoHint(false);
@@ -821,7 +745,7 @@ TerrainTileModelFactory::createImageTexture(const osg::Image* image,
             break;
         }
     }
-    
+
     return tex;
 }
 

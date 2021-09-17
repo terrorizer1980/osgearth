@@ -102,6 +102,12 @@ namespace osgEarth
     class OSGEARTH_EXPORT Profile : public osg::Referenced
     {
     public:
+        // well knowns
+        static std::string GLOBAL_GEODETIC;
+        static std::string GLOBAL_MERCATOR;
+        static std::string SPHERICAL_MERCATOR;
+        static std::string PLATE_CARREE;
+
         // profile types:
         enum ProfileType
         {
@@ -132,6 +138,9 @@ namespace osgEarth
             double xmin, double ymin, double xmax, double ymax,
             unsigned int numTilesWideAtLod0 =0,
             unsigned int numTilesHighAtLod0 =0 );
+
+        static const Profile* create(
+            const SpatialReference* srs);
 
         static const Profile* create(
             const std::string& srs_string,
@@ -190,10 +199,11 @@ namespace osgEarth
         /** 
          * Calculates an extent given a tile location in this profile.
          */
-        virtual GeoExtent calculateExtent( unsigned int lod, unsigned int tileX, unsigned int tileY );
+        virtual GeoExtent calculateExtent(unsigned int lod, unsigned int tileX, unsigned int tileY) const;
 
         /**
          * Deduces a profile type given an SRS string.
+         * @deprecated
          */
         static ProfileType getProfileTypeFromSRS(const std::string &srs);
 

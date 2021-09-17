@@ -22,7 +22,7 @@
 #include <osgEarth/Registry>
 #include <osgEarth/NodeUtils>
 #include <osgEarth/TerrainEngineNode>
-
+#include <osgEarth/Utils>
 
 #define LC "[GeodeticGraticule] "
 
@@ -359,7 +359,7 @@ GeodeticGraticule::setMapNode(MapNode* mapNode)
 
         if (_callback.valid())
         {
-            oldMapNode->getTerrainEngine()->removeCullCallback(_callback.get());
+            oldMapNode->getTerrainEngine()->getNode()->removeCullCallback(_callback.get());
         }
     }
 
@@ -381,7 +381,7 @@ GeodeticGraticule::setMapNode(MapNode* mapNode)
         updateGridLineVisibility();
 
         _callback = new GraticuleTerrainCallback(this);
-        mapNode->getTerrainEngine()->addCullCallback(_callback.get());
+        mapNode->getTerrainEngine()->getNode()->addCullCallback(_callback.get());
     }
 }
 
@@ -547,13 +547,15 @@ GeodeticGraticule::getViewExtent(osgUtil::CullVisitor* cullVisitor) const
         // That will disrupt our extent calculation, so we want to clamp
         // it to be between the eyepoint and the far plane.
         nearPlane = osg::clampBetween(nearPlane, 0.0, farPlane);
-        farPlane = osg::clampBetween(farPlane, 1.0, eye.length() - srs->getEllipsoid()->getRadiusPolar());
+        farPlane = osg::clampBetween(farPlane, 1.0, eye.length() - srs->getEllipsoid().getRadiusPolar());
     }
     else
     {
         double f, a, zn, zf;
         proj.getPerspective(f,a,zn,zf);
-        zf = Horizon::get(*cullVisitor)->getDistanceToVisibleHorizon();
+        osg::ref_ptr<Horizon> horizon;
+        ObjectStorage::get(cullVisitor, horizon);
+        zf = horizon.valid() ? horizon->getDistanceToVisibleHorizon() : 1e6;
         zn = zf * cullVisitor->getNearFarRatio();
         proj.makePerspective(f, a, zn, zf);
 

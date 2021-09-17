@@ -28,6 +28,7 @@
 #include <osg/Texture2D>
 #include <osg/CullFace>
 #include <osgDB/FileNameUtils>
+#include <osgDB/FileUtils>
 #include <osgDB/ReaderWriter>
 #include <osgDB/ObjectWrapper>
 #include <osgDB/Registry>
@@ -51,18 +52,43 @@ using namespace osgEarth::Util;
 class GLTFReader
 {
 public:
-    typedef osgEarth::Mutexed<
-        osgEarth::UnorderedMap<std::string, osg::ref_ptr<osg::Texture2D> >
-    > TextureCache;
+    using TextureCache = osgEarth::Mutexed<
+        std::unordered_map<std::string, osg::ref_ptr<osg::Texture2D>> >;
 
     struct NodeBuilder;
 
     static std::string ExpandFilePath(const std::string &filepath, void * userData)
     {
         const std::string& referrer = *(const std::string*)userData;
-        std::string path = osgDB::getRealPath(osgDB::isAbsolutePath(filepath) ? filepath : osgDB::concatPaths(osgDB::getFilePath(referrer), filepath));
+        URIContext context(referrer);
+        osgEarth::URI uri(filepath, context);
+        std::string path = uri.full();
         OSG_NOTICE << "ExpandFilePath: expanded " << filepath << " to " << path << std::endl;
-        return tinygltf::ExpandFilePath(path, userData);
+        return path;
+    }
+
+    static bool ReadWholeFile(std::vector<unsigned char> *out, std::string *err,
+        const std::string &filepath, void *)
+    {
+        auto result = URI(filepath).readString();
+        if (result.failed())
+        {
+            return false;
+        }
+
+        std::string str = result.getString();
+        out->resize(str.size());
+        memcpy(out->data(), str.c_str(), str.size());
+        return true;
+    }
+
+    static bool FileExists(const std::string &abs_filename, void *)
+    {
+        if (osgDB::containsServerAddress(abs_filename))
+        {
+            return true;
+        }
+        return osgDB::fileExists(abs_filename);
     }
 
     struct Env
@@ -94,9 +120,9 @@ public:
         tinygltf::TinyGLTF loader;
 
         tinygltf::FsCallbacks fs;
-        fs.FileExists = &tinygltf::FileExists;
+        fs.FileExists = &GLTFReader::FileExists;
         fs.ExpandFilePath = &GLTFReader::ExpandFilePath;
-        fs.ReadWholeFile = &tinygltf::ReadWholeFile;
+        fs.ReadWholeFile = &GLTFReader::ReadWholeFile;
         fs.WriteWholeFile = &tinygltf::WriteWholeFile;
         fs.user_data = (void*)&location;
         loader.SetFsCallbacks(fs);
@@ -112,15 +138,17 @@ public:
                 return osgDB::ReaderWriter::ReadResult::FILE_NOT_FOUND;
             }
 
+            std::string baseDir = osgDB::getFilePath(location);
+
             std::string mem = rr.getString();
 
             if (isBinary)
             {
-                loader.LoadBinaryFromMemory(&model, &err, &warn, (const unsigned char*)mem.data(), mem.size(), location, REQUIRE_VERSION, &opt);
+                loader.LoadBinaryFromMemory(&model, &err, &warn, (const unsigned char*)mem.data(), mem.size(), baseDir, REQUIRE_VERSION, &opt);
             }
             else
             {
-                loader.LoadASCIIFromString(&model, &err, &warn, mem.data(), mem.size(), location, REQUIRE_VERSION, &opt);
+                loader.LoadASCIIFromString(&model, &err, &warn, mem.data(), mem.size(), baseDir, REQUIRE_VERSION, &opt);
             }
         }
         else
@@ -152,9 +180,9 @@ public:
         tinygltf::TinyGLTF loader;
 
         tinygltf::FsCallbacks fs;
-        fs.FileExists = &tinygltf::FileExists;
+        fs.FileExists = &GLTFReader::FileExists;
         fs.ExpandFilePath = &GLTFReader::ExpandFilePath;
-        fs.ReadWholeFile = &tinygltf::ReadWholeFile;
+        fs.ReadWholeFile = &GLTFReader::ReadWholeFile;
         fs.WriteWholeFile = &tinygltf::WriteWholeFile;
         fs.user_data = (void*)&location;
         loader.SetFsCallbacks(fs);
@@ -175,7 +203,15 @@ public:
             }
         }
 
-        loader.LoadBinaryFromMemory(&model, &err, &warn, reinterpret_cast<const unsigned char*>(data->c_str()), data->size(), "", REQUIRE_VERSION, &opt);
+        std::string magic(*data, 0, 4);
+        if (magic == "glTF")
+        {
+            loader.LoadBinaryFromMemory(&model, &err, &warn, reinterpret_cast<const unsigned char*>(data->c_str()), data->size(), "", REQUIRE_VERSION, &opt);
+        }
+        else
+        {
+            loader.LoadASCIIFromString(&model, &err, &warn, data->c_str(), data->size(), "", REQUIRE_VERSION, &opt);
+        }
 
         if (!err.empty()) {
             OE_WARN << LC << "gltf Error loading " << location << std::endl;
@@ -428,7 +464,7 @@ public:
                     img->setInternalTextureFormat(GL_RGBA8);
 
                 tex = new osg::Texture2D(img.get());
-                tex->setUnRefImageDataAfterApply(imageEmbedded);
+                //tex->setUnRefImageDataAfterApply(imageEmbedded);
                 tex->setResizeNonPowerOfTwoHint(false);
                 tex->setDataVariance(osg::Object::STATIC);
 

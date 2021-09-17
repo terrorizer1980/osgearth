@@ -31,6 +31,7 @@
 #include <osg/MatrixTransform>
 #include <osgDB/Options>
 #include <osgUtil/CullVisitor>
+#include <osgEarth/LoadableNode>
 
 
 /**
@@ -41,12 +42,6 @@
 namespace osgEarth { namespace Contrib { namespace ThreeDTiles
 {
     using namespace osgEarth;
-
-    enum RefinePolicy
-    {
-        REFINE_REPLACE,
-        REFINE_ADD
-    };
 
     struct LoadContext
     {
@@ -148,7 +143,7 @@ namespace osgEarth { namespace Contrib { namespace ThreeDTiles
     /**
      * Node that renders a 3D-Tiles Tile
      */
-    class OSGEARTH_EXPORT ThreeDTileNode : public osg::MatrixTransform
+    class OSGEARTH_EXPORT ThreeDTileNode : public osg::MatrixTransform, public LoadableNode
     {
     public:
         ThreeDTileNode(ThreeDTilesetNode* tileset, Tile* tile, bool immediateLoad, osgDB::Options* options);
@@ -176,7 +171,7 @@ namespace osgEarth { namespace Contrib { namespace ThreeDTiles
 
         const Tile* getTile() const { return _tile.get(); }
 
-        RefinePolicy getRefine() const { return _refine; }
+        RefinePolicy getRefinePolicy() const { return _refine; }
 
         unsigned int getLastCulledFrameNumber() const;
         float getLastCulledFrameTime() const;
@@ -192,6 +187,83 @@ namespace osgEarth { namespace Contrib { namespace ThreeDTiles
 
         void setParentTile(ThreeDTileNode* parentTile);
 
+    public: // LoadableNode
+        void load()
+        {
+            // Load the content for this tile and attempt to resolve it.
+            requestContent(nullptr);
+            resolveContent();
+
+            // If this tile has children we also need to load their content so this node is ready to subdivide
+            if (_children.valid())
+            {
+                for (unsigned int i = 0; i < _children->getNumChildren(); i++)
+                {
+                    osg::ref_ptr< ThreeDTileNode > childTile = dynamic_cast<ThreeDTileNode*>(_children->getChild(i));
+                    if (childTile.valid())
+                    {
+                        if (childTile->hasContent() && !childTile->isContentReady())
+                        {
+                            childTile->requestContent(nullptr);   
+                            childTile->resolveContent();
+                        }
+                    }
+                }
+            }
+        }
+
+        void unload()
+        {
+            unloadContent();
+        }
+
+        bool isHighestResolution() const
+        {
+            return getNumChildren() == 0;
+        }
+
+        virtual bool isLoaded() const
+        {
+            auto t = const_cast<ThreeDTileNode*>(this);
+
+            // Check to see if the content of this tile is loaded.
+            bool isContentReady = false;
+            if (t->hasContent())
+            {
+                isContentReady = t->isContentReady();
+            }
+
+            // If this tile has children, check to make sure it's content is loaded as well.  This will allow this tile to subdivide property.
+            bool areChildrenReady = true;
+            if (_children.valid())
+            {
+                for (unsigned int i = 0; i < _children->getNumChildren(); i++)
+                {
+                    osg::ref_ptr< ThreeDTileNode > childTile = dynamic_cast<ThreeDTileNode*>(_children->getChild(i));
+                    if (childTile.valid())
+                    {
+                        if (childTile->hasContent() && !childTile->isContentReady())
+                        {
+                            areChildrenReady = false;
+                        }
+                    }
+                }
+            }
+
+            return areChildrenReady && isContentReady;
+        }
+
+        virtual bool getAutoUnload() const
+        {
+            return _autoUnload;
+        }
+
+        virtual void setAutoUnload(bool value)
+        {
+            _autoUnload = value;
+        }
+
+
     private:
 
         void createDebugBounds();
@@ -206,7 +278,7 @@ namespace osgEarth { namespace Contrib { namespace ThreeDTiles
         osg::ref_ptr< osg::Node > _boundsDebug;
         ThreeDTilesetNode* _tileset;
 
-        Threading::Future<osg::Node> _contentFuture;
+        Threading::Future< osg::ref_ptr<osg::Node> > _contentFuture;
         bool _requestedContent;
 
         bool _immediateLoad;
@@ -224,6 +296,8 @@ namespace osgEarth { namespace Contrib { namespace ThreeDTiles
 
         unsigned int _lastCulledFrameNumber;
         float _lastCulledFrameTime;
+
+        bool _autoUnload = true;
 
         RefinePolicy _refine;
 

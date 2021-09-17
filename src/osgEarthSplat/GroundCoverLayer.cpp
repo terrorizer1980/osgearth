@@ -249,6 +249,7 @@ GroundCoverLayer::init()
 
     _debug = (::getenv("OSGEARTH_GROUNDCOVER_DEBUG") != NULL);
 
+    _frameLastUpdate = 0U;
 }
 
 GroundCoverLayer::~GroundCoverLayer()
@@ -269,8 +270,10 @@ GroundCoverLayer::openImplementation()
     setCullCallback(new ZoneSelector(this));
 
     // this layer will do its own custom rendering
-    _renderer = new Renderer(this);
-    setDrawCallback(_renderer.get());
+    _renderer = std::make_shared<Renderer>(this);
+    //setRenderer(_renderer.get());
+    //setRenderer(_renderer.get());
+    //setDrawCallback(_renderer.get());
 
     installDefaultOpacityShader();
 
@@ -282,7 +285,8 @@ GroundCoverLayer::closeImplementation()
 {
     releaseGLObjects(NULL);
 
-    setDrawCallback(NULL);
+    //setDrawCallback(NULL);
+    //setRenderer(nullptr);
     _renderer = NULL;
 
     setAcceptCallback(NULL);
@@ -403,6 +407,21 @@ GroundCoverLayer::getUseAlphaToCoverage() const
 }
 
 void
+GroundCoverLayer::update(osg::NodeVisitor& nv)
+{
+    int frame = nv.getFrameStamp()->getFrameNumber();
+
+    if (frame > _frameLastUpdate &&
+        _renderer && 
+        _renderer->_frameLastActive > 0u &&
+        (frame - _renderer->_frameLastActive) > 2)
+    {
+        releaseGLObjects(nullptr);
+        _renderer->_frameLastActive = 0u;
+    }
+}
+
+void
 GroundCoverLayer::addedToMap(const Map* map)
 {
     PatchLayer::addedToMap(map);
@@ -443,7 +462,7 @@ GroundCoverLayer::addedToMap(const Map* map)
     }
 
     // calculate the tile width based on the LOD:
-    if (_renderer.valid() && getZones().size() > 0)
+    if (_renderer && getZones().size() > 0)
     {
         unsigned lod = getLOD();
         unsigned tx, ty;
@@ -640,7 +659,7 @@ GroundCoverLayer::resizeGLObjectBuffers(unsigned maxSize)
         i->get()->resizeGLObjectBuffers(maxSize);
     }
 
-    if (_renderer.valid())
+    if (_renderer)
         _renderer->resizeGLObjectBuffers(maxSize);
 
     PatchLayer::resizeGLObjectBuffers(maxSize);
@@ -656,23 +675,22 @@ GroundCoverLayer::releaseGLObjects(osg::State* state) const
         i->get()->releaseGLObjects(state);
     }
 
-    if (_renderer.valid())
+    if (_renderer)
     {
         _renderer->releaseGLObjects(state);
     }
 
     PatchLayer::releaseGLObjects(state);
 
-    if (isOpen())
+    if (isOpen() &&
+        _atlas.valid() &&
+        _atlas->getUnRefImageDataAfterApply() == false)
     {
-        if (_atlas.valid())
-        {
-            // Workaround for
-            // https://github.com/openscenegraph/OpenSceneGraph/issues/1013
-            for (unsigned i = 0; i < _atlas->getNumImages(); ++i)
-                if (_atlas->getImage(i))
-                    _atlas->getImage(i)->dirty();
-        }
+        // Workaround for
+        // https://github.com/openscenegraph/OpenSceneGraph/issues/1013
+        for (unsigned i = 0; i < _atlas->getNumImages(); ++i)
+            if (_atlas->getImage(i))
+                _atlas->getImage(i)->dirty();
     }
 }
 
@@ -742,6 +760,7 @@ namespace
         return geom;
     }
 
+#if 0
     osg::Geometry* loadShape()
     {
         //osg::ref_ptr<osg::Node> node = osgDB::readRefNodeFile("D:/data/models/rockinsoil/RockSoil.3DS.osg");
@@ -753,6 +772,7 @@ namespace
         
         return cruncher._geom.release();
     }
+#endif
 }
 
 osg::Geometry*
@@ -762,9 +782,9 @@ GroundCoverLayer::createGeometry() const
 
     if (_isModel)
     {
-        out_geom = loadShape();
-        out_geom->setUseVertexBufferObjects(true);
-        out_geom->setUseDisplayList(false);
+        //out_geom = loadShape();
+        //out_geom->setUseVertexBufferObjects(true);
+        //out_geom->setUseDisplayList(false);
         return out_geom;
     }
     else
@@ -819,11 +839,15 @@ GroundCoverLayer::Renderer::Renderer(GroundCoverLayer* layer)
     _computeStateSet->setAttribute(_computeProgram, osg::StateAttribute::ON);
 
     _counter = 0;
+
+    _frameLastActive = ~0U;
 }
 
 void
-GroundCoverLayer::Renderer::draw(osg::RenderInfo& ri, const PatchLayer::TileBatch* tiles)
+GroundCoverLayer::Renderer::draw(osg::RenderInfo& ri, const TileBatch& input)
 {
+    _frameLastActive = ri.getState()->getFrameStamp()->getFrameNumber();
+
     DrawState& ds = _drawStateBuffer[ri.getContextID()];
     ds._renderer = this;
     osg::State* state = ri.getState();
@@ -835,10 +859,10 @@ GroundCoverLayer::Renderer::draw(osg::RenderInfo& ri, const PatchLayer::TileBatc
 
     // Push the pre-gen culling shader and run it:
     const ZoneSA* sa = ZoneSA::extract(ri.getState());
-    osg::ref_ptr<InstanceCloud>& instancer = ds._instancers[sa->_obj];
+    osg::ref_ptr<LegacyInstanceCloud>& instancer = ds._instancers[sa->_obj];
     if (!instancer.valid())
     {
-        instancer = new InstanceCloud();
+        instancer = new LegacyInstanceCloud();
         ds._lastTileBatchID = -1;
         ds._uniforms.clear();
     }
@@ -850,9 +874,18 @@ GroundCoverLayer::Renderer::draw(osg::RenderInfo& ri, const PatchLayer::TileBatc
     bool needsCompute = sa != pcd._previousZoneSA;
     pcd._previousZoneSA = sa;
 
-    if (ds._lastTileBatchID != tiles->getBatchID())
+    std::size_t batch_id(0);
+    for (auto tile_ptr : input._tiles)
     {
-        ds._lastTileBatchID = tiles->getBatchID();
+        batch_id = hash_value_unsigned(
+            batch_id,
+            tile_ptr->getKey().hash(),
+            (std::size_t)tile_ptr->getRevision());
+    }
+
+    if (ds._lastTileBatchID != batch_id)
+    {
+        ds._lastTileBatchID = batch_id;
         needsCompute = true;
     }
 
@@ -874,10 +907,15 @@ GroundCoverLayer::Renderer::draw(osg::RenderInfo& ri, const PatchLayer::TileBatc
         state->apply(_computeStateSet.get());
         applyLocalState(ri, ds);
 
-        instancer->allocateGLObjects(ri, tiles->size());
+        instancer->allocateGLObjects(ri, input.tiles().size());
         instancer->preCull(ri);
         _pass = 0;
-        tiles->drawTiles(ri);
+        for (auto tile_ptr : input.tiles())
+        {
+            tile_ptr->apply(ri, input.env());
+            visitTile(ri, tile_ptr);
+        }
+        //tiles->drawTiles(ri);
         instancer->postCull(ri);
 
         // restore previous program
@@ -886,7 +924,12 @@ GroundCoverLayer::Renderer::draw(osg::RenderInfo& ri, const PatchLayer::TileBatc
         // rendering pass:
         applyLocalState(ri, ds);
         _pass = 1;
-        tiles->drawTiles(ri);
+        for (auto tile_ptr : input.tiles())
+        {
+            tile_ptr->apply(ri, input.env());
+            visitTile(ri, tile_ptr);
+        }
+        //tiles->drawTiles(ri);
 
         state->popStateSet();
     }
@@ -895,7 +938,12 @@ GroundCoverLayer::Renderer::draw(osg::RenderInfo& ri, const PatchLayer::TileBatc
     {
         applyLocalState(ri, ds);
         _pass = 1;
-        tiles->drawTiles(ri);
+        for (auto tile_ptr : input.tiles())
+        {
+            tile_ptr->apply(ri, input.env());
+            visitTile(ri, tile_ptr);
+        }
+        //tiles->drawTiles(ri);
 
         instancer->endFrame(ri);
     }
@@ -931,7 +979,7 @@ GroundCoverLayer::Renderer::applyLocalState(osg::RenderInfo& ri, DrawState& ds)
 
     // Check for initialization in this zone:
     const BiomeZone* bz = ZoneSA::extract(ri.getState())->_obj;
-    osg::ref_ptr<InstanceCloud>& instancer = ds._instancers[bz];
+    osg::ref_ptr<LegacyInstanceCloud>& instancer = ds._instancers[bz];
 
     if (!instancer->getGeometry() || u._numInstances1D == 0)
     {
@@ -975,17 +1023,14 @@ GroundCoverLayer::Renderer::applyLocalState(osg::RenderInfo& ri, DrawState& ds)
 }
 
 void
-GroundCoverLayer::Renderer::drawTile(osg::RenderInfo& ri, const PatchLayer::DrawContext& tile)
+GroundCoverLayer::Renderer::visitTile(osg::RenderInfo& ri, const TileState* tile)
 {
     const ZoneSA* sa = ZoneSA::extract(ri.getState());
     DrawState& ds = _drawStateBuffer[ri.getContextID()];
-    osg::ref_ptr<InstanceCloud>& instancer = ds._instancers[sa->_obj];
+    osg::ref_ptr<LegacyInstanceCloud>& instancer = ds._instancers[sa->_obj];
     const osg::Program::PerContextProgram* pcp = ri.getState()->getLastAppliedProgramObject();
-    if (!pcp)
-    {
-        OE_WARN << "nullptr PCP in Renderer::drawTile, how odd" << std::endl;
-        return;
-    }
+
+    OE_SOFT_ASSERT_AND_RETURN(pcp != nullptr, void());
 
     UniformState& u = ds._uniforms[pcp];
 
@@ -995,10 +1040,10 @@ GroundCoverLayer::Renderer::drawTile(osg::RenderInfo& ri, const PatchLayer::Draw
 
         if (u._computeDataUL >= 0)
         {
-            u._computeData[0] = tile._tileBBox->xMin();
-            u._computeData[1] = tile._tileBBox->yMin();
-            u._computeData[2] = tile._tileBBox->xMax();
-            u._computeData[3] = tile._tileBBox->yMax();
+            u._computeData[0] = tile->getBBox().xMin();
+            u._computeData[1] = tile->getBBox().yMin();
+            u._computeData[2] = tile->getBBox().xMax();
+            u._computeData[3] = tile->getBBox().yMax();
 
             u._computeData[4] = (float)u._tileCounter;
 
@@ -1036,7 +1081,7 @@ GroundCoverLayer::Renderer::releaseGLObjects(osg::State* state) const
 
         for (const auto& i : ds._instancers)
         {
-            InstanceCloud* cloud = i.second.get();
+            LegacyInstanceCloud* cloud = i.second.get();
             if (cloud)
             {
                 cloud->releaseGLObjects(state);
@@ -1054,7 +1099,7 @@ GroundCoverLayer::Renderer::releaseGLObjects(osg::State* state) const
 
             for (const auto& i : ds._instancers)
             {
-                InstanceCloud* cloud = i.second.get();
+                LegacyInstanceCloud* cloud = i.second.get();
                 if (cloud)
                 {
                     cloud->releaseGLObjects(state);
@@ -1169,6 +1214,7 @@ GroundCoverLayer::loadAssets()
                         _cache[uri] = data->_sideImage.get();
                         data->_sideImageAtlasIndex = _atlasImages.size();
                        _atlasImages.push_back(data->_sideImage.get());
+                       OE_DEBUG << LC << "Loaded \"" << uri.full() << "\"" << std::endl;
                     }
                 }
 
@@ -1443,7 +1489,7 @@ GroundCoverLayer::createLUTShader() const
     lutbuf <<
         "bool oe_gc_getLandCoverGroup(in int zone, in int code, out oe_gc_LandCoverGroup result) { \n";
 
-    UnorderedSet<std::string> exprs;
+    std::unordered_set<std::string> exprs;
     std::stringstream exprBuf;
 
     for(int a=0; a<_liveAssets.size(); ++a)

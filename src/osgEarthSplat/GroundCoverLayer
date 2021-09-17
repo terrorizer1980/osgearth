@@ -24,10 +24,11 @@
 
 #include "Export"
 #include "Biome"
+#include "OldInstanceCloud"
+
 #include <osgEarth/PatchLayer>
 #include <osgEarth/LayerReference>
 #include <osgEarth/LandCoverLayer>
-#include <osgEarth/InstanceCloud>
 #include <osgEarth/VirtualProgram>
 
 namespace osgEarth { namespace Splat
@@ -115,7 +116,17 @@ namespace osgEarth { namespace Splat
 
         virtual void prepareForRendering(TerrainEngine*) override;
 
+
+    public: // PatchLayer API
+
+        TileRenderer* getRenderer() const override {
+            return _renderer.get();
+        }
+
     public:
+
+        //! Update traversal
+        virtual void update(osg::NodeVisitor& nv) override;
 
         //! Called when this layer is added to the map
         virtual void addedToMap(const Map* map) override;
@@ -142,8 +153,8 @@ namespace osgEarth { namespace Splat
         {
             GroundCoverLayer* _layer;
             LayerAcceptor(GroundCoverLayer* layer) : _layer(layer) { }
-            bool acceptLayer(osg::NodeVisitor& nv, const osg::Camera* camera) const;
-            bool acceptKey(const TileKey& key) const;
+            bool acceptLayer(osg::NodeVisitor& nv, const osg::Camera* camera) const override;
+            bool acceptKey(const TileKey& key) const override;
         };
         friend struct LayerAcceptor;
 
@@ -151,12 +162,12 @@ namespace osgEarth { namespace Splat
         {
             GroundCoverLayer* _layer;
             ZoneSelector(GroundCoverLayer* layer) : _layer(layer) { }
-            void operator()(osg::Node*, osg::NodeVisitor*) const;
+            void operator()(osg::Node*, osg::NodeVisitor*) const override;
         };
         friend struct ZoneSelector;
 
         // Custom GL renderer for ground cover
-        struct Renderer : public PatchLayer::DrawCallback
+        struct Renderer : public TileRenderer
         {
             Renderer(GroundCoverLayer* layer);
             
@@ -178,12 +189,12 @@ namespace osgEarth { namespace Splat
             struct DrawState
             {
                 // Geometry differs by zone/groundcover settings
-                typedef UnorderedMap<const void*, osg::ref_ptr<InstanceCloud> > InstancerPerGroundCover;
+                using InstancerPerGroundCover = std::unordered_map<const void*, osg::ref_ptr<LegacyInstanceCloud>>;
                 InstancerPerGroundCover _instancers;
 
                 Renderer* _renderer;
 
-                typedef UnorderedMap<const void*, UniformState> UniformsPerPCP;
+                using UniformsPerPCP = std::unordered_map<const void*, UniformState>;
                 UniformsPerPCP _uniforms;
 
                 osg::Matrixd _mvp;
@@ -199,9 +210,12 @@ namespace osgEarth { namespace Splat
 
             void applyLocalState(osg::RenderInfo& ri, DrawState& ds);
 
+            // TileRenderer:
+            void draw(osg::RenderInfo& ri, const TileBatch& tiles) override;
             // DrawCallback API
-            void draw(osg::RenderInfo& ri, const TileBatch* tiles);
-            void drawTile(osg::RenderInfo& ri, const DrawContext& tile);
+            //void visitTileBatch(osg::RenderInfo& ri, const TileBatch* tiles) override;
+            //void visitTile(osg::RenderInfo& ri, const DrawContext& tile) override;
+            void visitTile(osg::RenderInfo& ri, const TileState* tile);
 
             void resizeGLObjectBuffers(unsigned maxSize);
             void releaseGLObjects(osg::State* state) const;
@@ -216,13 +230,16 @@ namespace osgEarth { namespace Splat
             osg::Program* _computeProgram;
             int _counter;
             float _spacing;
+
+            std::atomic<int> _frameLastActive;
         };
 
-        osg::ref_ptr<Renderer> _renderer;
+        std::shared_ptr<Renderer> _renderer;
         bool _isModel;
         bool _debug;
         osg::ref_ptr<osg::Drawable> _debugDrawable;
         osg::ref_ptr<osg::Texture> _atlas;
+        int _frameLastUpdate;
 
         struct PerCameraData {
             const osg::StateAttribute* _previousZoneSA;

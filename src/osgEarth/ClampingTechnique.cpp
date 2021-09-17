@@ -24,6 +24,7 @@
 #include <osgEarth/CullingUtils>
 #include <osgEarth/Registry>
 #include <osgEarth/Shaders>
+#include <osgEarth/CameraUtils>
 
 #include <osg/Depth>
 #include <osg/PolygonMode>
@@ -38,6 +39,8 @@
 //#undef DUMP_RTT_IMAGE
 
 //#define TIME_RTT_CAMERA 1
+
+//#define SUPPORT_Z
 
 using namespace osgEarth;
 using namespace osgEarth::Util;
@@ -82,8 +85,9 @@ namespace
         unsigned _renderLeafCount;
 
         META_Object(osgEarth,LocalPerViewData);
-        LocalPerViewData() { }
-        LocalPerViewData(const LocalPerViewData& rhs, const osg::CopyOp& co) { }
+        LocalPerViewData() : _renderLeafCount(0) { }
+        LocalPerViewData(const LocalPerViewData& rhs, const osg::CopyOp& co) 
+           : _renderLeafCount(0) { }
         
         void resizeGLObjectBuffers(unsigned maxSize) {
             if (_rttTexture.valid())
@@ -214,7 +218,7 @@ ClampingTechnique::setUpCamera(OverlayDecorator::TechRTTParams& params)
         osg::Uniform::FLOAT_MAT4);
 
     // We use this define to tell the terrain it's a depth-only camera
-    rttStateSet->setDefine("OE_IS_DEPTH_CAMERA");
+    CameraUtils::setIsDepthCamera(params._rttCamera.get());
 
     // install a VP on the stateset that cancels out any higher-up VP code.
     // This will prevent things like VPs on the main camera (e.g., log depth buffer)
@@ -375,7 +379,7 @@ ClampingTechnique::cullOverlayGroup(OverlayDecorator::TechRTTParams& params,
 
         //OE_NOTICE << "HD = " << std::setprecision(8) << float(*params._horizonDistance) << std::endl;
 
-#if SUPPORT_Z
+#ifdef SUPPORT_Z
         osg::Matrix depthClipToDepthView;
         depthClipToDepthView.invert( depthViewToDepthClip );
         local._depthClipToDepthViewUniform->set( depthClipToDepthView );

@@ -176,6 +176,16 @@ MBTilesImageLayer::writeImageImplementation(const TileKey& key, const osg::Image
     return _driver.write( key, image, progress );
 }
 
+bool MBTilesImageLayer::getMetaData(const std::string& name, std::string& value)
+{
+    return _driver.getMetaData(name, value);
+}
+
+bool MBTilesImageLayer::putMetaData(const std::string& name, const std::string& value)
+{
+    return _driver.putMetaData(name, value);
+}
+
 //...................................................................
 
 Config
@@ -297,6 +307,15 @@ MBTilesElevationLayer::writeHeightFieldImplementation(const TileKey& key, const 
     }
 }
 
+bool MBTilesElevationLayer::getMetaData(const std::string& name, std::string& value)
+{
+    return _driver.getMetaData(name, value);
+}
+
+bool MBTilesElevationLayer::putMetaData(const std::string& name, const std::string& value)
+{
+    return _driver.putMetaData(name, value);
+}
 
 //...................................................................
 
@@ -311,6 +330,13 @@ MBTiles::Driver::Driver() :
     _mutex("MBTiles Driver(OE)")
 {
     //nop
+}
+
+Driver::~Driver()
+{
+    sqlite3* database = (sqlite3*)_database;
+    if (database)
+        sqlite3_close_v2(database);
 }
 
 Status
@@ -496,7 +522,7 @@ MBTiles::Driver::open(
                 if (profileStr.empty() == false)
                     OE_WARN << LC << "Profile \"" << profileStr << "\" not recognized; defaulting to spherical-mercator\n";
 
-                profile = Profile::create("spherical-mercator");
+                profile = Profile::create(Profile::SPHERICAL_MERCATOR);
             }
 
             inout_profile = profile;
@@ -518,7 +544,12 @@ MBTiles::Driver::open(
                 double maxLon = osgEarth::Util::as<double>(tokens[2], 0.0);
                 double maxLat = osgEarth::Util::as<double>(tokens[3], 0.0);
 
-                GeoExtent extent(osgEarth::SpatialReference::get("wgs84"), minLon, minLat, maxLon, maxLat);
+                GeoExtent extent;
+                if (profile)
+                    extent = GeoExtent(profile->getSRS()->getGeographicSRS(), minLon, minLat, maxLon, maxLat);
+                else
+                    extent = GeoExtent(osgEarth::SpatialReference::get("wgs84"), minLon, minLat, maxLon, maxLat);
+
                 if (extent.isValid())
                 {
                     // Using 0 for the minLevel is not technically correct, but we use it instead of the proper minLevel to force osgEarth to subdivide
@@ -958,9 +989,17 @@ MBTiles::Driver::setDataExtents(const DataExtentList& values)
             e.expandToInclude(values[i]);
         }
 
-        // Convert the bounds to wgs84
-        osg::ref_ptr<const Profile> gg = Profile::create("global-geodetic");
-        GeoExtent bounds = gg->clampAndTransformExtent(e);
+        // Convert the bounds to geographic
+        GeoExtent bounds;
+        if (e.getSRS()->isGeographic())
+        {
+            bounds = e;
+        }
+        else
+        {
+            osg::ref_ptr<const Profile> gg = Profile::create(Profile::GLOBAL_GEODETIC);
+            bounds = gg->clampAndTransformExtent(e);
+        }
         std::stringstream boundsStr;
         boundsStr << bounds.xMin() << "," << bounds.yMin() << "," << bounds.xMax() << "," << bounds.yMax();
         putMetaData("bounds", boundsStr.str());

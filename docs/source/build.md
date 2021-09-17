@@ -21,7 +21,7 @@ vcpkg install osg:x64-windows gdal:x64-windows curl:x64-windows
 For full functionality, you can install optional dependences as well:
 
 ```
-vcpkg install sqlite3:x64-windows protobuf:x64-windows geos:x64-windows blend2d:x64-windows webp:x64-windows basisu:x64-windows draco:x64-windows libzip:x64-windows
+vcpkg install sqlite3:x64-windows protobuf:x64-windows geos:x64-windows blend2d:x64-windows libwebp:x64-windows basisu:x64-windows draco:x64-windows libzip:x64-windows
 ```
 
 This will take awhile the first time you run it as this pulls down lots of dependencies, so go get a cup of coffee.
@@ -33,9 +33,11 @@ Once all the dependencies are built, you’ll need to actually build osgEarth.
 Pull down the source from GitHub and create a ```build``` folder for your out-of-source build. We always recommend doing an out-of-source build to avoid problems down the road!
 
 ```
-git clone https://github.com/gwaldron/osgearth.git
+git clone --recurse-submodules https://github.com/gwaldron/osgearth.git osgearth
 mkdir build
 ```
+
+This will clone the repository into a folder called `osgearth` and pull down all the submodules.
 
 **Step 3 - Configure CMake**
 

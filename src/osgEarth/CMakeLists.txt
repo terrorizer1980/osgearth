@@ -56,7 +56,6 @@ SET(LIB_NAME osgEarth)
 
 set(TARGET_GLSL
     CascadeDraping.glsl
-    ClipPlane.glsl
     DepthOffset.glsl
     Draping.glsl
     DrawInstancedAttribute.glsl
@@ -134,6 +133,7 @@ SET(LIB_PUBLIC_HEADERS
     ElevationPool
     ElevationRanges
     ElevationQuery
+    Ellipsoid
     EllipsoidIntersector
     Endian
     Export
@@ -141,6 +141,7 @@ SET(LIB_PUBLIC_HEADERS
     FadeEffect
     FileUtils
     Fog
+    FrameClock
     GDAL
     GDALDEM
     GeoCommon
@@ -159,7 +160,6 @@ SET(LIB_PUBLIC_HEADERS
     ImageMosaic
     ImageToHeightFieldConverter
     ImageUtils
-    ImGuiUtils
     InstanceBuilder
     InstanceCloud
     IntersectionPicker
@@ -174,10 +174,13 @@ SET(LIB_PUBLIC_HEADERS
     Lighting
     LineDrawable
     LineFunctor
+    LoadableNode
     Locators
     LocalTangentPlane
+    MaterialLoader
     Math
     Map
+    MapboxGLImageLayer
     MapCallback
     MapInfo
     MapModelChange
@@ -195,6 +198,7 @@ SET(LIB_PUBLIC_HEADERS
     NodeUtils
     Notify
     optional
+    ObjectIDPicker
     ObjectIndex
     OverlayDecorator
     PagedNode
@@ -208,6 +212,7 @@ SET(LIB_PUBLIC_HEADERS
     Profile
     Progress
     Random
+    RefinePolicy
     Registry
     ResourceReleaser
     Revisioning
@@ -216,9 +221,11 @@ SET(LIB_PUBLIC_HEADERS
     ScreenSpaceLayoutImpl
     ScreenSpaceLayoutDeclutter
     ScreenSpaceLayoutCallout
+    SDF
     Shaders
     ShaderFactory
     ShaderGenerator
+    ShaderLayer
     ShaderLoader
     ShaderMerger
     ShaderUtils
@@ -241,6 +248,7 @@ SET(LIB_PUBLIC_HEADERS
     TerrainTileNode
     Tessellator
     Text
+    TextureBuffer
     ThreeDTilesLayer
     TileKey
     TileLayer
@@ -254,7 +262,6 @@ SET(LIB_PUBLIC_HEADERS
     TileVisitor
     TileCache
     TimeControl
-    TraversalData
     Threading
     TMS
     Units
@@ -311,6 +318,7 @@ SET(LIB_PUBLIC_HEADERS
     SkyView
     StarData
     TerrainProfile
+    TextureArena
     TileIndex
     TileIndexBuilder
     TFSPackager
@@ -321,6 +329,7 @@ SET(LIB_PUBLIC_HEADERS
     ViewFitter
 
     AltitudeFilter
+    AttributesFilter
     BufferFilter
     BuildGeometryFilter
     BuildTextFilter
@@ -334,6 +343,8 @@ SET(LIB_PUBLIC_HEADERS
     FeatureDisplayLayout
     FeatureElevationLayer
     FeatureImageLayer
+    FeatureSDFLayer
+    FeatureRasterizer
     FeatureIndex
     TerrainConstraintLayer
     FeatureModelGraph
@@ -362,6 +373,7 @@ SET(LIB_PUBLIC_HEADERS
     SubstituteModelFilter
     TessellateOperator
     TextSymbolizer
+    TextureArena.cpp
     TFS
     TransformFilter
     WingedEdgeMesh
@@ -440,8 +452,29 @@ SET(LIB_PUBLIC_HEADERS
 
     FileGDBFeatureSource
 
+    SDF
+
     ${OSGEARTH_BUILDCONFIG_HEADER}
 )
+
+if(OSGEARTH_ENABLE_IMGUI)
+    set(LIB_PUBLIC_HEADERS_IMGUI
+        ImGui/ImGui
+        ImGui/LayersGUI
+        ImGui/NetworkMonitorGUI
+        ImGui/NotifyGUI
+        ImGui/SceneGraphGUI
+        ImGui/SearchGUI
+        ImGui/TextureInspectorGUI
+        ImGui/ViewpointsGUI
+        ImGui/SystemGUI
+        ImGui/EphemerisGUI
+        ImGui/ShaderGUI
+        ImGui/TerrainGUI
+        ImGui/TerrainEditGUI
+        ImGui/CameraGUI
+        )
+endif()
 
 
 IF (NOT TINYXML_FOUND)
@@ -449,6 +482,7 @@ IF (NOT TINYXML_FOUND)
         ${LIB_PUBLIC_HEADERS}
         tinystr.h
         tinyxml.h
+        weemesh.h
     )
 ENDIF (NOT TINYXML_FOUND)
 
@@ -524,11 +558,13 @@ set(TARGET_SRC
     ElevationPool.cpp
     ElevationRanges.cpp
     ElevationQuery.cpp
+    Ellipsoid.cpp
     EllipsoidIntersector.cpp
     Extension.cpp
     FadeEffect.cpp
     FileUtils.cpp
     Fog.cpp
+    FrameClock.cpp
     GDAL.cpp
     GDALDEM.cpp
     GeoData.cpp
@@ -557,13 +593,14 @@ set(TARGET_SRC
     LayerShader.cpp
     Lighting.cpp
     LineDrawable.cpp
-    Locators.cpp
     LocalTangentPlane.cpp
     Math.cpp
     Map.cpp
+    MapboxGLImageLayer.cpp
     MapCallback.cpp
     MapInfo.cpp
     MapNode.cpp
+    MaterialLoader.cpp
     MemCache.cpp
     Memory.cpp
     MetaTile.cpp
@@ -575,6 +612,7 @@ set(TARGET_SRC
     NetworkMonitor.cpp
     NodeUtils.cpp
     Notify.cpp
+    ObjectIDPicker.cpp
     ObjectIndex.cpp
     OverlayDecorator.cpp
     PagedNode.cpp
@@ -591,8 +629,10 @@ set(TARGET_SRC
     Revisioning.cpp
     SceneGraphCallback.cpp
     ScreenSpaceLayout.cpp
+    SDF.cpp
     ShaderFactory.cpp
     ShaderGenerator.cpp
+    ShaderLayer.cpp
     ShaderLoader.cpp
     ShaderMerger.cpp
     ShaderUtils.cpp
@@ -611,6 +651,7 @@ set(TARGET_SRC
     TerrainTileModelFactory.cpp
     Tessellator.cpp
     Text.cpp
+    TextureBuffer.cpp
     ThreeDTilesLayer.cpp
     TextureBufferSerializer.cpp
     TileKey.cpp
@@ -625,7 +666,6 @@ set(TARGET_SRC
     TileSourceImageLayer.cpp
     TileCache.cpp
     TimeControl.cpp
-    TraversalData.cpp
     Threading.cpp
     TMS.cpp
     Units.cpp
@@ -685,6 +725,7 @@ set(TARGET_SRC
     ViewFitter.cpp
 
     AltitudeFilter.cpp
+    AttributesFilter.cpp
     BufferFilter.cpp
     BuildGeometryFilter.cpp
     BuildTextFilter.cpp
@@ -697,6 +738,8 @@ set(TARGET_SRC
     FeatureDisplayLayout.cpp
     FeatureElevationLayer.cpp
     FeatureImageLayer.cpp
+    FeatureRasterizer.cpp
+    FeatureSDFLayer.cpp
     TerrainConstraintLayer.cpp
     FeatureModelGraph.cpp
     FeatureModelLayer.cpp
@@ -788,6 +831,8 @@ set(TARGET_SRC
     TrackNode.cpp
     WindLayer.cpp
 
+    SDF.cpp
+
     FileGDBFeatureSource.cpp
 
     ${SHADERS_CPP}
@@ -818,9 +863,10 @@ endif()
 
 message(STATUS "Building ${LIB_NAME} as a ${OSGEARTH_DYNAMIC_OR_STATIC} library")
 
-ADD_LIBRARY(${LIB_NAME} 
+ADD_LIBRARY(${LIB_NAME}
     ${OSGEARTH_DYNAMIC_OR_STATIC}
     ${LIB_PUBLIC_HEADERS}
+    ${LIB_PUBLIC_HEADERS_IMGUI}
     ${TINYXML_SRC}
     ${VERSION_GIT_SOURCE}
     ${TARGET_SRC}
@@ -869,6 +915,12 @@ IF(FILEGDB_FOUND)
     LINK_WITH_VARIABLES(${LIB_NAME} FILEGDB_LIBRARY)
 ENDIF()
 
+IF(BLEND2D_FOUND)
+    add_definitions(-DOSGEARTH_HAVE_BLEND2D)
+    include_directories(${BLEND2D_INCLUDES})
+    link_with_variables(${LIB_NAME} BLEND2D_LIBRARY)
+ENDIF()
+
 IF (WIN32)
   LINK_EXTERNAL(${LIB_NAME} ${TARGET_EXTERNAL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${MATH_LIBRARY} )
 ELSE(WIN32)
@@ -882,12 +934,23 @@ ENDIF(TRACY_FOUND)
 
 OPTION(NRL_STATIC_LIBRARIES "Link osgEarth against static GDAL and cURL, including static OpenSSL, Proj4, JPEG, PNG, and TIFF." OFF)
 if(NOT NRL_STATIC_LIBRARIES)
-  LINK_WITH_VARIABLES(${LIB_NAME} OSG_LIBRARY OSGUTIL_LIBRARY OSGSIM_LIBRARY OSGDB_LIBRARY OSGVIEWER_LIBRARY OSGTEXT_LIBRARY OSGGA_LIBRARY OSGSHADOW_LIBRARY OPENTHREADS_LIBRARY CURL_LIBRARY GDAL_LIBRARY OSGMANIPULATOR_LIBRARY)
+  LINK_WITH_VARIABLES(${LIB_NAME} OSG_LIBRARY OSGUTIL_LIBRARY OSGSIM_LIBRARY OSGDB_LIBRARY OSGVIEWER_LIBRARY OSGTEXT_LIBRARY OSGGA_LIBRARY OSGSHADOW_LIBRARY CURL_LIBRARY GDAL_LIBRARY OSGMANIPULATOR_LIBRARY)
 else(NOT NRL_STATIC_LIBRARIES)
-  LINK_WITH_VARIABLES(${LIB_NAME} OSG_LIBRARY OSGUTIL_LIBRARY OSGSIM_LIBRARY OSGDB_LIBRARY OSGVIEWER_LIBRARY OSGTEXT_LIBRARY OSGGA_LIBRARY OSGSHADOW_LIBRARY OPENTHREADS_LIBRARY CURL_LIBRARY GDAL_LIBRARY OSGMANIPULATOR_LIBRARY SSL_EAY_RELEASE LIB_EAY_RELEASE TIFF_LIBRARY PROJ4_LIBRARY PNG_LIBRARY JPEG_LIBRARY)
+  LINK_WITH_VARIABLES(${LIB_NAME} OSG_LIBRARY OSGUTIL_LIBRARY OSGSIM_LIBRARY OSGDB_LIBRARY OSGVIEWER_LIBRARY OSGTEXT_LIBRARY OSGGA_LIBRARY OSGSHADOW_LIBRARY CURL_LIBRARY GDAL_LIBRARY OSGMANIPULATOR_LIBRARY SSL_EAY_RELEASE LIB_EAY_RELEASE TIFF_LIBRARY PROJ4_LIBRARY PNG_LIBRARY JPEG_LIBRARY)
 endif(NOT NRL_STATIC_LIBRARIES)
 
 LINK_CORELIB_DEFAULT(${LIB_NAME} ${CMAKE_THREAD_LIBS_INIT} ${MATH_LIBRARY})
 
 
 INCLUDE(ModuleInstall OPTIONAL)
+
+if(OSGEARTH_ENABLE_IMGUI)
+    # custom install for ImGui stuff
+    if(NOT USE_CUSTOM_SOURCE_GROUPS)
+        source_group("Headers\\ImGui" FILES ${LIB_PUBLIC_HEADERS_IMGUI})
+    endif()
+
+    install(
+        FILES ${LIB_PUBLIC_HEADERS_IMGUI} ImGui/ImGui.cpp
+        DESTINATION ${INSTALL_INCDIR}/ImGui)
+endif()

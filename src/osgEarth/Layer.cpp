@@ -80,6 +80,8 @@ Layer::Options::fromConfig(const Config& conf)
             _cachePolicy->usage() = CachePolicy::USAGE_CACHE_ONLY;
         if ( conf.value<bool>( "cache_enabled", true ) == false )
             _cachePolicy->usage() = CachePolicy::USAGE_NO_CACHE;
+        if (conf.value<bool>("caching", true) == false)
+            _cachePolicy->usage() = CachePolicy::USAGE_NO_CACHE;
     }
     conf.get("shader_define", shaderDefine());
 
@@ -133,6 +135,12 @@ Layer::~Layer()
     OE_DEBUG << LC << "~Layer\n";
     if (_mutex)
         delete _mutex;
+}
+
+void
+Layer::dirty()
+{
+    bumpRevision();
 }
 
 void
@@ -201,14 +209,45 @@ Layer::getCacheID() const
         Config hashConf = options().getConfig();
 
         // remove non-data properties.
-        hashConf.remove("name");
-        hashConf.remove("enabled");
+        // TODO: move these a virtual function called
+        // getNonDataProperties() or something.
+        hashConf.remove("accept_draping");
+        hashConf.remove("altitude");
+        hashConf.remove("async");
+        hashConf.remove("attenuation_range");
+        hashConf.remove("attribution");
+        hashConf.remove("blend");
         hashConf.remove("cacheid");
-        hashConf.remove("cache_only");
+        hashConf.remove("cache_id");
         hashConf.remove("cache_enabled");
+        hashConf.remove("cache_only");
         hashConf.remove("cache_policy");
-        hashConf.remove("visible");
+        hashConf.remove("caching");
+        hashConf.remove("color_filters");
+        hashConf.remove("enabled");
+        hashConf.remove("fid_attribute");
+        hashConf.remove("geo_interpolation");
         hashConf.remove("l2_cache_size");
+        hashConf.remove("max_data_level");
+        hashConf.remove("max_filter");
+        hashConf.remove("max_level");
+        hashConf.remove("max_range");
+        hashConf.remove("min_filter");
+        hashConf.remove("min_level");
+        hashConf.remove("min_range");
+        hashConf.remove("name");
+        hashConf.remove("open_write");
+        hashConf.remove("proxy");
+        hashConf.remove("rewind_polygons");
+        hashConf.remove("shader");
+        hashConf.remove("shaders");
+        hashConf.remove("shader_define");
+        hashConf.remove("shared");
+        hashConf.remove("shared_sampler");
+        hashConf.remove("shared_matrix");
+        hashConf.remove("terrain");
+        hashConf.remove("texture_compression");
+        hashConf.remove("visible");
 
         unsigned hash = osgEarth::hashString(hashConf.toJSON());
         std::stringstream buf;

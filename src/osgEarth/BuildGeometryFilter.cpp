@@ -38,7 +38,6 @@
 #include <osg/Geometry>
 #include <osg/LineStipple>
 #include <osg/Point>
-#include <osg/MatrixTransform>
 #include <osg/TriangleIndexFunctor>
 #include <osgText/Text>
 #include <osgUtil/Tessellator>
@@ -93,13 +92,15 @@ namespace
         return false;
     }
 
-    void ecef_to_gnomonic(osg::Vec3d& p, const osg::Vec3d& c, const osg::EllipsoidModel* e)
+    void ecef_to_gnomonic(osg::Vec3d& p, const osg::Vec3d& c, const Ellipsoid& e)
     {
-        double lat0, lon0, alt0;
-        e->convertXYZToLatLongHeight(c.x(), c.y(), c.z(), lat0, lon0, alt0);
+        osg::Vec3d lla0 = e.geocentricToGeodetic(c);
+        osg::Vec3d lla = e.geocentricToGeodetic(p);
 
-        double lat, lon, alt;
-        e->convertXYZToLatLongHeight(p.x(), p.y(), p.z(), lat, lon, alt);
+        double lon0 = osg::DegreesToRadians(lla0.x());
+        double lat0 = osg::DegreesToRadians(lla0.y());
+        double lon = osg::DegreesToRadians(lla.x());
+        double lat = osg::DegreesToRadians(lla.y());
 
         double d = sin(lat0)*sin(lat) + cos(lat0)*cos(lat)*cos(lon - lon0);
         p.x() = (cos(lat)*sin(lon - lon0)) / d;
@@ -229,7 +230,6 @@ BuildGeometryFilter::processPolygons(FeatureList& features, FilterContext& conte
 
                     double threshold = osg::DegreesToRadians( *_maxAngle_deg );
                     //OE_TEST << "Running mesh subdivider with threshold " << *_maxAngle_deg << std::endl;
-
                     MeshSubdivider ms( _world2local, _local2world );
                     if ( input->geoInterp().isSet() )
                         ms.run( *osgGeom, threshold, *input->geoInterp() );
@@ -959,8 +959,8 @@ BuildGeometryFilter::tileAndBuildPolygon(
     osg::Geometry*          osgGeom,
     const osg::Matrixd&     world2local)
 {
-    OE_SOFT_ASSERT_AND_RETURN(input != nullptr, __func__, );
-    OE_SOFT_ASSERT_AND_RETURN(input->getType() != Geometry::TYPE_MULTI, __func__, );
+    OE_SOFT_ASSERT_AND_RETURN(input != nullptr, void());
+    OE_SOFT_ASSERT_AND_RETURN(input->getType() != Geometry::TYPE_MULTI, void());
 
     osg::ref_ptr<osg::Vec3Array> verts = new osg::Vec3Array();
     verts->reserve(input->getTotalPointCount());
@@ -968,8 +968,7 @@ BuildGeometryFilter::tileAndBuildPolygon(
     // hard copy so we can project the values
     osg::ref_ptr<Geometry> proj = input->clone();
 
-    // Automatically figure out what is the closest plane for tessellation
-    Tessellator::Plane plane = Tessellator::PLANE_AUTO;
+    Tessellator::Plane plane = Tessellator::PLANE_XY;
 
     if (outputSRS)
     {
@@ -979,6 +978,7 @@ BuildGeometryFilter::tileAndBuildPolygon(
             osg::Vec3d temp;
             osg::BoundingBoxd ecef_bb;
 
+            bool allOnEquator = true;
             GeometryIterator xform_iter(proj.get(), true);
             while (xform_iter.hasMore())
             {
@@ -987,6 +987,10 @@ BuildGeometryFilter::tileAndBuildPolygon(
                 for (osg::Vec3d& p : *part)
                 {
                     inputSRS->transform(p, outputSRS, temp);
+                    if (temp.y() != 0.0)
+                    {
+                        allOnEquator = false;
+                    }
                     outputSRS->transformToWorld(temp, p);
                     ecef_bb.expandBy(p);
                 }
@@ -1000,6 +1004,12 @@ BuildGeometryFilter::tileAndBuildPolygon(
                 Geometry* part = proj_iter.next();
                 for (osg::Vec3d& p : *part)
                 {
+                    // The gnomonic equation won't provide any variation in y values if all of the coordinates are on the equator, so
+                    // adjust the point slightly up from the equator if all points lie on the equator.
+                    if (allOnEquator)
+                    {
+                        p.z() += 0.0000001;
+                    }
                     ecef_to_gnomonic(p, center, outputSRS->getEllipsoid());
                 }
             }
@@ -1015,6 +1025,12 @@ BuildGeometryFilter::tileAndBuildPolygon(
                 inputSRS->transform(part->asVector(), outputSRS);
             }
         }
+    }
+    else
+    {
+        // with no SRS, we need to automatically figure out what 
+        // is the closest plane for tessellation
+        plane = Tessellator::PLANE_AUTO;
     }
 
     // tessellate

@@ -24,6 +24,7 @@
 #include <osgEarth/Capabilities>
 #include <osgEarth/GLUtils>
 #include <osgEarth/TerrainEngineNode>
+#include <osg/BindImageTexture>
 #include <osg/Texture3D>
 #include <osg/Program>
 #include <osgUtil/CullVisitor>
@@ -62,7 +63,7 @@ namespace
             _bufferSize(0),
             _glBufferStorage(nullptr) { }
 
-        osg::ref_ptr<GLBuffer> _buffer;
+        GLBuffer::Ptr _buffer;
         GLuint _bufferSize;
 
         // pre-OSG 3.6 support
@@ -253,28 +254,19 @@ namespace
 
             GLuint requiredBufferSize = sizeof(WindData) * (_winds.size()+1);
 
-            if (!ds._buffer.valid() || ds._bufferSize < requiredBufferSize)
+            if (ds._buffer == nullptr || ds._bufferSize < requiredBufferSize)
             {
-                ds._buffer = new GLBuffer();
-
-                ext->glGenBuffers(1, &ds._buffer->_handle);
-
+                ds._buffer = GLBuffer::create(GL_SHADER_STORAGE_BUFFER, *state, "oe.wind");
                 ds._bufferSize = requiredBufferSize;
 
-                state->getGraphicsContext()->add(new GLBufferReleaser(ds._buffer.get()));
+                ds._buffer->bind();
 
-                if (!ds._glBufferStorage)
-                {
-                    // polyfill for pre-OSG 3.6 support
-                    osg::setGLExtensionFuncPtr(ds._glBufferStorage, "glBufferStorage", "glBufferStorageARB");
-                }
-
-                ext->glBindBuffer(GL_SHADER_STORAGE_BUFFER, ds._buffer->_handle);
-                ds._glBufferStorage(GL_SHADER_STORAGE_BUFFER, ds._bufferSize, nullptr, GL_DYNAMIC_STORAGE_BIT);
+                GLFunctions::get(*state).
+                    glBufferStorage(GL_SHADER_STORAGE_BUFFER, ds._bufferSize, nullptr, GL_DYNAMIC_STORAGE_BIT);
             }
             else
             {
-                ext->glBindBuffer(GL_SHADER_STORAGE_BUFFER, ds._buffer->_handle);
+                ds._buffer->bind();
             }
 
             // download to GPU
@@ -377,7 +369,7 @@ namespace
         compileGLObjects(ri, ds);
 
         // activate layout() binding point:
-        ext->glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ds._buffer->_handle);
+        ext->glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ds._buffer->name());
 
         // run it
         ext->glDispatchCompute(WIND_DIM_X, WIND_DIM_Y, WIND_DIM_Z);
@@ -471,30 +463,29 @@ WindLayer::Options::fromConfig(const Config& conf)
 void
 WindLayer::addWind(Wind* wind)
 {
-    WindDrawable* wd = static_cast<WindDrawable*>(_drawable.get());
+    WindDrawable* wd = dynamic_cast<WindDrawable*>(_drawable.get()); // also checks for nullptr
     if (wd)
     {
-       wd->_winds.push_back(wind);
+        wd->_winds.push_back(wind);
     }
-
 }
 
 void
 WindLayer::removeWind(Wind* wind)
 {
-    WindDrawable* wd = static_cast<WindDrawable*>(_drawable.get());
+    WindDrawable* wd = dynamic_cast<WindDrawable*>(_drawable.get()); // also checks for nullptr
     if (wd)
     {
-       for (std::vector<osg::ref_ptr<Wind> >::iterator i = wd->_winds.begin();
-          i != wd->_winds.end();
-          ++i)
-       {
-          if (i->get() == wind)
-          {
-             wd->_winds.erase(i);
-             break;
-          }
-       }
+        for (std::vector<osg::ref_ptr<Wind>>::iterator i = wd->_winds.begin();
+            i != wd->_winds.end();
+            ++i)
+        {
+            if (i->get() == wind)
+            {
+                wd->_winds.erase(i);
+                break;
+            }
+        }
     }
 }
 
@@ -503,7 +494,7 @@ WindLayer::init()
 {
     Layer::init();
 
-    // Never cache decals
+    // Never cache
     layerHints().cachePolicy() = CachePolicy::NO_CACHE;
 }
 
@@ -568,6 +559,8 @@ WindLayer::getSharedStateSet(osg::NodeVisitor* nv) const
 {
     if (!isOpen())
         return nullptr;
+
+    OE_SOFT_ASSERT_AND_RETURN(_drawable.valid(), nullptr);
 
     osgUtil::CullVisitor* cv = static_cast<osgUtil::CullVisitor*>(nv);
 

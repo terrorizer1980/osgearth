@@ -21,6 +21,7 @@
 #include <osgEarth/ShaderLoader>
 #include <osgEarth/Registry>
 #include <osgEarth/Capabilities>
+#include <osgEarth/ShaderUtils>
 
 #define LC "[ShaderFactory] "
 
@@ -43,7 +44,19 @@ using namespace osgEarth::Util;
 
 ShaderFactory::ShaderFactory()
 {
-    _fragStageOrder = FRAGMENT_STAGE_ORDER_COLORING_LIGHTING;
+    //nop
+}
+
+void
+ShaderFactory::clearPreProcessorCallbacks()
+{
+    ShaderPreProcessor::_callbacks.clear();
+}
+
+void
+ShaderFactory::addPreProcessorCallback(std::function<void(osg::Shader*)> cb)
+{
+    ShaderPreProcessor::_callbacks.push_back(cb);
 }
 
 
@@ -912,7 +925,7 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
         buf << "#version " << fs_glsl_version << "\n"
             << GLSL_DEFAULT_PRECISION_FLOAT << "\n"
             << "#pragma vp_name VP Fragment Shader Main\n"
-            << (!s_GLES_SHADERS ? "#extension GL_ARB_gpu_shader5 : enable \n" : "");
+            << (!s_GLES_SHADERS ? "#extension GL_ARB_gpu_shader5 : enable\n" : "");
 
         addExtensionsToBuffer(buf, in_extensions);
 
@@ -972,8 +985,8 @@ ShaderFactory::createMains(const ShaderComp::FunctionLocationMap&    functions,
 
         buf << INDENT << "vp_Normal = normalize(vp_Normal); \n";
 
-        int coloringPass = _fragStageOrder == FRAGMENT_STAGE_ORDER_COLORING_LIGHTING ? 0 : 1;
-        int lightingPass = 1-coloringPass;
+        constexpr int coloringPass = 0;
+        constexpr int lightingPass = 1;
 
         for(int pass=0; pass<2; ++pass)
         {

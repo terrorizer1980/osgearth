@@ -41,9 +41,9 @@ namespace osgEarth
     class OSGEARTH_EXPORT ElevationPool : public osg::Referenced
     {
     public:
-        typedef osg::observer_ptr<ElevationTexture> WeakPointer;
-        typedef osg::ref_ptr<ElevationTexture> Pointer;
-        typedef std::unordered_map<Internal::RevElevationKey, WeakPointer> WeakLUT;
+        using WeakPointer = osg::observer_ptr<ElevationTexture>;
+        using Pointer = osg::ref_ptr<ElevationTexture>;
+        using WeakLUT = std::unordered_map<Internal::RevElevationKey, WeakPointer>;
 
     private:
         struct OSGEARTH_EXPORT StrongLRU {
@@ -64,7 +64,7 @@ namespace osgEarth
             //! @param size Cache size
             WorkingSet(unsigned size =32u);
 
-            //! Assign a specific set of elevation layer to use 
+            //! Assign a specific set of elevation layer to use
             //! for sampling. Usually this is unnecessary as the Pool
             //! will synchronize with the map set by setMap, but you
             //! may want to use a custom Pool with a specific subset
@@ -80,6 +80,54 @@ namespace osgEarth
         private:
             StrongLRU _lru;
             ElevationLayerVector _elevationLayers;
+            friend class ElevationPool;
+        };
+
+        /**
+         * Object for doing lots of queries in a localized area.
+         * Call prepareEnvelope to initialize one.
+         */
+        class OSGEARTH_EXPORT Envelope
+        {
+        public:
+            //! For each point in an array of points, sample the elevation and store
+            //! the result in the Z coordinate. Input points must be in the map's SRS.
+            //! @param points Array of points in map coords for which to sample elevation
+            //! @param progress Optional progress callback (can be nullptr)
+            //! @return Number of valid elevations sampled, or -1 if there was an error
+            int sampleMapCoords(
+                std::vector<osg::Vec3d>& points,
+                ProgressCallback* progress);
+
+        public:
+            // internal
+            using QuickCache = vector_map<
+                Internal::RevElevationKey,
+                osg::ref_ptr<ElevationTexture>>;
+
+            // internal
+            struct QuickSampleVars {
+                double sizeS, sizeT;
+                double s, t;
+                double s0, s1, smix;
+                double t0, t1, tmix;
+                osg::Vec4f UL, UR, LL, LR, TOP, BOT;
+            };
+
+        private:
+            Internal::RevElevationKey _key;
+            QuickCache _cache;
+            QuickSampleVars _vars;
+            double _pw, _ph, _pxmin, _pymin;
+            osg::ref_ptr<ElevationTexture> _raster;
+            int _lod;
+            unsigned _tw, _th;
+            WorkingSet* _ws;
+            WorkingSet _default_ws;
+            osg::ref_ptr<const Map> _map;
+            osg::ref_ptr<const Profile> _profile;
+            ElevationPool* _pool;
+
             friend class ElevationPool;
         };
 
@@ -105,18 +153,17 @@ namespace osgEarth
         //! @param ws Optional working set (can be NULL)
         //! @param progress Optional progress callback
         ElevationSample getSample(
-            const GeoPoint& p, 
+            const GeoPoint& p,
             const Distance& resolution,
             WorkingSet* ws,
             ProgressCallback* progress =nullptr);
 
         //! Extract a complete tile of elevation data
         //! @param key TileKey or data to extact
-        //! @param getResolutions Whether to include the resolution of each tile sample
         //! @param acceptLowerRes Return a lower resolution tile if the requested one isn't available
-        //! @param out_elev Output
-        //! @param ws Optional working set
-        //! @param progress Optional progress callback
+        //! @param out_elev Output elevation texture tile
+        //! @param ws Optional working set (can be nullptr)
+        //! @param progress Optional progress callback (can be nullptr)
         //! @return true upon success, false upon failure
         bool getTile(
             const TileKey& key,
@@ -129,8 +176,8 @@ namespace osgEarth
         //! the result in the Z coordinate. Input points must be in the map's SRS,
         //! and the sampling resolution is taken from the W coordinate.
         //! @param points Array of points in map coords for which to sample elevation
-        //! @param ws Optional working set (local cache)
-        //! @param progress Optional progress callback
+        //! @param ws Optional working set (local cache, can be nullptr)
+        //! @param progress Optional progress callback (can be nullptr)
         //! @return Number of valid elevations sampled, or -1 if there was an error
         int sampleMapCoords(
             std::vector<osg::Vec4d>& points,
@@ -141,8 +188,8 @@ namespace osgEarth
         //! the result in the Z coordinate. Input points must be in the map's SRS.
         //! @param points Array of points in map coords for which to sample elevation
         //! @param resolution Resolution at which to sample the points
-        //! @param ws Optional working set (local cache)
-        //! @param progress Optional progress callback
+        //! @param ws Optional working set (local cache, can be nullptr)
+        //! @param progress Optional progress callback (can be nullptr)
         //! @return Number of valid elevations sampled, or -1 if there was an error
         int sampleMapCoords(
             std::vector<osg::Vec3d>& points,
@@ -150,9 +197,21 @@ namespace osgEarth
             WorkingSet* ws,
             ProgressCallback* progress);
 
+        //! Creates an envelope for sampling lots of points in a localized region
+        //! @param out Created envelope (output)
+        //! @param refPoint Reference point near which you intend to sample points
+        //! @param resolution Resolution at which to intend to sample points
+        //! @param ws Optional working set (can be nullptr)
+        bool prepareEnvelope(
+            Envelope& out,
+            const GeoPoint& refPoint,
+            const Distance& resolution,
+            WorkingSet* ws =nullptr);
+
         //! Invalidates all caches in the ElevationPool
         void clear();
 
+    protected:
         //! Destructor
         virtual ~ElevationPool();
 
@@ -187,12 +246,12 @@ namespace osgEarth
             void onMapModelChanged(const MapModelChange&);
             ElevationPool* _pool;
         };
-        friend struct MapCallbackAdapter; 
+        friend struct MapCallbackAdapter;
 
         osg::ref_ptr<MapCallbackAdapter> _mapCallback;
 
         ElevationLayerVector _elevationLayers;
-        
+
         std::atomic<int> _workers;
 
         int getElevationRevision(const Map* map) const;
@@ -202,9 +261,9 @@ namespace osgEarth
         void refresh(const Map*);
 
         ElevationSample getSample(
-            const GeoPoint& p, 
-            unsigned maxLOD, 
-            const Map* map, 
+            const GeoPoint& p,
+            unsigned maxLOD,
+            const Map* map,
             WorkingSet* ws,
             ProgressCallback* progress);
 
@@ -212,8 +271,8 @@ namespace osgEarth
         int getLOD(double x, double y) const;
 
         osg::ref_ptr<ElevationTexture> getOrCreateRaster(
-            const Internal::RevElevationKey& key, 
-            const Map* map, 
+            const Internal::RevElevationKey& key,
+            const Map* map,
             bool acceptLowerRes,
             WorkingSet* ws,
             ProgressCallback* progress);
@@ -230,26 +289,38 @@ namespace osgEarth
     /**
     * Utility to run elevation queries in the background.
     */
-    class OSGEARTH_EXPORT AsyncElevationSampler : public osg::Referenced
+    class OSGEARTH_EXPORT AsyncElevationSampler
     {
     public:
+        //! Construct a new sampler
+        //! @param map Map the sampler will use to sample elevation data
+        //! @param threads Number of threads the sampler should use
         AsyncElevationSampler(
             const Map* map,
             unsigned threads =1u);
 
-        Future<RefElevationSample> getSample(
+        //! Destructor
+        virtual ~AsyncElevationSampler() { }
+
+        //! Sample elevation at a point at highest available resolution
+        //! @param p Point at which to sample terrain elevation
+        //! @return Future result of the sample
+        Future<ElevationSample> getSample(
             const GeoPoint& p);
 
-        Future<RefElevationSample> getSample(
+        //! Sample elevation at a point and a target resolution
+        //! @param p Point at which to sample terrain elevation
+        //! @param resolution Resolution at which to sample terrain
+        //! @return Future result of the sample
+        Future<ElevationSample> getSample(
             const GeoPoint& p,
             const Distance& resolution);
 
-        virtual ~AsyncElevationSampler() { }
-
     protected:
+
         osg::observer_ptr<const Map> _map;
         ElevationPool::WorkingSet _ws;
-        osg::ref_ptr<ThreadPool> _threadPool;
+        JobArena _arena;
     };
 } // namespace
 

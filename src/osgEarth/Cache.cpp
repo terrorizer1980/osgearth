@@ -18,6 +18,7 @@
  */
 #include <osgEarth/Cache>
 #include <osgEarth/Registry>
+#include <osgEarth/Utils>
 #include "sha1.hpp"
 
 #include <osgDB/ReadFile>
@@ -31,6 +32,21 @@ using namespace osgEarth::Threading;
 
 CacheOptions::~CacheOptions()
 {
+}
+
+Config
+CacheOptions::getConfig() const
+{
+    Config conf = ConfigOptions::getConfig();
+    conf.set("enable_node_caching", enableNodeCaching());
+    return conf;
+}
+
+void
+CacheOptions::fromConfig(const Config& conf)
+{
+    enableNodeCaching().setDefault(false);
+    conf.get("enable_node_caching", enableNodeCaching());
 }
 
 //------------------------------------------------------------------------
@@ -81,26 +97,16 @@ CacheSettings::store(osgDB::Options* readOptions)
 {
     if (readOptions)
     {
-        osg::UserDataContainer* udc = readOptions->getOrCreateUserDataContainer();
-        unsigned index = udc->getUserObjectIndex(CACHESETTINGS_UDC_NAME);
-        udc->removeUserObject(index);
-        udc->addUserObject(this);
+        ObjectStorage::set(readOptions, this);
     }
 }
  
 CacheSettings*
 CacheSettings::get(const osgDB::Options* readOptions)
 {
-    CacheSettings* obj = 0L;
-    if (readOptions)
-    {
-        const osg::UserDataContainer* udc = readOptions->getUserDataContainer();
-        if (udc) {
-            osg::Object* temp = const_cast<osg::Object*>(udc->getUserObject(CACHESETTINGS_UDC_NAME));
-            obj = dynamic_cast<CacheSettings*>(temp);
-        }
-    }
-    return obj;
+    osg::ref_ptr<CacheSettings> settings;
+    ObjectStorage::get(readOptions, settings);
+    return settings.get();
 }
 
 std::string

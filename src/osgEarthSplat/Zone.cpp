@@ -17,7 +17,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>
  */
 #include "Zone"
-#include <osgEarth/TraversalData>
 #include <osgUtil/CullVisitor>
 
 #define LC "[Zone] "
@@ -63,7 +62,7 @@ Zone::configure(const Map* map, const osgDB::Options* readOptions)
 
         // this only needs to be very approximate.
         double meanRadius = extent.getSRS()->isGeographic() ?
-            extent.getSRS()->getEllipsoid()->getRadiusEquator() : 0.0;
+            extent.getSRS()->getEllipsoid().getRadiusEquator() : 0.0;
         b.meanRadius2 = meanRadius*meanRadius;
     }
     

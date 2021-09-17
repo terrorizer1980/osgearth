@@ -27,6 +27,7 @@
 #include <osgEarth/Map>
 #include <osgEarth/Extension>
 #include <osgEarth/TerrainOptions>
+#include <osgEarth/Registry>
 
 namespace osg {
     class View;
@@ -42,12 +43,10 @@ namespace osgEarth
 
     namespace Util
     {
-        class ResourceReleaser;
         class DrapingManager;
         class ClampingManager;
         class DrapingTechnique;
         class ClampingTechnique;
-        class MapNodeCullData;
     }
 
     /**
@@ -150,12 +149,7 @@ namespace osgEarth
         /**
          * Gets the underlying terrain engine that renders the terrain surface of the map.
          */
-        TerrainEngineNode* getTerrainEngine() const;
-
-        /**
-         * Gets a service that you can use to release GL objects.
-         */
-        ResourceReleaser* getResourceReleaser() const;
+        TerrainEngine* getTerrainEngine() const;
 
         /**
          * Gets the Config object serializing external data. External data is information
@@ -220,6 +214,15 @@ namespace osgEarth
             float       my,
             GeoPoint&   out_point) const;
 
+        //! Returns the map coordinates under the provided mouse (window) coordinates.
+        //! @param view View in which to do the query
+        //! @param mx, my Mouse coordinates
+        //! @return Outputs the point under the mouse
+        GeoPoint getGeoPointUnderMouse(
+            osg::View* view,
+            float mx,
+            float my) const;
+
     public: // osg::Object
 
         virtual const char* libraryName() const { return "osgEarth"; }
@@ -241,15 +244,16 @@ namespace osgEarth
 
     private:
 
+        osg::ref_ptr<Registry> _registry;
         osg::ref_ptr<Map>  _map;
         osg::Group*        _layerNodes;
         unsigned           _lastNumBlacklistedFilenames;
         Config             _externalConf;
         TerrainEngineNode* _terrainEngine;
         osg::Group*        _terrainGroup;
-        ResourceReleaser*  _resourceReleaser;
-        DrapingManager*    _drapingManager;
+        std::shared_ptr<DrapingManager> _drapingManager;
         ClampingManager*   _clampingManager;
+        std::atomic<bool>  _readyForUpdate;
 
         std::vector< osg::ref_ptr<Extension> > _extensions;
 
@@ -267,7 +271,7 @@ namespace osgEarth
     
         void init();
 
-        DrapingManager* getDrapingManager();
+        //std::shared_ptr<DrapingManager>& getDrapingManager();
         friend class DrapingTechnique;
         friend class DrapeableNode;
         

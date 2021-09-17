@@ -25,7 +25,7 @@
 #include <osgEarth/Revisioning>
 #include <osgEarth/Threading>
 #include <osgEarth/Containers>
-#include <osgEarth/ResourceReleaser>
+#include <osgEarth/FrameClock>
 
 #include "EngineContext"
 #include "TileNodeRegistry"
@@ -37,17 +37,16 @@
 #include "SurfaceNode"
 #include "TileDrawable"
 #include "TerrainCuller"
-#include "FrameClock"
 
 #include <list>
 #include <map>
 #include <vector>
 
-using namespace osgEarth;
-
 namespace osgEarth { namespace REX
 {
-    class RexTerrainEngineNode : public TerrainEngineNode
+    using namespace osgEarth;
+
+    class RexTerrainEngineNode : public osgEarth::TerrainEngineNode
     {
     public:
         META_Node(osgEarth, RexTerrainEngineNode);
@@ -88,6 +87,9 @@ namespace osgEarth { namespace REX
         //! Shutdown the engine and any running services
         void shutdown() override;
 
+        //! Name of the job arena used to load terrain tiles
+        std::string getJobArenaName() const override;
+
     public: // osg::Node
 
         void traverse(osg::NodeVisitor& nv);
@@ -102,8 +104,8 @@ namespace osgEarth { namespace REX
 
         void onMapModelChanged( const MapModelChange& change ); // not virtual!
 
-        //! Access to the asychronous data loader
-        Loader* getLoader() const { return _loader.get(); }
+        //! Access to the data merger
+        Merger* getMerger() const { return _merger.get(); }
 
     protected: // TerrainEngineNode protected
 
@@ -164,7 +166,6 @@ namespace osgEarth { namespace REX
 
         // node registry is shared across all threads.
         osg::ref_ptr<TileNodeRegistry> _liveTiles; // tiles in the scene graph.
-        osg::ref_ptr<ResourceReleaser> _releaser;
      
         EngineContext* getEngineContext() const { return _engineContext.get(); }
         osg::ref_ptr< EngineContext > _engineContext;
@@ -172,7 +173,7 @@ namespace osgEarth { namespace REX
 
         RenderBindings _renderBindings;
         osg::ref_ptr<GeometryPool> _geometryPool;
-        osg::ref_ptr<Loader>  _loader;
+        osg::ref_ptr<Merger> _merger;
         osg::ref_ptr<UnloaderGroup> _unloader;
         
         osg::ref_ptr<osg::Group> _terrain;
@@ -190,6 +191,7 @@ namespace osgEarth { namespace REX
         unsigned _frameLastUpdated;
 
         FrameClock _clock;
+        std::atomic_bool _updatedThisFrame;
     };
 
 } } // namespace osgEarth::REX

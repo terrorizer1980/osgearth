@@ -24,7 +24,6 @@
 
 #include <osgEarth/MapNode>
 #include <osgEarth/ImageLayer>
-#include <osgEarth/ResourceReleaser>
 #include <osgEarth/NodeUtils>
 #include <osgEarth/ElevationLOD>
 #include <osgEarth/TerrainEngineNode>
@@ -97,10 +96,6 @@ namespace osgEarth { namespace Triton
 
             const osgEarth::Map* map = mapNode->getMap();
 
-            // Remember the resource releaser so we can properly destroy 
-            // Triton objects in a graphics context.
-            _releaser = mapNode->getResourceReleaser();
-
             // create an object to house Triton data and resources.
             if (!_TRITON.valid())
                 _TRITON = new TritonContext(_tritonLayer->options());
@@ -129,7 +124,7 @@ namespace osgEarth { namespace Triton
             if (_tritonLayer->getUseHeightMap() == true)
             {
                 TritonHeightMap* heightMapGen = new TritonHeightMap();
-                heightMapGen->setTerrain(mapNode->getTerrainEngine());
+                heightMapGen->setTerrain(mapNode->getTerrainEngine()->getNode());
                 if (_maskLayer.getLayer())
                     heightMapGen->setMaskLayer(_maskLayer.getLayer());
                 this->addChild(heightMapGen);
@@ -241,7 +236,6 @@ namespace osgEarth { namespace Triton
         osg::ref_ptr<TritonContext> _TRITON;
         osg::Drawable* _drawable;
         LayerReference<osgEarth::ImageLayer>& _maskLayer;
-        osg::observer_ptr<osgEarth::ResourceReleaser> _releaser;
         osg::observer_ptr<osgEarth::MapNode> _mapNode;
         osg::observer_ptr<osgEarth::Triton::TritonLayer> _tritonLayer;
         osg::ref_ptr<Callback> _callback;

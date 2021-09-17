@@ -68,9 +68,9 @@ namespace
         Config assetConfig;
     };
 
-    typedef std::vector<AssetLUTEntry> AssetLUTVector;
+    using AssetLUTVector = std::vector<AssetLUTEntry>;
 
-    typedef UnorderedMap<const LandCoverGroup*, AssetLUTVector> AssetLUT;
+    using AssetLUT = std::unordered_map<const LandCoverGroup*, AssetLUTVector>;
 
     void buildLUT(const BiomeZone& zone, AssetLUT& lut)
     {
@@ -101,37 +101,6 @@ namespace
             }
         }
     }
-
-#if 0
-
-
-            for (GroundCoverObjects::const_iterator i = b->get()->getObjects().begin();
-                i != b->get()->getObjects().end();
-                ++i)
-            {
-                const GroundCoverBillboard* bb = static_cast<const GroundCoverBillboard*>(i->get());
-                if (bb)
-                {
-                    unsigned weight = 1u;
-                    BillboardLUTEntry entry;
-                    if (bb->_symbol.valid())
-                    {
-                        entry.billboardConfig = bb->_symbol->getOriginalConfig();
-                        OE_DEBUG << entry.billboardConfig.toJSON(false) << std::endl;
-                        entry.width = bb->_symbol->width().get();
-                        entry.height = bb->_symbol->height().get();
-                        entry.sizeVariation = bb->_symbol->sizeVariation().get();
-                        weight = bb->_symbol->selectionWeight().get();
-                    }
-                    for(unsigned w=0; w<weight; ++w)
-                    {
-                        billboards.push_back(entry);
-                    }
-                }
-            }
-        }
-    }
-#endif
 
     // custom featurelist cursor that lets us populate the list directly
     class MyFeatureListCursor : public FeatureListCursor
@@ -269,6 +238,13 @@ GroundCoverFeatureGenerator::initialize()
         }
     }
 
+    // make sure the mask layer is not compressed since we are
+    // going to sample it in CPU
+    if (_masklayer.valid())
+    {
+        _masklayer->options().textureCompression() = "none";
+    }
+
     // create noise texture
     NoiseTextureFactory noise;
     _noiseTexture = noise.create(256u, 4u);
@@ -358,7 +334,7 @@ GroundCoverFeatureGenerator::getFeatures(const TileKey& key, FeatureList& output
     GeoPoint p = _location;
 
     if (!_location.isValid())
-        key.getExtent().getCentroid(p);
+        p = key.getExtent().getCentroid();
 
     const BiomeZone& zone = selectZone(p);
 

@@ -253,37 +253,7 @@ namespace
          , _geomCell(rhs._geomCell)
          , _geomGrid(rhs._geomGrid)
         { }
-    };
-
-    struct LocalRoot : public osg::Group
-    {
-#ifdef DEBUG_MODE
-        void traverse(osg::NodeVisitor& nv)
-        {
-            if (nv.getVisitorType() == nv.CULL_VISITOR)
-            {
-                osg::UserDataContainer* udc = nv.getOrCreateUserDataContainer();
-                LocalStats* stats = new LocalStats();
-                stats->setName("stats");
-                unsigned index = udc->addUserObject(stats);
-
-                osg::Group::traverse(nv);
-
-                Registry::instance()->startActivity("GZDGeom", Stringify() << stats->_gzdNode);
-                Registry::instance()->startActivity("GZDText", Stringify() << stats->_gzdText);
-                Registry::instance()->startActivity("SQIDText", Stringify() << stats->_sqidText);
-                Registry::instance()->startActivity("GeomCell", Stringify() << stats->_geomCell);
-                Registry::instance()->startActivity("GeomGrid", Stringify() << stats->_geomGrid);
-
-                udc->removeUserObject(index);
-            }
-            else
-            {
-                osg::Group::traverse(nv);
-            }
-        }
-#endif
-    };
+    };    
 
 #define STATS(nv) (dynamic_cast<LocalStats*>(nv.getUserDataContainer()->getUserObject("stats")))
 }
@@ -332,7 +302,7 @@ MGRSGraticule::init()
     // force it to render after the terrain.
     ss->setRenderBinDetails(1, "RenderBin");
 
-    _root = new LocalRoot();
+    _root = new osg::Group;
 
     GLUtils::setLighting(_root->getOrCreateStateSet(), osg::StateAttribute::OFF);
 
@@ -407,7 +377,7 @@ namespace
         }
     }
 
-    struct GeomCell : public PagedNode
+    struct GeomCell : public PagedNode2
     {
         double _size;        
         osg::ref_ptr<Feature> _feature;
@@ -422,11 +392,11 @@ namespace
         osg::BoundingSphere getChildBound() const;
         osg::Node* build();
 
-        void traverse(osg::NodeVisitor&);
+        void traverse(osg::NodeVisitor&) override;
     };
 
 
-    struct GeomGrid : public PagedNode
+    struct GeomGrid : public PagedNode2
     {
         double _size;
         const MGRSGraticule* _parent;
@@ -435,13 +405,10 @@ namespace
         GeoExtent _extent;
         osg::ref_ptr<const SpatialReference> _utm;
 
-        GeomGrid(double size)
+        GeomGrid(double size) : PagedNode2()
         {
             _size = size;
             _parent = NULL;
-            setRangeMode(osg::LOD::PIXEL_SIZE_ON_SCREEN);
-            setRange(1600);
-            setAdditive(false);
         }
 
         void setupData(Feature* feature, const MGRSGraticule* parent)
@@ -450,7 +417,21 @@ namespace
             _parent = parent;
             std::string styleName = Stringify() << (int)(_size*0.1);
             _style = *parent->getStyleSheet()->getStyle(styleName, true);
-            setNode(build());
+            addChild(build());
+            //setNode(build());
+
+            if (hasChild())
+            {
+                setMinPixels(1600);
+                setRefinePolicy(REFINE_REPLACE);
+
+                osg::observer_ptr<GeomGrid> o(this);
+                setLoadFunction([o](Cancelable*) mutable
+                    {
+                        osg::ref_ptr<GeomGrid> safe(o);
+                        return safe.valid() ? safe->loadChild() : nullptr;
+                    });
+            }
         }
 
         osg::Node* loadChild()
@@ -483,7 +464,7 @@ namespace
                         f->set("northing", y);
                         GeomCell* child = new GeomCell(interval);
                         child->setupData(f.get(), _parent);
-                        child->setupPaging();
+                        //child->setupPaging();
                         group->addChild(child);
                     }                 
                 }
@@ -569,9 +550,6 @@ namespace
        , _hasChild(false)
        , _parent(NULL)
     {
-        setRangeMode(osg::LOD::PIXEL_SIZE_ON_SCREEN);
-        setRange(880);
-        setAdditive(true);
     }
 
     void GeomCell::setupData(Feature* feature, const MGRSGraticule* parent)
@@ -580,14 +558,26 @@ namespace
         _parent = parent;
         std::string styleName = Stringify() << (int)(_size);
         _style = *parent->getStyleSheet()->getStyle(styleName, true);
-        setNode( build() );
+        addChild(build());
+
+        if (hasChild())
+        {
+            setMinPixels(880);
+            setRefinePolicy(REFINE_ADD);
+
+            osg::observer_ptr<GeomCell> o(this);
+            setLoadFunction([o](Cancelable*) mutable
+                {
+                    osg::ref_ptr<GeomCell> safe(o);
+                    return safe.valid() ? safe->loadChild() : nullptr;
+                });
+        }
     }
 
     osg::Node* GeomCell::loadChild()
     {
         GeomGrid* child = new GeomGrid(_size);
         child->setupData(_feature.get(), _parent);
-        child->setupPaging();
         return child;
     }
 
@@ -618,12 +608,12 @@ namespace
         if (nv.getVisitorType() == nv.CULL_VISITOR)
             STATS(nv)->_geomCell++;
 #endif
-        PagedNode::traverse(nv);
+        PagedNode2::traverse(nv);
     }
 
 
     //! Geometry for a single SQID 100km cell and its children
-    struct SQID100kmCell : public PagedNode
+    struct SQID100kmCell : public PagedNode2
     {
         osg::ref_ptr<Feature> _feature;
         const MGRSGraticule* _parent;
@@ -633,9 +623,6 @@ namespace
            : _parent(NULL)
         {
             setName(name);
-            setRangeMode(osg::LOD::PIXEL_SIZE_ON_SCREEN);
-            setRange(880);
-            setAdditive(true);
         }
 
         void setupData(Feature* feature, const MGRSGraticule* parent)
@@ -644,14 +631,28 @@ namespace
             _parent = parent;
             std::string styleName("100000");
             _style = *_parent->getStyleSheet()->getStyle(styleName, true);
-            setNode( build() );
+            addChild(build());
+
+            if (hasChild())
+            {
+                setMinPixels(880);
+                setRefinePolicy(REFINE_ADD);
+
+                osg::observer_ptr<SQID100kmCell> o(this);
+
+                setLoadFunction([o](Cancelable* c) mutable
+                    {
+                        osg::ref_ptr< SQID100kmCell> safe(o);
+                        return safe.valid() ? safe->loadChild() : nullptr;
+                    });
+            }
         }
 
         osg::Node* loadChild()
         {
             GeomGrid* child = new GeomGrid(100000.0);
             child->setupData(_feature.get(), _parent);
-            child->setupPaging();
+            //child->setupPaging();
             return child;
         }
 
@@ -678,7 +679,7 @@ namespace
 
 
     //! All SQID 100km goemetry from a single UTM GZD cell combined into one geometry
-    struct SQID100kmGrid : public PagedNode
+    struct SQID100kmGrid : public PagedNode2
     {
         osg::BoundingSphere _bs;
         FeatureList _sqidFeatures;
@@ -686,13 +687,11 @@ namespace
         const MGRSGraticule* _parent;
 
         SQID100kmGrid(const std::string& name, const osg::BoundingSphere& bs)
+            : PagedNode2()
         {
             setName(name);
             _bs = bs;
             _parent = NULL;
-            setAdditive(false);
-            setRangeMode(osg::LOD::PIXEL_SIZE_ON_SCREEN);
-            setRange(3200);
         }
 
         void setupData(const FeatureList& sqidFeatures, const MGRSGraticule* parent)
@@ -706,7 +705,17 @@ namespace
             // remove any text symbology; that gets built elsewhere.
             _style.remove<TextSymbol>();
            
-            setNode(build());
+            addChild(build());
+
+            setMinPixels(3200);
+            setRefinePolicy(REFINE_REPLACE);
+
+            osg::observer_ptr< SQID100kmGrid> o(this);
+            setLoadFunction([o](Cancelable*) mutable
+                {
+                    osg::ref_ptr< SQID100kmGrid> safe(o);
+                    return safe.valid() ? safe->loadChild() : nullptr;
+                });
         }
 
         osg::Node* loadChild()
@@ -718,7 +727,6 @@ namespace
                 Feature* feature = f->get();
                 SQID100kmCell* geom = new SQID100kmCell(feature->getString("sqid"));
                 geom->setupData(feature, _parent);
-                geom->setupPaging();
                 group->addChild(geom);
                 
                 GeoExtent extent(feature->getSRS(), feature->getGeometry()->getBounds());
@@ -741,7 +749,7 @@ namespace
     };
 
 
-    struct GZDGeom : public PagedNode
+    struct GZDGeom : public PagedNode2
     {
         Style _sqidStyle;
         FeatureList _sqidFeatures;
@@ -750,10 +758,7 @@ namespace
         GZDGeom(const std::string& name)
            : _parent(NULL)
         {
-            setName(name);     
-            setRangeMode(osg::LOD::PIXEL_SIZE_ON_SCREEN);
-            setRange(640);
-            setAdditive(false);
+            setName(name);
         }
 
         bool hasChild() const
@@ -765,7 +770,6 @@ namespace
         {
             SQID100kmGrid* child = new SQID100kmGrid(getName(), getBound());
             child->setupData(_sqidFeatures, _parent);
-            child->setupPaging();
             return child;
         }
 
@@ -781,8 +785,22 @@ namespace
                        const Map* map)
         {
             _parent = parent;
-            setNode(build(gzdFeature, prof, map));
+            addChild(build(gzdFeature, prof, map));
             _sqidFeatures = sqidFeatures;
+
+            if (hasChild())
+            {
+                setMinPixels(640);
+                setRefinePolicy(REFINE_REPLACE);
+
+                osg::observer_ptr<GZDGeom> o(this);
+
+                setLoadFunction([o](Cancelable*) mutable
+                    {
+                        osg::ref_ptr<GZDGeom> safe(o);
+                        return safe.valid() ? safe->loadChild() : nullptr;
+                    });
+            }
         }
 
         osg::Node* build(const Feature* f, const FeatureProfile* prof, const Map* map)
@@ -913,7 +931,7 @@ namespace
     };
 
 
-    struct GZDText : public PagedNode
+    struct GZDText : public PagedNode2
     {
         const MGRSGraticule* _parent;
         FeatureList  _sqidFeatures;
@@ -926,9 +944,6 @@ namespace
             setName(name);     
             _bs = bs;
             _parent = NULL;
-            _additive = false;    
-            setRangeMode(osg::LOD::PIXEL_SIZE_ON_SCREEN);
-            setRange(880);
         }
 
         bool hasChild() const
@@ -950,8 +965,21 @@ namespace
         void setupData(const Feature* gzdFeature, const FeatureList& sqidFeatures, const MGRSGraticule* parent)
         {
             _parent = parent;
-            setNode(buildGZD(gzdFeature));
+            addChild(buildGZD(gzdFeature));
             _sqidFeatures = sqidFeatures;
+
+            if (hasChild())
+            {
+                setMinPixels(880);
+                setRefinePolicy(REFINE_REPLACE);
+
+                osg::observer_ptr< GZDText> o(this);
+                setLoadFunction([o](Cancelable*) mutable
+                    {
+                        osg::ref_ptr<GZDText> safe(o);
+                        return safe.valid() ? safe->loadChild() : nullptr;
+                    });
+            }
         }
 
         osg::Node* buildGZD(const Feature* f)
@@ -1128,12 +1156,12 @@ MGRSGraticule::rebuild()
             {
                 GZDGeom* geom = new GZDGeom(gzd);
                 geom->setupData(feature.get(), table[gzd], this, _featureProfile.get(), map.get());
-                geom->setupPaging();
+                //geom->setupPaging();
                 geomTop->addChild(geom);
 
                 GZDText* text = new GZDText(gzd, geom->getBound(), _textObjects);
                 text->setupData(feature.get(), table[gzd], this);
-                text->setupPaging();
+                //text->setupPaging();
                 textTop->addChild(text);
 
                 ++count;

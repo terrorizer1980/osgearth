@@ -25,6 +25,7 @@
 #include <osgEarth/Filter>
 #include <osgEarth/Progress>
 #include <osgEarth/Profile>
+#include <functional>
 
 namespace osgEarth
 {
@@ -35,12 +36,19 @@ namespace osgEarth
     class OSGEARTH_EXPORT FeatureCursor : public osg::Referenced
     {
     public:
+        //! Whether a call to nextFeature() will return a valid feature
         virtual bool hasMore() const =0;
 
+        //! The next feature, or nullptr if empty
         virtual Feature* nextFeature() =0;
 
+        //! Copy all features to the list
         void fill(FeatureList& output);
 
+        //! Copy all features to the list that pass the predicate
+        void fill(FeatureList& output, std::function<bool(const Feature*)> predicate);
+
+        //! Progress callback to check for cancelation
         ProgressCallback* getProgress() const { return _progress.get(); }
 
     protected:
@@ -103,8 +111,12 @@ namespace osgEarth
     public:
         FilteredFeatureCursor(
             FeatureCursor* cursor,
+            FeatureFilterChain* chain);
+
+        FilteredFeatureCursor(
+            FeatureCursor* cursor,
             FeatureFilterChain* chain,
-            FilterContext& context);
+            FilterContext* context);
 
         virtual bool hasMore() const;
         virtual Feature* nextFeature();
@@ -115,7 +127,7 @@ namespace osgEarth
     private:
         osg::ref_ptr<FeatureCursor> _cursor;
         osg::ref_ptr<FeatureFilterChain> _chain;
-        FilterContext& _context;
+        FilterContext* _user_cx;
         mutable FeatureList _cache;
     };
 

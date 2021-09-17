@@ -53,16 +53,6 @@ namespace osgEarth
     };
 
     /**
-     * Reference-counted wrapper for ElevationSample
-     */
-    class OSGEARTH_EXPORT RefElevationSample : public ElevationSample, public osg::Referenced
-    {
-    public:
-        RefElevationSample(const Distance& e, const Distance& r) :
-            ElevationSample(e, r) { }
-    };
-
-    /**
      * Elevation grid as a texture with in optional associated normal map.
      */
     class OSGEARTH_EXPORT ElevationTexture : public osg::Texture2D
@@ -71,7 +61,7 @@ namespace osgEarth
         ElevationTexture(
             const TileKey& key,
             const GeoHeightField& hf,
-            float* resolutions);
+            const std::vector<float>& resolutions);
 
         virtual ~ElevationTexture();
 
@@ -91,6 +81,10 @@ namespace osgEarth
         //! Normal map associated with the elevation data, if available.
         osg::Texture2D* getNormalMapTexture() const;
 
+        //! The normal at map coordinates, or (0,0,1) if the tile does not
+        //! contain a normal map.
+        osg::Vec3 getNormal(double x, double y) const;
+
         //! Generates a normal map for this object.
         void generateNormalMap(const Map* map, void* workingSet, ProgressCallback* progress);
 
@@ -98,7 +92,7 @@ namespace osgEarth
         const ImageUtils::PixelReader& reader() const { return _read; }
 
         //! Matching list of sample resolutions
-        const float* getResolutions() const { return _resolutions; }
+        const std::vector<float>& getResolutions() const { return _resolutions; }
 
         //! Get the resolution at s,t
         inline float getResolution(int s, int t) const {
@@ -110,6 +104,10 @@ namespace osgEarth
                 (int)(v*(double)(_read.t()-1)));
         }
 
+        //! Ruggedness value at map coordinates (x,y)
+        //! (Warning: experimental function; may go away or change without notice.)
+        inline float getRuggedness(double x, double y) const;
+
         //! The heightfield that was used to populate this object
         const osg::HeightField* getHeightField() const {
             return _heightField.get();
@@ -120,9 +118,12 @@ namespace osgEarth
         GeoExtent _extent;
         Distance _resolution;
         ImageUtils::PixelReader _read;
+        ImageUtils::PixelReader _readNormal;
         osg::ref_ptr<osg::Texture2D> _normalTex;
         osg::ref_ptr<const osg::HeightField> _heightField;
-        float* _resolutions;
+        std::vector<float> _resolutions;
+        osg::ref_ptr<osg::Image> _ruggedness;
+        ImageUtils::PixelReader _readRuggedness;
     };
 
     /**
@@ -135,7 +136,14 @@ namespace osgEarth
             const TileKey& key,
             const class Map* map,
             void* workingSet,
+            osg::Image* ruggedness,
             ProgressCallback* progress);
+
+        //! Packs a 3-vec normal into RG (octohedral compression)
+        static void pack(const osg::Vec3& normal, osg::Vec4& packed);
+
+        //! Unpacks the RG packed normal into a 3-vec.
+        static void unpack(const osg::Vec4& packed, osg::Vec3& normal);
     };
 
     //! Revisioned key for elevation lookups (internal)

@@ -27,17 +27,11 @@
 #include <osgText/Font>
 #include <osgDB/Registry>
 
-#include <gdal_priv.h>
-#include <ogr_api.h>
+#include <gdal.h>
+#include <cpl_conv.h>
 #include <cstdlib>
 
 using namespace osgEarth;
-
-#define STR_GLOBAL_GEODETIC    "global-geodetic"
-#define STR_GLOBAL_MERCATOR    "global-mercator"
-#define STR_SPHERICAL_MERCATOR "spherical-mercator"
-#define STR_CUBE               "cube"
-#define STR_LOCAL              "local"
 
 #define LC "[Registry] "
 
@@ -73,8 +67,12 @@ _blacklist("Reg.BlackList(OE)")
     OGRRegisterAll();
     GDALAllRegister();
 
+#ifdef OSG_USE_UTF8_FILENAME
+    CPLSetConfigOption("GDAL_FILENAME_IS_UTF8","YES");
+#else
     // support Chinese character in the file name and attributes in ESRI's shapefile
     CPLSetConfigOption("GDAL_FILENAME_IS_UTF8","NO");
+#endif
     CPLSetConfigOption("SHAPE_ENCODING","");
 
 #if GDAL_VERSION_MAJOR>=3
@@ -106,7 +104,7 @@ _blacklist("Reg.BlackList(OE)")
     _stateSetCache = new StateSetCache();
 
     // Default unref-after apply policy:
-    _unRefImageDataAfterApply = true;
+    _unRefImageDataAfterApply = false;
 
     if (::getenv("OSGEARTH_DISABLE_UNREF_AFTER_APPLY"))
         _unRefImageDataAfterApply = false;
@@ -192,15 +190,16 @@ _blacklist("Reg.BlackList(OE)")
     Units::registerAll( this );
 
     // Default concurrency for async image layers
-    JobArena::setSize("ASYNC_LAYER", 4u);
+    JobArena::setConcurrency("oe.layer.async", 4u);
 }
 
 Registry::~Registry()
 {
     OE_DEBUG << LC << "Registry shutting down...\n";
-    _global_geodetic_profile = 0L;
-    _spherical_mercator_profile = 0L;
-    _cube_profile = 0L;
+    // A heavy hammer, but at this stage, which is usually application
+    // shutdown, various osgEarth objects (e.g., VirtualPrograms) are
+    // in the OSG cache and will cause a crash when they are deleted later.
+    osgDB::Registry::instance()->clearObjectCache();
     OE_DEBUG << LC << "Registry shutdown complete.\n";
 
     // pop the custom error handler
@@ -234,7 +233,7 @@ Registry::instance(bool reset)
     {
         s_registryInit = true;
         s_registry = new Registry;
-        atexit(destroyRegistry);
+        std::atexit(destroyRegistry);
     }
 
     if (reset)
@@ -243,7 +242,7 @@ Registry::instance(bool reset)
         s_registry = new Registry();
     }
 
-    return s_registry.get(); // will return NULL on erase
+    return s_registry.get();
 }
 
 void
@@ -290,26 +289,16 @@ Threading::RecursiveMutex& osgEarth::getGDALMutex()
 const Profile*
 Registry::getGlobalGeodeticProfile() const
 {
-    if ( !_global_geodetic_profile.valid() )
-    {
-        GDAL_SCOPED_LOCK;
-
-        if ( !_global_geodetic_profile.valid() ) // double-check pattern
-        {
-            const_cast<Registry*>(this)->_global_geodetic_profile = Profile::create(
-                "epsg:4326",
-                -180.0, -90.0, 180.0, 90.0,
-                "",
-                2, 1 );
-        }
-    }
-    return _global_geodetic_profile.get();
+    // DEPRECATED
+    static osg::ref_ptr<const Profile> p = Profile::create(Profile::GLOBAL_GEODETIC);
+    return p.get();
 }
 
 
 const Profile*
 Registry::getGlobalMercatorProfile() const
 {
+    // DEPRECATED
     return getSphericalMercatorProfile();
 }
 
@@ -317,37 +306,16 @@ Registry::getGlobalMercatorProfile() const
 const Profile*
 Registry::getSphericalMercatorProfile() const
 {
-    if ( !_spherical_mercator_profile.valid() )
-    {
-        GDAL_SCOPED_LOCK;
-
-        if ( !_spherical_mercator_profile.valid() ) // double-check pattern
-        {
-            // automatically figure out proper mercator extents:
-            const SpatialReference* srs = SpatialReference::create( "spherical-mercator" );
-
-            //double e, dummy;
-            //srs->getGeographicSRS()->transform2D( 180.0, 0.0, srs, e, dummy );
-            //const_cast<Registry*>(this)->_global_mercator_profile = Profile::create(
-            //    srs, -e, -e, e, e, 1, 1 );
-            const_cast<Registry*>(this)->_spherical_mercator_profile = Profile::create(
-                srs, MERC_MINX, MERC_MINY, MERC_MAXX, MERC_MAXY, 1, 1 );
-        }
-    }
-    return _spherical_mercator_profile.get();
+    // DEPRECATED
+    static osg::ref_ptr<const Profile> p = Profile::create(Profile::SPHERICAL_MERCATOR);
+    return p.get();
 }
 
 const Profile*
 Registry::getNamedProfile( const std::string& name ) const
 {
-    if ( name == STR_GLOBAL_GEODETIC )
-        return getGlobalGeodeticProfile();
-    else if ( name == STR_GLOBAL_MERCATOR )
-        return getGlobalMercatorProfile();
-    else if ( name == STR_SPHERICAL_MERCATOR )
-        return getSphericalMercatorProfile();
-    else
-        return NULL;
+    // DEPRECATED
+    return Profile::create(name);
 }
 
 osg::ref_ptr<SpatialReference>

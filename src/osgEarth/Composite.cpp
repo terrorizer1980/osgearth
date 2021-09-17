@@ -39,17 +39,22 @@ CompositeImageLayer::Options::getConfig() const
         }
         conf.set(layersConf);
     }
+    conf.set("composite_function", "blend", function(), FUNCTION_BLEND);
+    conf.set("composite_function", "less", function(), FUNCTION_LESS);
     return conf;
 }
 
 void
 CompositeImageLayer::Options::fromConfig(const Config& conf)
 {
+    function().setDefault(FUNCTION_BLEND);
     const ConfigSet& layers = conf.child("layers").children();
     for( ConfigSet::const_iterator i = layers.begin(); i != layers.end(); ++i )
     {
         _layers.push_back(ConfigOptions(*i));
     }
+    conf.get("composite_function", "blend", function(), FUNCTION_BLEND);
+    conf.get("composite_function", "less", function(), FUNCTION_LESS);
 }
 
 //........................................................................
@@ -186,7 +191,7 @@ CompositeImageLayer::openImplementation()
 
         if (status.isOK())
         {
-            OE_INFO << LC << "...opened " << layer->getName() << " OK" << std::endl;
+            OE_DEBUG << LC << "...opened " << layer->getName() << " OK" << std::endl;
 
             // If no profile is specified assume they want to use the profile of the first layer in the list
             if (!profile.valid())
@@ -263,7 +268,7 @@ CompositeImageLayer::openImplementation()
         {
             if (getCacheSettings()->isCacheEnabled())
             {
-                profile = Profile::create("global-geodetic");
+                profile = Profile::create(Profile::GLOBAL_GEODETIC);
             }
             else
             {
@@ -437,7 +442,31 @@ CompositeImageLayer::createImageImplementation(const TileKey& key, ProgressCallb
             {
                 if (imageInfo.image.valid())
                 {
-                    ImageUtils::mix( result, imageInfo.image.get(), imageInfo.opacity );
+                    if (options().function() == options().FUNCTION_BLEND)
+                    {
+                        ImageUtils::mix(result, imageInfo.image.get(), imageInfo.opacity);
+                    }
+                    else if (options().function() == options().FUNCTION_LESS)
+                    {
+                        ImageUtils::PixelReader readOne(result);
+                        ImageUtils::PixelReader readTwo(imageInfo.image.get());
+                        ImageUtils::PixelWriter writeOne(result);
+                        osg::Vec4 pixelOne, pixelTwo;
+
+                        for (int t = 0; t < result->t(); ++t)
+                        {
+                            for (int s = 0; s < result->s(); ++s)
+                            {
+                                readOne(pixelOne, s, t);
+                                readTwo(pixelTwo, s, t);
+                                if (pixelTwo.r() < pixelOne.r())
+                                {
+                                    pixelOne.r() = pixelTwo.r();
+                                    writeOne(pixelOne, s, t);
+                                }
+                            }
+                        }
+                    }
                 }
             }            
         }        
@@ -586,7 +615,7 @@ CompositeElevationLayer::openImplementation()
 
         if (status.isOK())
         {
-            OE_INFO << LC << "...opened " << layer->getName() << " OK" << std::endl;
+            OE_DEBUG << LC << "...opened " << layer->getName() << " OK" << std::endl;
 
             // If no profile is specified assume they want to use the profile of the first layer in the list.
             if (!profile.valid())
@@ -660,7 +689,7 @@ CompositeElevationLayer::openImplementation()
     {
         if (getCacheSettings()->isCacheEnabled())
         {
-            profile = Profile::create("global-geodetic");
+            profile = Profile::create(Profile::GLOBAL_GEODETIC);
         }
         else
         {
@@ -865,7 +894,7 @@ CompositeLandCoverLayer::openImplementation()
 
         if (status.isOK())
         {
-            OE_INFO << LC << "...opened " << layer->getName() << " OK" << std::endl;
+            OE_DEBUG << LC << "...opened " << layer->getName() << " OK" << std::endl;
 
             // If no profile is specified assume they want to use the profile of the first layer in the list.
             if (!profile.valid())
@@ -940,7 +969,7 @@ CompositeLandCoverLayer::openImplementation()
     {
         if (getCacheSettings()->isCacheEnabled())
         {
-            profile = Profile::create("global-geodetic");
+            profile = Profile::create(Profile::GLOBAL_GEODETIC);
         }
         else
         {

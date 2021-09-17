@@ -20,6 +20,7 @@
 #include <osgUtil/CullVisitor>
 #include <osgEarth/Registry>
 #include <osgEarth/CullingUtils>
+#include <osgEarth/Utils>
 #include <osg/Geometry>
 #include <osg/Geode>
 
@@ -37,10 +38,10 @@ _valid( false ),
 _VCmag(0), _VCmag2(0), _VHmag2(0), _coneCos(0), _coneTan(0), _minVCmag(0), _minHAE(0)
 {
     setName(OSGEARTH_HORIZON_UDC_NAME);
-    setEllipsoid(osg::EllipsoidModel());
+    setEllipsoid(Ellipsoid());
 }
 
-Horizon::Horizon(const osg::EllipsoidModel& e) :
+Horizon::Horizon(const Ellipsoid& e) :
 _valid( false ),
 _VCmag(0), _VCmag2(0), _VHmag2(0), _coneCos(0), _coneTan(0), _minVCmag(0), _minHAE(0)
 {
@@ -55,7 +56,7 @@ _VCmag(0), _VCmag2(0), _VHmag2(0), _coneCos(0), _coneTan(0), _minVCmag(0), _minH
     setName(OSGEARTH_HORIZON_UDC_NAME);
     if ( srs && !srs->isProjected() )
     {
-        setEllipsoid( *srs->getEllipsoid() );
+        setEllipsoid( srs->getEllipsoid() );
     }
 }
 
@@ -79,32 +80,20 @@ _minHAE  ( rhs._minHAE )
     // nop
 }
 
-bool
-Horizon::put(osg::NodeVisitor& nv)
-{
-    return VisitorData::store( nv, OSGEARTH_HORIZON_UDC_NAME, this );
-}
-
-Horizon* Horizon::get(osg::NodeVisitor& nv)
-{
-    return VisitorData::fetch<Horizon>( nv, OSGEARTH_HORIZON_UDC_NAME );
-}
-
 void
-Horizon::setEllipsoid(const osg::EllipsoidModel& e)
+Horizon::setEllipsoid(const Ellipsoid& em)
 {
-    _em.setRadiusEquator(e.getRadiusEquator());
-    _em.setRadiusPolar(e.getRadiusPolar());
+    _em = em;
 
     _scaleInv.set(
-        e.getRadiusEquator(),
-        e.getRadiusEquator(),
-        e.getRadiusPolar() );
+        em.getRadiusEquator(),
+        em.getRadiusEquator(),
+        em.getRadiusPolar() );
 
     _scale.set(
-        1.0 / e.getRadiusEquator(),
-        1.0 / e.getRadiusEquator(),
-        1.0 / e.getRadiusPolar() );
+        1.0 / em.getRadiusEquator(),
+        1.0 / em.getRadiusEquator(),
+        1.0 / em.getRadiusPolar() );
 
     _minHAE = 500.0;
     _minVCmag = 1.0 + (_scale*_minHAE).length();
@@ -341,8 +330,11 @@ Horizon::getDistanceToVisibleHorizon() const
     double eyeLen = _eye.length();
 
     osg::Vec3d geodetic;
-    double lat, lon, hasl;
-    _em.convertXYZToLatLongHeight(_eye.x(), _eye.y(), _eye.z(), lat, lon, hasl);
+    //double lat, lon, hasl;
+    //_em.convertXYZToLatLongHeight(_eye.x(), _eye.y(), _eye.z(), lat, lon, hasl);
+
+    geodetic = _em.geocentricToGeodetic(_eye);
+    double hasl = geodetic.z();
 
     // limit it:
     hasl = osg::maximum(hasl, 100.0);
@@ -363,10 +355,10 @@ HorizonCullCallback::HorizonCullCallback() :
 }
 
 void
-HorizonCullCallback::setEllipsoid(const osg::EllipsoidModel& em)
+HorizonCullCallback::setEllipsoid(const Ellipsoid& em)
 {
-    _customEllipsoid.setRadiusEquator(em.getRadiusEquator());
-    _customEllipsoid.setRadiusPolar(em.getRadiusPolar());
+    _customEllipsoid.setSemiMajorAxis(em.getRadiusEquator());
+    _customEllipsoid.setSemiMinorAxis(em.getRadiusPolar());
     _customEllipsoidSet = true;
 }
 
@@ -376,7 +368,8 @@ HorizonCullCallback::isVisible(osg::Node* node, osg::NodeVisitor* nv)
     if ( !node )
         return false;
 
-    osg::ref_ptr<Horizon> horizon = Horizon::get(*nv);
+    osg::ref_ptr<Horizon> horizon;
+    ObjectStorage::get(nv, horizon);
 
     if (_customEllipsoidSet)
     {
@@ -492,7 +485,8 @@ HorizonNode::HorizonNode()
 void
 HorizonNode::traverse(osg::NodeVisitor& nv)
 {
-    bool isSpy = (VisitorData::isSet(nv, "osgEarth.Spy"));
+    bool temp;
+    bool isSpy = nv.getUserValue("osgEarth.Spy", temp);
 
     if (nv.getVisitorType() == nv.CULL_VISITOR)
     {

@@ -59,9 +59,17 @@ BingImageLayer::Options::fromConfig(const Config& conf)
 
 REGISTER_OSGEARTH_LAYER(bingimage, BingImageLayer);
 
-OE_LAYER_PROPERTY_IMPL(BingImageLayer, std::string, APIKey, apiKey);
 OE_LAYER_PROPERTY_IMPL(BingImageLayer, std::string, ImagerySet, imagerySet);
 OE_LAYER_PROPERTY_IMPL(BingImageLayer, URI, ImageryMetadataURL, imageryMetadataURL);
+
+void BingImageLayer::setAPIKey(const std::string& value) {
+    _key = value;
+    setOptionThatRequiresReopen(options().apiKey(), value);
+}
+const std::string& BingImageLayer::getAPIKey() const {
+    return options().apiKey().get();
+}
+
 
 void
 BingImageLayer::init()
@@ -96,11 +104,6 @@ BingImageLayer::openImplementation()
     else
         _key = options().apiKey().get();
 
-    if (_key.empty())
-    {
-        return Status(Status::ConfigurationError, "Bing API key is required");
-    }
-    
     // Bing maps profile is spherical mercator with 2x2 tiles are the root.
     setProfile(Profile::create(
         SpatialReference::get("spherical-mercator"),
@@ -122,6 +125,12 @@ BingImageLayer::createImageImplementation(const TileKey& key, ProgressCallback* 
 {
     osg::ref_ptr<osg::Image> image;
 
+    if (_key.empty())
+    {
+        setStatus(Status::ConfigurationError, "Bing API key is required");
+        return GeoImage(getStatus());
+    }
+
     if (_debugDirect)
     {
         ++_apiCount;
@@ -131,15 +140,10 @@ BingImageLayer::createImageImplementation(const TileKey& key, ProgressCallback* 
     else
     {
         // center point of the tile (will be in spherical mercator)
-        double x, y;
-        key.getExtent().getCentroid(x, y);
+        GeoPoint cen = key.getExtent().getCentroid();
 
         // transform it to lat/long:
-        GeoPoint geo;
-
-        GeoPoint(getProfile()->getSRS(), x, y).transform(
-            getProfile()->getSRS()->getGeographicSRS(),
-            geo);
+        GeoPoint geo = cen.transform(cen.getSRS()->getGeographicSRS());
 
         // contact the REST API. Docs are here:
         // http://msdn.microsoft.com/en-us/library/ff701716.aspx
@@ -289,7 +293,7 @@ BingElevationLayer::init()
     // disable caching by default due to TOS
     layerHints().cachePolicy() = CachePolicy::NO_CACHE;
 
-    _globalGeodetic = Profile::create("global-geodetic");
+    _globalGeodetic = Profile::create(Profile::GLOBAL_GEODETIC);
 
     const char* key = ::getenv("OSGEARTH_BING_KEY");
     if (key)
