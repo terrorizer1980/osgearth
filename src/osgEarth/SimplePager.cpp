@@ -13,7 +13,7 @@ using namespace osgEarth::Util;
 
 #define LC "[SimplerPager] "
 
-     * The master progress tracker keeps track of the current framestamp
+//     * The master progress tracker keeps track of the current framestamp
 SimplePager::SimplePager(const osgEarth::Profile* profile):
 _profile( profile ),
 _rangeFactor( 6.0 ),

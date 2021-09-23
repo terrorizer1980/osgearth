@@ -25,6 +25,8 @@
 #include <osgEarth/Registry>
 #include <osgEarth/FeatureSourceIndexNode>
 
+#include <cstdlib>
+
 using namespace osgEarth;
 using namespace osgEarth::Buildings;
 
@@ -62,7 +64,11 @@ BuildingLayer::setFeatureSource(FeatureSource* source)
             return;
         }
 
-        createSceneGraph();
+        if (_session.valid())
+        {
+            destroySceneGraph();
+            createSceneGraph();
+        }
     }
 }
 
@@ -75,14 +81,17 @@ BuildingLayer::getNode() const
 Status
 BuildingLayer::openImplementation()
 {
+    // open the feature source:
     Status fsStatus = options().featureSource().open(getReadOptions());
     if (fsStatus.isError())
         return fsStatus;
 
+    // open the stylesheet:
     Status ssStatus = options().styleSheet().open(getReadOptions());
     if (ssStatus.isError())
         return ssStatus;
 
+    // load the building catalog:
     if (options().buildingCatalog().isSet())
     {
         _catalog = new BuildingCatalog();
@@ -103,9 +112,6 @@ BuildingLayer::openImplementation()
 void
 BuildingLayer::addedToMap(const Map* map)
 {
-    // Hang on to the Map reference
-    _map = map;
-
     options().featureSource().addedToMap(map);
     options().styleSheet().addedToMap(map);
 
@@ -128,14 +134,15 @@ BuildingLayer::addedToMap(const Map* map)
 void
 BuildingLayer::createSceneGraph()
 {
-    const Profile* profile = 0L;
+    const Profile* profile = nullptr;
 
     // reinitialize the graph:
     _root->removeChildren(0, _root->getNumChildren());
 
+    OE_SOFT_ASSERT_AND_RETURN(_session.valid(), void());
+
     // resolve observer reference:
-    osg::ref_ptr<const Map> map;
-    _map.lock(map);
+    osg::ref_ptr<const Map> map = _session->getMap();
 
     // assertion:
     FeatureSource* fs = options().featureSource().getLayer();
@@ -149,23 +156,27 @@ BuildingLayer::createSceneGraph()
     // Try to page against the feature profile, otherwise fallback to the map
     profile = fs->getFeatureProfile()->getTilingProfile();
 
-    if (profile == 0L)
+    if (profile == nullptr)
     {
-        profile = _map->getProfile();
+        profile = map->getProfile();
     }
 
+    // Set up the scene graph
     BuildingPager* pager = new BuildingPager( profile );
+    pager->setName("BuildingPager");
     pager->setAdditive        ( options().additiveLODs().get() );
-    pager->setElevationPool   ( _map->getElevationPool() );
+    pager->setElevationPool   ( map->getElevationPool() );
     pager->setSession         ( _session.get() );
     pager->setFeatureSource   ( fs );
     pager->setCatalog         ( _catalog.get() );
     pager->setCompilerSettings( options().compilerSettings().get() );
     pager->setPriorityOffset  ( options().priorityOffset().get() );
     pager->setPriorityScale   ( options().priorityScale().get() );
+    //pager->setClusterCullingEnabled(options().clusterCulling().get());
     pager->setSceneGraphCallbacks(getSceneGraphCallbacks());
 
-    if (options().verboseWarnings().isSetTo(true))
+    if (options().verboseWarnings().isSetTo(true) ||
+        ::getenv("OSGEARTH_BUILDINGS_VERBOSE_WARNINGS") != nullptr)
     {
         pager->setVerboseWarnings(true);
     }
@@ -207,7 +218,20 @@ BuildingLayer::createSceneGraph()
     }
 }
 
-BuildingPager* BuildingLayer::pager()
+void
+BuildingLayer::destroySceneGraph()
+{
+    // Tell the pager to henceforth ignore asynchronous requests
+    // resulting in faster shutdown
+    BuildingPager* pager = findTopMostNodeOfType<BuildingPager>(_root.get());
+    if (pager) pager->setDone();
+
+    // Remove it from the scene
+    _root->removeChildren(0, _root->getNumChildren());    
+}
+
+BuildingPager*
+BuildingLayer::pager()
 {
    for (size_t i = 0; i < _root->getNumChildren(); ++i)
    {
@@ -218,7 +242,7 @@ BuildingPager* BuildingLayer::pager()
          return pager;
       }
    }
-   return 0;
+   return nullptr;
 }
 
 void
@@ -226,6 +250,8 @@ BuildingLayer::removedFromMap(const Map* map)
 {
     options().featureSource().removedFromMap(map);
     options().styleSheet().removedFromMap(map);
+
+    destroySceneGraph();
 }
 
 const GeoExtent&
@@ -238,10 +264,13 @@ BuildingLayer::getExtent() const
         return fs->getFeatureProfile()->getExtent();
     }
 
-    osg::ref_ptr<const Map> map;
-    if (_map.lock(map))
+    if (_session.valid())
     {
-        return map->getProfile()->getExtent();
+        osg::ref_ptr<const Map> map = _session->getMap();
+        if (map.valid())
+        {
+            return map->getProfile()->getExtent();
+        }
     }
 
     return GeoExtent::INVALID;

@@ -38,7 +38,7 @@ namespace osgEarth { namespace Util
     public:
         SimplePager(const osgEarth::Profile* profile);
 
-        void build();
+        virtual void build();
 
         //! Whether this pager uses additive lods.
         bool getAdditive() const { return _additive; }

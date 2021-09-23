@@ -26,12 +26,15 @@
 #include <osg/Geode>
 #include <osg/Matrix>
 #include <osg/TextureBuffer>
-#include <osgEarth/Containers>
 #include <osgEarth/Progress>
 #include <osgEarth/Session>
 #include <osgEarth/FeatureIndex>
 #include <osgEarth/ModelResource>
 #include <osgEarth/ResourceCache>
+#include <osgEarth/StateSetCache>
+
+#include <map>
+#include <unordered_map>
 
 namespace osg
 {
@@ -80,6 +83,20 @@ namespace osgEarth { namespace Buildings
             return result;
         }
 
+        void releaseGLObjects(osg::State* state)
+        {
+            ScopedMutexLock lock(_mutex);
+            for (auto iter : _cache) {
+                iter.second->releaseGLObjects(state);
+            }
+        }
+
+        void clear()
+        {
+            ScopedMutexLock lock(_mutex);
+            _cache.clear();
+        }
+
         // todo: consider changing this to an observer_ptr -gw
         std::unordered_map<std::string, osg::ref_ptr<osg::Texture> > _cache;
     };
@@ -100,6 +117,9 @@ namespace osgEarth { namespace Buildings
         void setTileKey(const TileKey& key) { _key = key; }
 
         void setTextureCache(TextureCache* cache) { _texCache = cache; }
+
+        //! Stateset cache for shader generation
+        void setStateSetCache(StateSetCache* value) { _stateSetCache = value; }
 
         /** Read output from a cache bin */
         osg::Node* readFromCache(const osgDB::Options* readOptions, ProgressCallback* progress) const;
@@ -160,11 +180,11 @@ namespace osgEarth { namespace Buildings
         osg::Matrix _local2world, _world2local;
 
         osg::ref_ptr<osg::Geode> _defaultGeode;
-        typedef UnorderedMap<std::string, osg::ref_ptr<osg::Geode> > TaggedGeodes;
+        using TaggedGeodes = std::unordered_map<std::string, osg::ref_ptr<osg::Geode>>;
         TaggedGeodes _geodes;
         
-        typedef std::vector<osg::Matrix> MatrixVector;
-        typedef std::map< osg::ref_ptr<ModelResource>, MatrixVector > InstanceMap;
+        using MatrixVector = std::vector<osg::Matrix>;
+        using InstanceMap = std::map<osg::ref_ptr<ModelResource>, MatrixVector>;
         InstanceMap _instances;
         
         osg::ref_ptr<osg::Group> _externalModelsGroup;
@@ -183,10 +203,12 @@ namespace osgEarth { namespace Buildings
         TileKey _key;
         std::string _name;
 
-        typedef UnorderedMap<std::string, osg::ref_ptr<osg::StateSet> > SkinStateSetCache;
+        using SkinStateSetCache = std::unordered_map<std::string, osg::ref_ptr<osg::StateSet>>;
         SkinStateSetCache _skinStateSetCache;
 
         osg::ref_ptr<TextureCache> _texCache;
+
+        osg::ref_ptr<StateSetCache> _stateSetCache;
 
         FilterUsage _filterUsage;
 
